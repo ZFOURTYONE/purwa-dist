@@ -1,0 +1,510 @@
+// ============================================================
+// lib/nui.pw - Native UI backend untuk widget PUI
+// ------------------------------------------------------------
+// Masalah yang dijawab: render perangkat-lunak PUI terlihat
+// pixelated (font bitmap 5x7). NUI memakai KONTROL WIN32 ASLI:
+//   - teks dirender OS (ClearType, anti-alias) - tajam
+//   - tombol punya hover/tekan/fokus bawaan Windows
+//   - tampilan mengikuti tema sistem, bukan gambar kita
+//
+// Pohon widget SAMA dengan pui.pw (teks/tombol/kolom/baris/kartu);
+// hanya backend penggambarannya yang beda: NUI membuat HWND nyata.
+//
+// Deteksi klik tanpa wndproc kustom: polling BM_GETSTATE per
+// frame + deteksi tepi (naik = klik). Pesan children tetap mengalir
+// ke proc masing-masing lewat DispatchMessage.
+// ============================================================
+
+import "canvas"
+import "gui"
+import "pui"
+
+global NU_U32 = 0
+global NU_G32 = 0
+global NU_HINST = 0
+global NU_HFONT_BODY = 0
+global NU_HFONT_HEAD = 0
+global NU_F_SEND = 0
+global NU_F_DESTROY = 0
+global NU_F_SHOW = 0
+global NU_F_SETTXT = 0
+global NU_F_GETTXT = 0
+
+// tabel kontrol hidup (untuk rebuild & polling)
+global CTL_HWND = 0
+global CTL_KIND = 0        // 1 statis, 2 tombol, 3 groupbox
+global CTL_AKSI = 0        // id action utk tombol, 0 selainnya
+global CTL_PREV = 0        // status pushed frame lalu (edge detect)
+global CTL_N = 0
+const CTL_MAX = 256
+
+const WM_SETFONT = 48      // 0x30
+const BM_GETSTATE = 242    // 0xF2
+const BST_PUSHED = 4
+const GW_CHILD = 5
+
+// ---------------- mode gelap: wndproc JIT + tema kontrol ----------------
+global NU_DARK = 1
+global NU_STUB = 0
+global NU_HBR_BG = 0
+global NU_F_THEME = 0
+
+nui_emit_stub() do
+    // Tata letak FINAL v2 - basis kode C = ofs32.
+    // ABI x64: saat dipanggil Windows, RSP = 8 (mod 16). Jalur ctl
+    // melakukan call ke GDI sehingga WAJIB selaras: buka dengan
+    // push rbp (RSP jadi 0 mod 16) dan tutup dengan pop rbp.
+    //  C+0 cmp 0x138 je ctl(rel49) | C+12 cmp 0x133 je ctl(rel37)
+    //  C+24 cmp 0x135 je ctl(rel25)| C+36 cmp 0x14 je erase(rel14)
+    //  C+41 jmp [rip+0]; C+47 dq proc lama; C+55 erase eax=1 ret
+    //  C+61 ctl: push rbp; SetBkMode; SetTextColor; rax=hbrBg; pop rbp; ret
+    m = alloc_exec(256)
+    mem_set(m, 0, 256)
+    o = 32
+    set_byte(m,o,129); set_byte(m,o+1,250); set_byte(m,o+2,56); set_byte(m,o+3,1); set_byte(m,o+4,0); set_byte(m,o+5,0); o += 6
+    set_byte(m,o,15); set_byte(m,o+1,132); set_byte(m,o+2,49); set_byte(m,o+3,0); set_byte(m,o+4,0); set_byte(m,o+5,0); o += 6
+    set_byte(m,o,129); set_byte(m,o+1,250); set_byte(m,o+2,51); set_byte(m,o+3,1); set_byte(m,o+4,0); set_byte(m,o+5,0); o += 6
+    set_byte(m,o,15); set_byte(m,o+1,132); set_byte(m,o+2,37); set_byte(m,o+3,0); set_byte(m,o+4,0); set_byte(m,o+5,0); o += 6
+    set_byte(m,o,129); set_byte(m,o+1,250); set_byte(m,o+2,53); set_byte(m,o+3,1); set_byte(m,o+4,0); set_byte(m,o+5,0); o += 6
+    set_byte(m,o,15); set_byte(m,o+1,132); set_byte(m,o+2,25); set_byte(m,o+3,0); set_byte(m,o+4,0); set_byte(m,o+5,0); o += 6
+    set_byte(m,o,131); set_byte(m,o+1,250); set_byte(m,o+2,20); o += 3
+    set_byte(m,o,116); set_byte(m,o+1,14); o += 2
+    set_byte(m,o,255); set_byte(m,o+1,37); set_byte(m,o+2,0); set_byte(m,o+3,0); set_byte(m,o+4,0); set_byte(m,o+5,0); o += 6
+    // o = 79: dq proc lama (ditulis pemasangan)
+    o = 87
+    set_byte(m,o,184); set_byte(m,o+1,1); set_byte(m,o+2,0); set_byte(m,o+3,0); set_byte(m,o+4,0); o += 5
+    set_byte(m,o,195)
+    // ctl @ C+61 = abs 93
+    set_byte(m,93,85)                                   // push rbp
+    set_byte(m,94,76); set_byte(m,95,137); set_byte(m,96,193)   // mov rcx,r8
+    set_byte(m,97,186); set_byte(m,98,1); set_byte(m,99,0); set_byte(m,100,0); set_byte(m,101,0)  // mov edx,1
+    set_byte(m,102,255); set_byte(m,103,21); set_byte(m,104,156); set_byte(m,105,255); set_byte(m,106,255); set_byte(m,107,255) // call ofs8
+    set_byte(m,108,76); set_byte(m,109,137); set_byte(m,110,193)  // mov rcx,r8
+    set_byte(m,111,186); set_byte(m,112,230); set_byte(m,113,237); set_byte(m,114,243); set_byte(m,115,0)  // mov edx,color
+    set_byte(m,116,255); set_byte(m,117,21); set_byte(m,118,150); set_byte(m,119,255); set_byte(m,120,255); set_byte(m,121,255) // call ofs16
+    set_byte(m,122,72); set_byte(m,123,139); set_byte(m,124,5); set_byte(m,125,151); set_byte(m,126,255); set_byte(m,127,255); set_byte(m,128,255) // mov rax,[ofs24]
+    set_byte(m,129,93)                                  // pop rbp
+    set_byte(m,130,195)                                 // ret
+    m
+end
+
+
+
+nui_dark_install(win: GuiWindow) do
+    // judul gelap (Windows 10 1809+): DwmSetWindowAttribute(attr 20, TRUE)
+    dwm = load_dll("dwmapi.dll")
+    fn_dwm = get_fn(dwm, "DwmSetWindowAttribute")
+    satu = alloc(8)
+    canvas_write_u32(satu, 0, 1)
+    call_dll(fn_dwm, win.hwnd, 20, satu, 4)
+    drop(satu)
+
+    // tema kontrol gelap bila tersedia (abaikan kegagalan dengan tenang)
+    ux = load_dll("uxtheme.dll")
+    if ux != 0 then NU_F_THEME = get_fn(ux, "SetWindowTheme") else 0
+
+    // kuas latar slate-900: COLORREF 0x002A170F (r15 g23 b42)
+    fn_csbrush = get_fn(win.g32, "CreateSolidBrush")
+    NU_HBR_BG = call_dll(fn_csbrush, 2752519)
+
+    // stub + tukar wndproc jendela induk
+    gdi = win.g32
+    NU_STUB = nui_emit_stub()
+    fn_bk = get_fn(gdi, "SetBkMode")
+    fn_tc = get_fn(gdi, "SetTextColor")
+    v8 = NU_STUB + 8
+    set_byte(v8, 0, fn_bk % 256)
+    v = fn_bk / 256
+    set_byte(v8, 1, v % 256); v /= 256; set_byte(v8, 2, v % 256); v /= 256; set_byte(v8, 3, v % 256); v /= 256; set_byte(v8, 4, v % 256); v /= 256; set_byte(v8, 5, v % 256); v /= 256; set_byte(v8, 6, v % 256); v /= 256; set_byte(v8, 7, v % 256)
+    v16 = NU_STUB + 16
+    set_byte(v16, 0, fn_tc % 256)
+    v = fn_tc / 256
+    set_byte(v16, 1, v % 256); v /= 256; set_byte(v16, 2, v % 256); v /= 256; set_byte(v16, 3, v % 256); v /= 256; set_byte(v16, 4, v % 256); v /= 256; set_byte(v16, 5, v % 256); v /= 256; set_byte(v16, 6, v % 256); v /= 256; set_byte(v16, 7, v % 256)
+    v24 = NU_STUB + 24
+    set_byte(v24, 0, NU_HBR_BG % 256)
+    v = NU_HBR_BG / 256
+    set_byte(v24, 1, v % 256); v /= 256; set_byte(v24, 2, v % 256); v /= 256; set_byte(v24, 3, v % 256); v /= 256; set_byte(v24, 4, v % 256); v /= 256; set_byte(v24, 5, v % 256); v /= 256; set_byte(v24, 6, v % 256); v /= 256; set_byte(v24, 7, v % 256)
+
+    u32 = win.u32
+    fn_swl = get_fn(u32, "SetWindowLongPtrW")
+    fn_def = get_fn(u32, "DefWindowProcA")
+    entry = NU_STUB + 32
+    // KRITIS: tulis proc lama ke slot dq ofs67 SEBELUM penukaran;
+    // pesan yang tiba sesaat setelah swap langsung jmp [slot] - jika
+    // masih nol, itu lompatan ke alamat nol (AV)
+    d = NU_STUB + 79
+    v = fn_def
+    set_byte(d, 0, v % 256)
+    v /= 256; set_byte(d, 1, v % 256); v /= 256; set_byte(d, 2, v % 256); v /= 256; set_byte(d, 3, v % 256); v /= 256; set_byte(d, 4, v % 256); v /= 256; set_byte(d, 5, v % 256); v /= 256; set_byte(d, 6, v % 256); v /= 256; set_byte(d, 7, v % 256)
+    call_dll(fn_swl, win.hwnd, 0 - 4, entry)
+    0
+end
+
+nui_init_tables() do
+    CTL_HWND = make_array(CTL_MAX, 0)
+    CTL_KIND = make_array(CTL_MAX, 0)
+    CTL_AKSI = make_array(CTL_MAX, 0)
+    CTL_PREV = make_array(CTL_MAX, 0)
+    CTL_N = 0
+    0
+end
+
+// LOGFONTA 92 byte: Segoe UI, tinggi -16 (body) / -26 tebal (judul)
+nui_make_font(h, weight) do
+    lf = alloc(128)
+    mem_set(lf, 0, 128)
+    // lfHeight int32 di offset 0
+    hh = if h < 0 then 4294967296 + h else h
+    canvas_write_u32(lf, 0, hh)
+    canvas_write_u32(lf, 16, weight)         // lfWeight
+    set_byte(lf, 20, 0)                       // italic
+    set_byte(lf, 23, 1)                       // lfCharSet = DEFAULT_CHARSET
+    set_byte(lf, 27, 5)                       // lfQuality = CLEARTYPE_QUALITY
+    // lfFaceName di offset 28 (char[32])
+    wajah = "Segoe UI"
+    i = 0
+    while i < _str_len(wajah) do
+        set_byte(lf, 28 + i, get_byte(wajah, i))
+        i += 1
+    end
+    fn_create_font = get_fn(NU_G32, "CreateFontIndirectA")
+    f = call_dll(fn_create_font, lf)
+    drop(lf)
+    f
+end
+
+nui_setup(win: GuiWindow) do
+    NU_U32 = win.u32
+    NU_G32 = win.g32
+    fn_mod = get_fn(win.k32, "GetModuleHandleA")
+    NU_HINST = call_dll(fn_mod, 0)
+    NU_F_SEND = get_fn(NU_U32, "SendMessageA")
+    NU_F_DESTROY = get_fn(NU_U32, "DestroyWindow")
+    NU_F_SHOW = get_fn(NU_U32, "ShowWindow")
+    NU_F_SETTXT = get_fn(NU_U32, "SetWindowTextA")
+    NU_F_GETTXT = get_fn(NU_U32, "GetWindowTextA")
+    NU_HFONT_BODY = nui_make_font(0 - 16, 400)
+    NU_HFONT_HEAD = nui_make_font(0 - 26, 600)
+    nui_init_tables()
+    if NU_DARK == 1 then nui_dark_install(win) else 0
+    0
+end
+
+nui_utf16(s) do
+    // SetWindowTheme hanya menerima UTF-16 - konversi manual
+    ln = _str_len(s)
+    b = alloc((ln + 1) * 2)
+    i = 0
+    while i < ln do
+        set_byte(b, i * 2, get_byte(s, i))
+        set_byte(b, i * 2 + 1, 0)
+        i += 1
+    end
+    set_byte(b, ln * 2, 0)
+    set_byte(b, ln * 2 + 1, 0)
+    b
+end
+
+nui_theme_ctl(hwnd) do
+    // terapkan tema kontrol gelap (no-op aman bila tak tersedia)
+    if NU_DARK == 1 and NU_F_THEME != 0 then do
+        nm = nui_utf16("DarkMode_Explorer")
+        call_dll(NU_F_THEME, hwnd, nm, 0)
+        drop(nm)
+    end else 0
+    0
+end
+
+// ---------------- pembuatan kontrol dari pohon PUI ----------------
+
+nui_apply_font(hwnd, text_kind) do
+    f = NU_HFONT_BODY
+    if text_kind == 1 then f = NU_HFONT_HEAD else 0
+    call_dll(NU_F_SEND, hwnd, WM_SETFONT, f, 1)
+    0
+end
+
+nui_create_static(parent, text, x, y, w, h, scale) do
+    // SS_LEFT = 0; WS_CHILD|WS_VISIBLE = 0x50000000
+    hwnd = call_dll(get_fn(NU_U32, "CreateWindowExA"),
+        0, "STATIC", text, 1342177280,
+        x, y, w, h, parent, 20000 + CTL_N, NU_HINST, 0)
+    if hwnd != 0 then do
+        CTL_HWND[CTL_N] = hwnd
+        CTL_KIND[CTL_N] = 1
+        CTL_AKSI[CTL_N] = 0
+        CTL_PREV[CTL_N] = 0
+        CTL_N += 1
+        nui_apply_font(hwnd, scale)
+        nui_theme_ctl(hwnd)
+    end else 0
+    hwnd
+end
+
+nui_create_button(parent, label, x, y, w, h, action) do
+    hwnd = call_dll(get_fn(NU_U32, "CreateWindowExA"),
+        0, "BUTTON", label, 1342177280,
+        x, y, w, h, parent, 20000 + CTL_N, NU_HINST, 0)
+    if hwnd != 0 then do
+        CTL_HWND[CTL_N] = hwnd
+        CTL_KIND[CTL_N] = 2
+        CTL_AKSI[CTL_N] = action
+        CTL_PREV[CTL_N] = 0
+        CTL_N += 1
+        nui_apply_font(hwnd, 0)
+        nui_theme_ctl(hwnd)
+    end else 0
+    hwnd
+end
+
+nui_create_group(parent, title, x, y, w, h) do
+    // BS_GROUPBOX = 7
+    hwnd = call_dll(get_fn(NU_U32, "CreateWindowExA"),
+        0, "BUTTON", title, 1342177280 + 7,
+        x, y, w, h, parent, 20000 + CTL_N, NU_HINST, 0)
+    if hwnd != 0 then do
+        CTL_HWND[CTL_N] = hwnd
+        CTL_KIND[CTL_N] = 3
+        CTL_AKSI[CTL_N] = 0
+        CTL_PREV[CTL_N] = 0
+        CTL_N += 1
+        nui_apply_font(hwnd, 0)
+        nui_theme_ctl(hwnd)
+    end else 0
+    hwnd
+end
+
+// tinggi natural per kind (konsisten dgn pui_measure)
+nui_child_h(node) do
+    j = node[N_KIND]
+    if j == J_TEXT then do
+        sc = node[N_SC]
+        if sc >= 3 then 34 else if sc == 2 then 24 else 18
+    end
+    else if j == J_SPACER then node[N_MINH]
+    else if j == J_BUTTON then node[N_MINH]
+    else pui_measure(node, 999999)
+end
+
+// buat kontrol utk satu children pada kotak (x,y,w) -> tinggi terpakai
+nui_build_child(parent, node, x, y, w) do
+    j = node[N_KIND]
+    if j == J_TEXT then do
+        sc = node[N_SC]
+        hh = nui_child_h(node)
+        tx = node[N_TEXT]
+        if sc >= 3 then do
+            hwnd = nui_create_static(parent, tx, x, y, w, hh, 1)
+            // judul pakai font head; geser sedikit agar baseline rapi
+            34
+        end else do
+            nui_create_static(parent, tx, x, y, w, hh, 0)
+            hh
+        end
+    end
+    else if j == J_SPACER then node[N_MINH]
+    else if j == J_BUTTON then do
+        nui_create_button(parent, node[N_TEXT], x, y, w, node[N_MINH], node[N_ACTION])
+        node[N_MINH]
+    end
+    else if j == J_BOX or j == J_ROW or j == J_COLUMN then do
+        // wadah: groupbox bila kartu/kotak; polos bila kolom/baris
+        hh = pui_measure(node, w)
+        if j == J_BOX then do
+            nui_create_group(parent, "", x, y, w, hh)
+        end else 0
+        // isi
+        inner_x = x
+        inner_y = y
+        inner_w = w
+        if j == J_BOX then do
+            inner_x = x + PAD
+            inner_y = y + PAD + 8
+            inner_w = w - PAD * 2
+        end else 0
+        cy = inner_y
+        n = node[N_NA]
+        mh = 0
+        if j == J_ROW then do
+            if n > 0 then do
+                iw = (inner_w - GAP * (n - 1)) / n
+                cx = inner_x
+                i = 0
+                while i < n do
+                    ch2 = nui_child_h(node[N_CHILDREN][i])
+                    if ch2 > mh do mh = ch2 end
+                    i += 1
+                end
+                i = 0
+                while i < n do
+                    an = node[N_CHILDREN][i]
+                    ch3 = nui_child_h(an)
+                    oy = cy + (mh - ch3) / 2
+                    nui_build_child(parent, an, cx, oy, iw)
+                    cx = cx + iw + GAP
+                    i += 1
+                end
+            end else 0
+            cy = cy + mh
+        end else do
+            i = 0
+            while i < n do
+                an = node[N_CHILDREN][i]
+                used = nui_build_child(parent, an, inner_x, cy, inner_w)
+                cy = cy + used + GAP
+                i += 1
+            end
+        end
+        hh
+    end
+    else do
+        // J_SPACER sudah ditangani; fallback aman
+        pui_measure(node, w)
+    end
+end
+
+nui_rebuild(parent, root, sw) do
+    // hancurkan semua kontrol lama lalu bangun ulang dari pohon
+    // mode gelap: WM_ERASEBKGND kita tolak (return 1) supaya Windows
+    // tak mengecat putih - maka KITA yang mengisi latar dgn kuas gelap
+    if NU_DARK == 1 and NU_HBR_BG != 0 then do
+        fn_gcr = get_fn(NU_U32, "GetClientRect")
+        fn_gdc = get_fn(NU_U32, "GetDC")
+        fn_fr = get_fn(NU_U32, "FillRect")
+        fn_rdc = get_fn(NU_U32, "ReleaseDC")
+        rc = alloc(16)
+        call_dll(fn_gcr, parent, rc)
+        hdc = call_dll(fn_gdc, parent)
+        call_dll(fn_fr, hdc, rc, NU_HBR_BG)
+        call_dll(fn_rdc, parent, hdc)
+        drop(rc)
+    end else 0
+    i = 0
+    while i < CTL_N do
+        call_dll(NU_F_DESTROY, CTL_HWND[i])
+        i += 1
+    end
+    CTL_N = 0
+    nui_build_child(parent, root, 0, 0, sw)
+    0
+end
+
+// deteksi klik: naiknya status PUSHED pada tombol mana pun
+nui_poll_click() do
+    ketemu = 0 - 1
+    i = 0
+    while i < CTL_N do
+        if CTL_KIND[i] == 2 then do
+            st = call_dll(NU_F_SEND, CTL_HWND[i], BM_GETSTATE, 0, 0)
+            pushed = if st % (BST_PUSHED * 2) >= BST_PUSHED then 1 else 0
+            if pushed == 1 and CTL_PREV[i] == 0 then ketemu = CTL_AKSI[i] else 0
+            CTL_PREV[i] = pushed
+        end else 0
+        i += 1
+    end
+    ketemu
+end
+
+// ---------------- pintu aplikasi native ----------------
+
+nui_selftest_offscreen(title, sw, sh, build_fn) do
+    // buat window disembunyikan + kontrol nyata; uji kelangsungan hidup:
+    // semua HWND valid, roundtrip teks statis, tombol terdaftar
+    pui_init_theme()
+    win = gui_open_window(title, sw, sh)
+    if win == 0 then 0 - 1
+    else do
+        call_dll(get_fn(win.u32, "ShowWindow"), win.hwnd, 0)   // SW_HIDE
+        nui_setup(win)
+        root = build_fn(0)
+        nui_rebuild(win.hwnd, root, sw)
+        fails = 0
+        if CTL_N < 2 then do
+            fails = fails + 1
+            show("uji gagal: kontrol terlalu sedikit\n")
+        end else 0
+        // cari satu statis: roundtrip teks
+        ketemu_statis = 0 - 1
+        i = 0
+        while i < CTL_N and ketemu_statis < 0 do
+            if CTL_KIND[i] == 1 then ketemu_statis = i else 0
+            i += 1
+        end
+        if ketemu_statis < 0 then do
+            fails = fails + 1
+            show("uji gagal: tidak ada label\n")
+        end else do
+            hw = CTL_HWND[ketemu_statis]
+            call_dll(NU_F_SETTXT, hw, "UJI123")
+            rcv = alloc(64)
+            mem_set(rcv, 0, 64)
+            call_dll(NU_F_GETTXT, hw, rcv, 63)
+            if str_eq(rcv, "UJI123") == 1 then 0 else do
+                fails = fails + 1
+                show("uji gagal: roundtrip teks\n")
+            end
+            drop(rcv)
+        end
+        // semua hwnd masih hidup
+        fn_iswin = get_fn(NU_U32, "IsWindow")
+        i = 0
+        while i < CTL_N do
+            if call_dll(fn_iswin, CTL_HWND[i]) == 0 then do
+                fails = fails + 1
+                show("uji gagal: kontrol mati\n")
+            end else 0
+            i += 1
+        end
+        // bersih-bersih
+        i = 0
+        while i < CTL_N do
+            call_dll(NU_F_DESTROY, CTL_HWND[i])
+            i += 1
+        end
+        CTL_N = 0
+        call_dll(NU_F_DESTROY, win.hwnd)
+        fails
+    end
+end
+
+nui_start(title, sw, sh, initial_state, build_fn, event_fn) do
+    cmdline = args()
+    if pui_has_flag(cmdline, "-selftest") == 1 then do
+        nui_selftest_offscreen(title, sw, sh, build_fn)
+    end else do
+        pui_init_theme()
+        win = gui_open_window(title, sw, sh)
+        if win == 0 then 0
+        else do
+            nui_setup(win)
+            state = initial_state
+            root = build_fn(state)
+            nui_rebuild(win.hwnd, root, sw)
+            jalan = 1
+            while jalan == 1 do
+                if gui_is_open(win) == 0 then jalan = 0
+                else if gui_key_esc(win) != 0 then jalan = 0
+                else do
+                    gui_poll_events(win)
+                    id = nui_poll_click()
+                    if id > 0 then do
+                        state = event_fn(state, id)
+                        root = build_fn(state)
+                        nui_rebuild(win.hwnd, root, sw)
+                    end else 0
+                end
+            end
+            i = 0
+            while i < CTL_N do
+                call_dll(NU_F_DESTROY, CTL_HWND[i])
+                i += 1
+            end
+            CTL_N = 0
+            fn_delobj = get_fn(win.g32, "DeleteObject")
+            call_dll(fn_delobj, NU_HFONT_BODY)
+            call_dll(fn_delobj, NU_HFONT_HEAD)
+            gui_close_window(win)
+            state
+        end
+    end
+end

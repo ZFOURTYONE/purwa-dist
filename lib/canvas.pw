@@ -1,0 +1,298 @@
+// lib/canvas.pw — Sovereign 2D Graphics Canvas & Rasterizer (Milestone P10)
+// Pure bare-metal software rasterizer and BMP image exporter with zero external dependencies.
+
+struct Canvas {
+    width,
+    height,
+    buffer,
+    size
+}
+
+canvas_create(w, h): Canvas do
+    total_size = w * h * 4
+    buf = alloc(total_size)
+    mem_set(buf, 0, total_size)
+    Canvas(w, h, buf, total_size)
+end
+
+// Fast canvas clear using mem_set + minimal loop
+// Menulis 1 baris pixel dengan set_byte lalu mem_copy sisa baris dari baris pertama
+canvas_clear(c: Canvas, r, g, b, a) do
+    w = c.width
+    h = c.height
+    buf = c.buffer
+    row_bytes = w * 4
+
+    // Tulis baris pertama (row 0) pixel-per-pixel — hanya 1 baris
+    x = 0
+    while x < w do
+        offset = x * 4
+        set_byte(buf, offset + 0, b)
+        set_byte(buf, offset + 1, g)
+        set_byte(buf, offset + 2, r)
+        set_byte(buf, offset + 3, a)
+        x += 1
+    end
+
+    // Salin baris pertama ke seluruh baris berikutnya via mem_copy (super cepat)
+    y = 1
+    while y < h do
+        dst_off = y * row_bytes
+        mem_copy(buf + dst_off, buf, row_bytes)
+        y += 1
+    end
+    0
+end
+
+canvas_set_pixel(c: Canvas, x, y, r, g, b, a) do
+    w = c.width
+    h = c.height
+    if x >= 0 and x < w and y >= 0 and y < h do
+        offset = (y * w + x) * 4
+        buf = c.buffer
+        set_byte(buf, offset + 0, b)
+        set_byte(buf, offset + 1, g)
+        set_byte(buf, offset + 2, r)
+        set_byte(buf, offset + 3, a)
+        1
+    else do  0 end
+end
+
+canvas_get_pixel(c: Canvas, x, y) do
+    w = c.width
+    h = c.height
+    if x >= 0 and x < w and y >= 0 and y < h do
+        offset = (y * w + x) * 4
+        buf = c.buffer
+        b = get_byte(buf, offset + 0)
+        g = get_byte(buf, offset + 1)
+        r = get_byte(buf, offset + 2)
+        (r * 65536) + (g * 256) + b
+    else do  0 end
+end
+
+// Isi persegi panjang solid — optimasi baris: tulis baris pertama lalu mem_copy
+canvas_fill_rect(c: Canvas, rx, ry, rw, rh, r, g, b, a) do
+    cw = c.width
+    ch = c.height
+    buf = c.buffer
+
+    // Klip ke batas kanvas
+    x0 = if rx < 0 then 0 else rx
+    y0 = if ry < 0 then 0 else ry
+    x1 = if rx + rw > cw then cw else rx + rw
+    y1 = if ry + rh > ch then ch else ry + rh
+
+    clip_w = x1 - x0
+    clip_h = y1 - y0
+    if clip_w > 0 and clip_h > 0 do
+        // Tulis baris pertama pixel per pixel
+        off0 = (y0 * cw + x0) * 4
+        i = 0
+        while i < clip_w do
+            p = off0 + i * 4
+            set_byte(buf, p + 0, b)
+            set_byte(buf, p + 1, g)
+            set_byte(buf, p + 2, r)
+            set_byte(buf, p + 3, a)
+            i += 1
+        end
+        // Salin baris pertama ke baris-baris berikutnya
+        row_len = clip_w * 4
+        stride = cw * 4
+        j = 1
+        while j < clip_h do
+            dst = off0 + j * stride
+            mem_copy(buf + dst, buf + off0, row_len)
+            j += 1
+        end
+    end
+    0
+end
+
+canvas_draw_rect(c: Canvas, rx, ry, rw, rh, r, g, b, a, fill_bool) do
+    if fill_bool == 1 do
+        canvas_fill_rect(c, rx, ry, rw, rh, r, g, b, a)
+    else do
+        // Draw top & bottom edges
+        x = rx
+        while x < rx + rw do
+            canvas_set_pixel(c, x, ry, r, g, b, a)
+            canvas_set_pixel(c, x, ry + rh - 1, r, g, b, a)
+            x += 1
+        end
+        // Draw left & right edges
+        y = ry
+        while y < ry + rh do
+            canvas_set_pixel(c, rx, y, r, g, b, a)
+            canvas_set_pixel(c, rx + rw - 1, y, r, g, b, a)
+            y += 1
+        end
+    end
+    0
+end
+
+canvas_draw_line(c: Canvas, x0, y0, x1, y1, r, g, b, a) do
+    dx = if x1 >= x0 then x1 - x0 else x0 - x1
+    sx = if x0 < x1 then 1 else 0 - 1
+    dy = if y1 >= y0 then 0 - (y1 - y0) else y0 - y1
+    sy = if y0 < y1 then 1 else 0 - 1
+    err = dx + dy
+    
+    cur_x = x0
+    cur_y = y0
+    running = 1
+    
+    while running == 1 do
+        canvas_set_pixel(c, cur_x, cur_y, r, g, b, a)
+        if cur_x == x1 and cur_y == y1 do
+            running = 0
+        else do
+            e2 = 2 * err
+            if e2 >= dy do
+                err += dy
+                cur_x += sx
+            end
+            if e2 <= dx do
+                err += dx
+                cur_y += sy
+            end
+        end
+    end
+    0
+end
+
+// Lingkaran terisi — optimasi: isi baris horizontal per scanline (bukan pixel per pixel)
+canvas_fill_circle(c: Canvas, cx, cy, radius, r, g, b, a) do
+    y = 0 - radius
+    while y <= radius do
+        // Hitung lebar baris horizontal di scanline y
+        // x² + y² <= r² → x dari -sqrt(r²-y²) sampai +sqrt(r²-y²)
+        rr = radius * radius
+        yy = y * y
+        if yy <= rr do
+            // Cari x_max dengan brute force — tapi gunakan fill_rect untuk isi baris
+            x_max = 0
+            while (x_max + 1) * (x_max + 1) + yy <= rr do
+                x_max += 1
+            end
+            // Isi baris horizontal dari cx-x_max sampai cx+x_max
+            row_w = x_max * 2 + 1
+            canvas_fill_rect(c, cx - x_max, cy + y, row_w, 1, r, g, b, a)
+        end
+        y += 1
+    end
+    0
+end
+
+canvas_draw_circle(c: Canvas, cx, cy, radius, r, g, b, a, fill_bool) do
+    if fill_bool == 1 do
+        canvas_fill_circle(c, cx, cy, radius, r, g, b, a)
+    else do
+        x = 0
+        y = radius
+        d = 3 - 2 * radius
+        
+        while y >= x do
+            canvas_set_pixel(c, cx + x, cy + y, r, g, b, a)
+            canvas_set_pixel(c, cx - x, cy + y, r, g, b, a)
+            canvas_set_pixel(c, cx + x, cy - y, r, g, b, a)
+            canvas_set_pixel(c, cx - x, cy - y, r, g, b, a)
+            canvas_set_pixel(c, cx + y, cy + x, r, g, b, a)
+            canvas_set_pixel(c, cx - y, cy + x, r, g, b, a)
+            canvas_set_pixel(c, cx + y, cy - x, r, g, b, a)
+            canvas_set_pixel(c, cx - y, cy - x, r, g, b, a)
+            
+            if d < 0 do
+                d = d + 4 * x + 6
+            else do
+                d = d + 4 * (x - y) + 10
+                y -= 1
+            end
+            x += 1
+        end
+    end
+    0
+end
+
+// Helper: Tulis integer 32-bit little-endian ke buffer
+canvas_write_u32(buf, offset, val) do
+    // normalize negatives into the unsigned 32-bit domain first:
+    // % and / truncate toward zero, so raw negatives pack garbage
+    u = val
+    if u < 0 then u = u + 4294967296
+    set_byte(buf, offset + 0, u % 256)
+    u = u / 256
+    set_byte(buf, offset + 1, u % 256)
+    u = u / 256
+    set_byte(buf, offset + 2, u % 256)
+    u = u / 256
+    set_byte(buf, offset + 3, u % 256)
+    0
+end
+
+// Helper: Tulis integer 16-bit little-endian ke buffer
+canvas_write_u16(buf, offset, val) do
+    u = val
+    if u < 0 then u = u + 65536
+    set_byte(buf, offset + 0, u % 256)
+    set_byte(buf, offset + 1, (u / 256) % 256)
+    0
+end
+
+canvas_save_bmp(c: Canvas, filepath) do
+    w = c.width
+    h = c.height
+    pixel_bytes = w * h * 4
+    total_file_size = 54 + pixel_bytes
+    
+    out_buf = alloc(total_file_size)
+    cleanup drop(out_buf)
+    
+    // --- 1. BMP File Header (14 bytes) ---
+    set_byte(out_buf, 0, 66) // 'B'
+    set_byte(out_buf, 1, 77) // 'M'
+    canvas_write_u32(out_buf, 2, total_file_size)
+    canvas_write_u16(out_buf, 6, 0)  // reserved1
+    canvas_write_u16(out_buf, 8, 0)  // reserved2
+    canvas_write_u32(out_buf, 10, 54) // offset to pixel data
+    
+    // --- 2. DIB Info Header (40 bytes - BITMAPINFOHEADER) ---
+    canvas_write_u32(out_buf, 14, 40) // biSize = 40
+    canvas_write_u32(out_buf, 18, w)  // biWidth
+    // Untuk standard BMP top-down (negatif height)
+    // biHeight: standard bottom-up
+    canvas_write_u32(out_buf, 22, h)  // biHeight
+    canvas_write_u16(out_buf, 26, 1)  // biPlanes = 1
+    canvas_write_u16(out_buf, 28, 32) // biBitCount = 32 (BGRA)
+    canvas_write_u32(out_buf, 30, 0)  // biCompression = 0 (BI_RGB)
+    canvas_write_u32(out_buf, 34, pixel_bytes) // biSizeImage
+    canvas_write_u32(out_buf, 38, 2835) // biXPelsPerMeter (72 DPI)
+    canvas_write_u32(out_buf, 42, 2835) // biYPelsPerMeter
+    canvas_write_u32(out_buf, 46, 0)  // biClrUsed
+    canvas_write_u32(out_buf, 50, 0)  // biClrImportant
+    
+    // --- 3. Pixel Data (Bottom-Up Row Flip for Standard BMP) ---
+    src_buf = c.buffer
+    row_bytes = w * 4
+    
+    row = 0
+    while row < h do
+        src_row = h - 1 - row
+        src_off = src_row * row_bytes
+        dst_off = 54 + (row * row_bytes)
+        
+        // Gunakan mem_copy untuk salin satu baris sekaligus
+        mem_copy(out_buf + dst_off, src_buf + src_off, row_bytes)
+        row += 1
+    end
+    
+    write_file(filepath, out_buf, total_file_size)
+    total_file_size
+end
+
+canvas_destroy(c: Canvas) do
+    drop(c.buffer)
+    drop(c)
+    0
+end

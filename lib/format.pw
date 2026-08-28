@@ -1,0 +1,34 @@
+// lib/format.pw - Pemformatan teks untuk Purwa (v36.7)
+
+format_num(n) = do
+    // ribuan dipisah koma: 1234567 -> "1,234,567"; dukung negatif & nol
+    if n == 0 then "0"
+    else do
+        x = if n < 0 then 0 - n else n;
+        res = "";
+        pos = 0;
+        while x > 0 do
+            g = x % 1000;
+            x = x / 1000;
+            seg = to_text(g);
+            if x > 0 and g < 10 then seg = concat("00", seg)
+            else if x > 0 and g < 100 then seg = concat("0", seg)
+            else 0;
+            if pos == 0 then res = seg
+            else res = concat(seg, concat(",", res));
+            pos = pos + 1
+        end;
+        if n < 0 then concat("-", res) else res
+    end
+end;
+
+join(strs, len, sep) do
+    res = ""
+    i = 0
+    while i < len do
+        if i == 0 then res = strs[i]
+        else res = concat(res, concat(sep, strs[i]))
+        i = i + 1
+    end
+    res
+end

@@ -1,0 +1,73 @@
+// lib/str_arena.pw — High-Performance Scoped String Arena Allocator for Purwa
+// Menyediakan manajemen string temporer tanpa overhead heap OS dan bebas memory leak.
+
+create_string_arena(capacity: i64): i64 do
+    create_arena(capacity)
+end
+
+drop_string_arena(arena: i64) do
+    drop_arena(arena)
+end
+
+arena_reset_strings(arena: i64) do
+    arena_reset(arena)
+end
+
+arena_concat(arena: i64, a: string, b: string): string do
+    la = str_len(a)
+    lb = str_len(b)
+    buf = arena_alloc(arena, la + lb + 1)
+    
+    i = 0
+    while i < la do
+        set_byte(buf, i, get_byte(a, i))
+        i = i + 1
+    end
+    
+    j = 0
+    while j < lb do
+        set_byte(buf, la + j, get_byte(b, j))
+        j = j + 1
+    end
+    
+    set_byte(buf, la + lb, 0)
+    buf
+end
+
+arena_slice(arena: i64, s: string, start: i64, finish: i64): string do
+    L = if finish < start then 0 else finish - start
+    buf = arena_alloc(arena, L + 1)
+    
+    i = 0
+    while i < L do
+        set_byte(buf, i, get_byte(s, start + i))
+        i = i + 1
+    end
+    
+    set_byte(buf, L, 0)
+    buf
+end
+
+arena_str_repeat(arena: i64, s: string, count: i64): string do
+    if count <= 0 then ""
+    else do
+        slen = str_len(s)
+        total = slen * count
+        buf = arena_alloc(arena, total + 1)
+        
+        pos = 0
+        i = 0
+        while i < count do
+            j = 0
+            while j < slen do
+                set_byte(buf, pos, get_byte(s, j))
+                pos = pos + 1
+                j = j + 1
+            end
+            i = i + 1
+        end
+        
+        set_byte(buf, pos, 0)
+        buf
+    end
+end

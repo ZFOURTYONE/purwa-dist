@@ -1,0 +1,63 @@
+// lib/hrtimer.pw — high-resolution timer (QueryPerformanceCounter)
+// Memberikan waktu presisi mikrodetik untuk aplikasi (ping, benchmark, delay):
+//   hrt_init()      inisialisasi (idempotent), return 1 = ok
+//   hrt_us()        waktu sejak inisialisasi, dalam mikrodetik
+//   hrt_ms()        waktu sejak inisialisasi, dalam milidetik
+//   hrt_sleep_us(n) tidur (spin-wait) n mikrodetik
+//
+// Mengapa bukan time_ms()? time_ms() builtin memakai GetTickCount64 yang
+// resolusi-nya ~15.6 ms — terlalu kasar untuk mengukur ping atau latensi.
+import "bytes"
+
+global g_hrt_k32 = 0
+global g_hrt_qpc = 0
+global g_hrt_qpf = 0
+global g_hrt_freq = 0
+global g_hrt_base = 0
+
+hrt_raw() do
+    buf = alloc(8)
+    call_dll(g_hrt_qpc, buf)
+    v = read_u64(buf, 0)
+    drop(buf)
+    v
+end
+
+hrt_init() do
+    if g_hrt_k32 == 0 then do
+        g_hrt_k32 = load_dll("kernel32.dll")
+        if g_hrt_k32 != 0 then do
+            g_hrt_qpc = get_fn(g_hrt_k32, "QueryPerformanceCounter")
+            g_hrt_qpf = get_fn(g_hrt_k32, "QueryPerformanceFrequency")
+            fbuf = alloc(8)
+            call_dll(g_hrt_qpf, fbuf)
+            g_hrt_freq = read_u64(fbuf, 0)
+            drop(fbuf)
+            if g_hrt_freq == 0 then 0
+            else do
+                g_hrt_base = hrt_raw()
+                1
+            end
+        end else 0
+    end else 1
+end
+
+// Mikrodetik sejak hrt_init (atau sejak g_hrt_base ditetapkan).
+hrt_us() do
+    if g_hrt_freq == 0 then 0
+    else (hrt_raw() - g_hrt_base) * 1000000 / g_hrt_freq
+end
+
+// Milidetik sejak hrt_init.
+hrt_ms() do
+    hrt_us() / 1000
+end
+
+// Spin-wait n mikrodetik (presisi jauh lebih baik daripada sleep()).
+hrt_sleep_us(n) do
+    target = hrt_raw() + n * g_hrt_freq / 1000000
+    while hrt_raw() < target do
+        0
+    end
+    0
+end

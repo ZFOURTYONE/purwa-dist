@@ -1,0 +1,66 @@
+// lib/functional.pw — Higher-Order Functional Programming Library for Purwa
+
+apply(fn_ptr, arg) do
+    fn_ptr(arg)
+end
+
+apply2(fn_ptr, a, b) do
+    fn_ptr(a, b)
+end
+
+map_array(arr, len, fn_ptr) do
+    res = make_array(len, 0)
+    i = 0
+    while i < len do
+        val = arr[i]
+        new_val = fn_ptr(val)
+        res[i] = new_val
+        i = i + 1
+    end
+    res
+end
+
+filter_array(arr, len, pred_ptr) do
+    tmp = make_array(len, 0)
+    i = 0
+    cnt = 0
+    while i < len do
+        val = arr[i]
+        keep = pred_ptr(val)
+        if keep != 0 then do
+            tmp[cnt] = val
+            cnt = cnt + 1
+        end else 0
+        i = i + 1
+    end
+    
+    res = make_array(cnt, 0)
+    k = 0
+    while k < cnt do
+        res[k] = tmp[k]
+        k = k + 1
+    end
+    drop(tmp)
+    res
+end
+
+fold_array(arr, len, init, fn_ptr) do
+    acc = init
+    i = 0
+    while i < len do
+        val = arr[i]
+        acc = fn_ptr(acc, val)
+        i = i + 1
+    end
+    acc
+end
+
+each_array(arr, len, fn_ptr) do
+    i = 0
+    while i < len do
+        val = arr[i]
+        fn_ptr(val)
+        i = i + 1
+    end
+    0
+end

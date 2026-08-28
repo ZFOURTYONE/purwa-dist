@@ -1,0 +1,26 @@
+// lib/http.pw — High-Performance Native HTTP/1.1 Engine for Purwa
+import "tcp"
+
+http_ok(body: string): string do
+    L = str_len(body)
+    $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {L}\r\nConnection: close\r\n\r\n{body}"
+end
+
+http_not_found(msg: string): string do
+    L = str_len(msg)
+    $"HTTP/1.1 404 Not Found\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {L}\r\nConnection: close\r\n\r\n{msg}"
+end
+
+http_json(json_str: string): string do
+    L = str_len(json_str)
+    $"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {L}\r\nConnection: close\r\n\r\n{json_str}"
+end
+
+http_wasm(body: string): string do
+    L = str_len(body)
+    $"HTTP/1.1 200 OK\r\nContent-Type: application/wasm\r\nContent-Length: {L}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n{body}"
+end
+
+http_response_header(content_type: string, content_len: i64): string do
+    $"HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_len}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+end

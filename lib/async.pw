@@ -1,0 +1,292 @@
+// lib/async.pw — 64-bit Safe Asynchronous Event Loop Engine for Purwa (Milestone P6)
+import "net"
+
+const ASYNC_EVENT_READ  = 1
+const ASYNC_EVENT_WRITE = 2
+
+struct AsyncLoop {
+    timer_ids,
+    timer_ticks,
+    timer_repeats,
+    timer_callbacks,
+    timer_user_data,
+    timer_actives,
+    timer_count,
+    timer_cap,
+    next_timer_id,
+    sock_fds,
+    sock_events,
+    sock_callbacks,
+    sock_user_data,
+    sock_actives,
+    sock_count,
+    sock_cap,
+    is_running
+}
+
+async_create_loop() do
+    t_cap = 256
+    s_cap = 256
+    
+    t_ids   = make_array(t_cap, 0)
+    t_ticks = make_array(t_cap, 0)
+    t_rpts  = make_array(t_cap, 0)
+    t_cbs   = make_array(t_cap, 0)
+    t_uds   = make_array(t_cap, 0)
+    t_acts  = make_array(t_cap, 0)
+    
+    s_fds   = make_array(s_cap, 0)
+    s_evts  = make_array(s_cap, 0)
+    s_cbs   = make_array(s_cap, 0)
+    s_uds   = make_array(s_cap, 0)
+    s_acts  = make_array(s_cap, 0)
+    
+    AsyncLoop(
+        t_ids, t_ticks, t_rpts, t_cbs, t_uds, t_acts, 0, t_cap, 1,
+        s_fds, s_evts, s_cbs, s_uds, s_acts, 0, s_cap, 0
+    )
+end
+
+async_set_timeout(loop, delay_ticks, cb, ud) do
+    t_acts = loop.timer_actives
+    t_cnt  = loop.timer_count
+    t_cap  = loop.timer_cap
+    
+    idx = 0 - 1
+    i = 0
+    while i < t_cnt and idx < 0 do
+        if t_acts[i] == 0 then idx = i else 0
+        i += 1
+    end
+    
+    target_idx = 0 - 1
+    if idx >= 0 do
+        target_idx = idx
+    else if t_cnt < t_cap do
+        target_idx = t_cnt
+        loop.timer_count = t_cnt + 1
+    else do
+        target_idx = 0 - 1
+    end
+                 
+    if target_idx < 0 then 0 - 1
+    else do
+        tid = loop.next_timer_id
+        loop.next_timer_id = tid + 1
+        
+        t_ids   = loop.timer_ids
+        t_ticks = loop.timer_ticks
+        t_rpts  = loop.timer_repeats
+        t_cbs   = loop.timer_callbacks
+        t_uds   = loop.timer_user_data
+        
+        t_ids[target_idx]   = tid
+        t_ticks[target_idx] = delay_ticks
+        t_rpts[target_idx]  = 0
+        t_cbs[target_idx]   = cb
+        t_uds[target_idx]   = ud
+        t_acts[target_idx]  = 1
+        tid
+    end
+end
+
+async_set_interval(loop, interval_ticks, cb, ud) do
+    t_acts = loop.timer_actives
+    t_cnt  = loop.timer_count
+    t_cap  = loop.timer_cap
+    
+    idx = 0 - 1
+    i = 0
+    while i < t_cnt and idx < 0 do
+        if t_acts[i] == 0 then idx = i else 0
+        i += 1
+    end
+    
+    target_idx = 0 - 1
+    if idx >= 0 do
+        target_idx = idx
+    else if t_cnt < t_cap do
+        target_idx = t_cnt
+        loop.timer_count = t_cnt + 1
+    else do
+        target_idx = 0 - 1
+    end
+                 
+    if target_idx < 0 then 0 - 1
+    else do
+        tid = loop.next_timer_id
+        loop.next_timer_id = tid + 1
+        
+        t_ids   = loop.timer_ids
+        t_ticks = loop.timer_ticks
+        t_rpts  = loop.timer_repeats
+        t_cbs   = loop.timer_callbacks
+        t_uds   = loop.timer_user_data
+        
+        t_ids[target_idx]   = tid
+        t_ticks[target_idx] = interval_ticks
+        t_rpts[target_idx]  = interval_ticks
+        t_cbs[target_idx]   = cb
+        t_uds[target_idx]   = ud
+        t_acts[target_idx]  = 1
+        tid
+    end
+end
+
+async_clear_timer(loop, tid) do
+    t_acts = loop.timer_actives
+    t_ids  = loop.timer_ids
+    t_cnt  = loop.timer_count
+    
+    found = 0
+    i = 0
+    while i < t_cnt and found == 0 do
+        if t_acts[i] == 1 and t_ids[i] == tid do
+            t_acts[i] = 0
+            found = 1
+        end
+        i += 1
+    end
+    found
+end
+
+async_add_fd(loop, fd, events, cb, ud) do
+    s_acts = loop.sock_actives
+    s_cnt  = loop.sock_count
+    s_cap  = loop.sock_cap
+    
+    idx = 0 - 1
+    i = 0
+    while i < s_cnt and idx < 0 do
+        if s_acts[i] == 0 then idx = i else 0
+        i += 1
+    end
+    
+    target_idx = 0 - 1
+    if idx >= 0 do
+        target_idx = idx
+    else if s_cnt < s_cap do
+        target_idx = s_cnt
+        loop.sock_count = s_cnt + 1
+    else do
+        target_idx = 0 - 1
+    end
+                 
+    if target_idx < 0 then 0 - 1
+    else do
+        s_fds  = loop.sock_fds
+        s_evts = loop.sock_events
+        s_cbs  = loop.sock_callbacks
+        s_uds  = loop.sock_user_data
+        
+        s_fds[target_idx]  = fd
+        s_evts[target_idx] = events
+        s_cbs[target_idx]  = cb
+        s_uds[target_idx]  = ud
+        s_acts[target_idx] = 1
+        1
+    end
+end
+
+async_remove_fd(loop, fd) do
+    s_acts = loop.sock_actives
+    s_fds  = loop.sock_fds
+    s_cnt  = loop.sock_count
+    
+    found = 0
+    i = 0
+    while i < s_cnt do
+        if s_acts[i] == 1 and s_fds[i] == fd do
+            s_acts[i] = 0
+            found = 1
+        end
+        i += 1
+    end
+    found
+end
+
+async_run_once(loop) do
+    pending = 0
+    
+    t_acts  = loop.timer_actives
+    t_ticks = loop.timer_ticks
+    t_rpts  = loop.timer_repeats
+    t_cbs   = loop.timer_callbacks
+    t_uds   = loop.timer_user_data
+    t_cnt   = loop.timer_count
+    
+    // 1. Eksekusi Timer Queue
+    i = 0
+    while i < t_cnt do
+        if t_acts[i] == 1 do
+            rem = t_ticks[i] - 1
+            t_ticks[i] = rem
+            if rem <= 0 do
+                cb = t_cbs[i]
+                ud = t_uds[i]
+                
+                // Panggil callback function pointer
+                if cb != 0 then cb(ud) else 0
+                
+                // Evaluasi apakah single-shot atau interval
+                rpt = t_rpts[i]
+                if rpt > 0 do
+                    t_ticks[i] = rpt
+                    pending += 1
+                else do
+                    t_acts[i] = 0
+                end
+            else do
+                pending += 1
+            end
+        end
+        i += 1
+    end
+    
+    // 2. Hitung Sockets Pending
+    s_acts = loop.sock_actives
+    s_cnt  = loop.sock_count
+    j = 0
+    while j < s_cnt do
+        if s_acts[j] == 1 then pending += 1 else 0
+        j += 1
+    end
+    
+    pending
+end
+
+async_run(loop) do
+    loop.is_running = 1
+    while loop.is_running == 1 do
+        active_items = async_run_once(loop)
+        if active_items <= 0 do
+            loop.is_running = 0
+        else do
+            sleep(1)
+        end
+    end
+    0
+end
+
+async_stop(loop) do
+    loop.is_running = 0
+    0
+end
+
+async_destroy_loop(loop) do
+    drop(loop.timer_ids)
+    drop(loop.timer_ticks)
+    drop(loop.timer_repeats)
+    drop(loop.timer_callbacks)
+    drop(loop.timer_user_data)
+    drop(loop.timer_actives)
+    
+    drop(loop.sock_fds)
+    drop(loop.sock_events)
+    drop(loop.sock_callbacks)
+    drop(loop.sock_user_data)
+    drop(loop.sock_actives)
+    
+    drop(loop)
+    0
+end

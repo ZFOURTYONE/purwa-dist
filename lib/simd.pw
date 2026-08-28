@@ -1,0 +1,226 @@
+// lib/simd.pw — High-Performance SIMD Vectorization & Numerical Primitives (Milestone P7)
+// Provides 4D Vector arithmetic, 4x4 Matrix transforms, and 4-way unrolled parallel array kernels.
+
+struct Vec4 {
+    x, y, z, w
+}
+
+struct Mat4 {
+    m00, m01, m02, m03,
+    m10, m11, m12, m13,
+    m20, m21, m22, m23,
+    m30, m31, m32, m33
+}
+
+// ----------------------------------------------------------------------------
+// 1. 4D Vector Operations
+// ----------------------------------------------------------------------------
+
+vec4_new(x, y, z, w) do
+    Vec4(x, y, z, w)
+end
+
+vec4_add(a, b) do
+    Vec4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w)
+end
+
+vec4_sub(a, b) do
+    Vec4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w)
+end
+
+vec4_mul(a, b) do
+    Vec4(a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w)
+end
+
+vec4_scale(v, s) do
+    Vec4(v.x * s, v.y * s, v.z * s, v.w * s)
+end
+
+vec4_dot(a, b) do
+    a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w
+end
+
+vec4_magnitude_sq(v) do
+    v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w
+end
+
+vec4_distance_sq(a, b) do
+    dx = a.x - b.x
+    dy = a.y - b.y
+    dz = a.z - b.z
+    dw = a.w - b.w
+    dx * dx + dy * dy + dz * dz + dw * dw
+end
+
+// ----------------------------------------------------------------------------
+// 2. 4x4 Matrix Operations (Linear Algebra & 3D Graphics)
+// ----------------------------------------------------------------------------
+
+mat4_identity() do
+    Mat4(
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+    )
+end
+
+mat4_transform_vec4(m, v) do
+    rx = m.m00 * v.x + m.m01 * v.y + m.m02 * v.z + m.m03 * v.w
+    ry = m.m10 * v.x + m.m11 * v.y + m.m12 * v.z + m.m13 * v.w
+    rz = m.m20 * v.x + m.m21 * v.y + m.m22 * v.z + m.m23 * v.w
+    rw = m.m30 * v.x + m.m31 * v.y + m.m32 * v.z + m.m33 * v.w
+    Vec4(rx, ry, rz, rw)
+end
+
+mat4_mul(a, b) do
+    r00 = a.m00 * b.m00 + a.m01 * b.m10 + a.m02 * b.m20 + a.m03 * b.m30
+    r01 = a.m00 * b.m01 + a.m01 * b.m11 + a.m02 * b.m21 + a.m03 * b.m31
+    r02 = a.m00 * b.m02 + a.m01 * b.m12 + a.m02 * b.m22 + a.m03 * b.m32
+    r03 = a.m00 * b.m03 + a.m01 * b.m13 + a.m02 * b.m23 + a.m03 * b.m33
+
+    r10 = a.m10 * b.m00 + a.m11 * b.m10 + a.m12 * b.m20 + a.m13 * b.m30
+    r11 = a.m10 * b.m01 + a.m11 * b.m11 + a.m12 * b.m21 + a.m13 * b.m31
+    r12 = a.m10 * b.m02 + a.m11 * b.m12 + a.m12 * b.m22 + a.m13 * b.m32
+    r13 = a.m10 * b.m03 + a.m11 * b.m13 + a.m12 * b.m23 + a.m13 * b.m33
+
+    r20 = a.m20 * b.m00 + a.m21 * b.m10 + a.m22 * b.m20 + a.m23 * b.m30
+    r21 = a.m20 * b.m01 + a.m21 * b.m11 + a.m22 * b.m21 + a.m23 * b.m31
+    r22 = a.m20 * b.m02 + a.m21 * b.m12 + a.m22 * b.m22 + a.m23 * b.m32
+    r23 = a.m20 * b.m03 + a.m21 * b.m13 + a.m22 * b.m23 + a.m23 * b.m33
+
+    r30 = a.m30 * b.m00 + a.m31 * b.m10 + a.m32 * b.m20 + a.m33 * b.m30
+    r31 = a.m30 * b.m01 + a.m31 * b.m11 + a.m32 * b.m21 + a.m33 * b.m31
+    r32 = a.m30 * b.m02 + a.m31 * b.m12 + a.m32 * b.m22 + a.m33 * b.m32
+    r33 = a.m30 * b.m03 + a.m31 * b.m13 + a.m32 * b.m23 + a.m33 * b.m33
+
+    Mat4(
+        r00, r01, r02, r03,
+        r10, r11, r12, r13,
+        r20, r21, r22, r23,
+        r30, r31, r32, r33
+    )
+end
+
+// ----------------------------------------------------------------------------
+// 3. 4-Way Unrolled High-Throughput Parallel Array Kernels
+// ----------------------------------------------------------------------------
+
+simd_array_add(dst, a, b, count) do
+    chunks = count / 4
+    rem = count % 4
+    
+    // 4-Way Parallel Unrolling Loop
+    c = 0
+    while c < chunks do
+        idx = c * 4
+        dst[idx + 0] = a[idx + 0] + b[idx + 0]
+        dst[idx + 1] = a[idx + 1] + b[idx + 1]
+        dst[idx + 2] = a[idx + 2] + b[idx + 2]
+        dst[idx + 3] = a[idx + 3] + b[idx + 3]
+        c += 1
+    end
+    
+    // Remainder Loop
+    tail = chunks * 4
+    i = 0
+    while i < rem do
+        dst[tail + i] = a[tail + i] + b[tail + i]
+        i += 1
+    end
+    count
+end
+
+simd_array_scale(dst, src, scalar, count) do
+    chunks = count / 4
+    rem = count % 4
+    
+    c = 0
+    while c < chunks do
+        idx = c * 4
+        dst[idx + 0] = src[idx + 0] * scalar
+        dst[idx + 1] = src[idx + 1] * scalar
+        dst[idx + 2] = src[idx + 2] * scalar
+        dst[idx + 3] = src[idx + 3] * scalar
+        c += 1
+    end
+    
+    tail = chunks * 4
+    i = 0
+    while i < rem do
+        dst[tail + i] = src[tail + i] * scalar
+        i += 1
+    end
+    count
+end
+
+simd_array_dot(a, b, count) do
+    chunks = count / 4
+    rem = count % 4
+    
+    // 4 Independent Accumulators (Breaks Dependency Chains for maximum CPU ILP)
+    acc0 = 0
+    acc1 = 0
+    acc2 = 0
+    acc3 = 0
+    
+    c = 0
+    while c < chunks do
+        idx = c * 4
+        acc0 += a[idx + 0] * b[idx + 0]
+        acc1 += a[idx + 1] * b[idx + 1]
+        acc2 += a[idx + 2] * b[idx + 2]
+        acc3 += a[idx + 3] * b[idx + 3]
+        c += 1
+    end
+    
+    total = acc0 + acc1 + acc2 + acc3
+    
+    tail = chunks * 4
+    i = 0
+    while i < rem do
+        total += a[tail + i] * b[tail + i]
+        i += 1
+    end
+    total
+end
+
+simd_array_sum(arr, count) do
+    chunks = count / 4
+    rem = count % 4
+    
+    acc0 = 0
+    acc1 = 0
+    acc2 = 0
+    acc3 = 0
+    
+    c = 0
+    while c < chunks do
+        idx = c * 4
+        acc0 += arr[idx + 0]
+        acc1 += arr[idx + 1]
+        acc2 += arr[idx + 2]
+        acc3 += arr[idx + 3]
+        c += 1
+    end
+    
+    total = acc0 + acc1 + acc2 + acc3
+    
+    tail = chunks * 4
+    i = 0
+    while i < rem do
+        total += arr[tail + i]
+        i += 1
+    end
+    total
+end
+
+simd_find_byte(buf, len, target_byte) do
+    found_idx = 0 - 1
+    i = 0
+    while i < len and found_idx < 0 do
+        if get_byte(buf, i) == target_byte then found_idx = i else 0
+        i += 1
+    end
+    found_idx
+end

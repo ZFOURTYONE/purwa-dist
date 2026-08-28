@@ -1,0 +1,113 @@
+// lib/ws.pw — WebSocket Protocol (RFC 6455) for Purwa (P6)
+// Per panduan: zero-dependency, uses only OS APIs.
+import "net"
+
+global WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+global WS_OP_TEXT = 1
+global WS_OP_PING = 9
+global WS_OP_PONG = 10
+global WS_OP_CLOSE = 8
+
+ws_listen(port: i64): i64 do net_listen(port) end
+
+ws_accept(server_fd: i64): i64 do net_accept(server_fd) end
+
+ws_send_text(client_fd: i64, text: string): i64 do
+    text_len = str_len(text)
+    frame = alloc(text_len + 14)
+    set_byte(frame, 0, 129)
+    if text_len < 126 then do
+        set_byte(frame, 1, text_len)
+        i = 0
+        while i < text_len do set_byte(frame, 2 + i, get_byte(text, i)); i = i + 1 end
+        net_send(client_fd, frame, 2 + text_len)
+    end else do
+        set_byte(frame, 1, 126)
+        set_byte(frame, 2, (text_len >> 8) & 256)
+        set_byte(frame, 3, text_len & 255)
+        i = 0
+        while i < text_len do set_byte(frame, 4 + i, get_byte(text, i)); i = i + 1 end
+        net_send(client_fd, frame, 4 + text_len)
+    end
+end
+
+ws_send_close(client_fd: i64): i64 do
+    frame = alloc(2)
+    set_byte(frame, 0, 136); set_byte(frame, 1, 0)
+    net_send(client_fd, frame, 2)
+end
+
+ws_send_pong(client_fd: i64): i64 do
+    frame = alloc(2)
+    set_byte(frame, 0, 138); set_byte(frame, 1, 0)
+    net_send(client_fd, frame, 2)
+end
+
+ws_recv_text(client_fd: i64, buf: ptr, buf_size: i64): ptr do
+    n = net_recv(client_fd, buf, buf_size)
+    if n <= 0 then 0
+    else do
+        opcode = get_byte(buf, 0) & 15
+        masked = (get_byte(buf, 1) >> 7) & 1
+        payload_len = get_byte(buf, 1) & 127
+        pos = 2
+        if payload_len == 126 then do
+            payload_len = get_byte(buf, 2) << 8 | get_byte(buf, 3)
+            pos = 4
+        end else 0
+        mask_key = 0
+        if masked == 1 then do
+            mask_key = alloc(4)
+            set_byte(mask_key, 0, get_byte(buf, pos))
+            set_byte(mask_key, 1, get_byte(buf, pos + 1))
+            set_byte(mask_key, 2, get_byte(buf, pos + 2))
+            set_byte(mask_key, 3, get_byte(buf, pos + 3))
+            pos = pos + 4
+        end else 0
+        if buf_size < pos + payload_len then 0
+        else do
+            payload = alloc(payload_len + 1)
+            i = 0
+            while i < payload_len do
+                raw = get_byte(buf, pos + i)
+                if masked == 1 then set_byte(payload, i, raw ^ get_byte(mask_key, i % 4))
+                else set_byte(payload, i, raw)
+                i = i + 1
+            end
+            set_byte(payload, payload_len, 0)
+            if mask_key != 0 then drop(mask_key) else 0
+            if opcode == WS_OP_TEXT then payload
+            else if opcode == WS_OP_PING then do ws_send_pong(client_fd); drop(payload); 0 end
+            else if opcode == WS_OP_CLOSE then do ws_send_close(client_fd); drop(payload); 0 end
+            else do drop(payload); 0 end
+        end
+    end
+end
+
+ws_handshake(client_fd: i64, buf: ptr, buf_size: i64): i64 do
+    n = net_recv(client_fd, buf, buf_size)
+    if n <= 0 then 0
+    else do
+        key_header = "Sec-WebSocket-Key: "
+        key_pos = 0 - 1
+        i = 0
+        while i <= n - 19 and key_pos < 0 do
+            m = 1
+            j = 0
+            while j < 19 and m == 1 do
+                if get_byte(buf, i + j) != get_byte(key_header, j) then m = 0 else 0
+                j = j + 1
+            end
+            if m == 1 then key_pos = i else i = i + 1
+        end
+        if key_pos < 0 then 0
+        else do
+            resp = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+            net_send(client_fd, resp, str_len(resp))
+            1
+        end
+    end
+end
+
+ws_close(client_fd: i64) do ws_send_close(client_fd); net_close(client_fd); 0 end
+ws_close_server(server_fd: i64) do net_close(server_fd); 0 end

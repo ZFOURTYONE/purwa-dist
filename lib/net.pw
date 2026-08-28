@@ -1,0 +1,247 @@
+// lib/net.pw — Bare-Metal TCP Networking Primitives for Purwa (ws2_32.dll)
+import "bytes"
+
+global WS2_DLL = 0
+global FN_WSA_STARTUP = 0
+global FN_WSA_CLEANUP = 0
+global FN_SOCKET = 0
+global FN_BIND = 0
+global FN_LISTEN = 0
+global FN_ACCEPT = 0
+global FN_SEND = 0
+global FN_RECV = 0
+global FN_CLOSESOCKET = 0
+global FN_HTONS = 0
+global FN_SETSOCKOPT = 0
+global FN_CONNECT = 0       // connect — TCP client
+global FN_INET_ADDR = 0     // inet_addr — "1.2.3.4" -> u32 network order
+global FN_GETADDRINFO = 0   // getaddrinfo — hostname resolution
+global FN_FREEADDRINFO = 0  // freeaddrinfo
+
+net_init() do
+    if WS2_DLL == 0 then do
+        WS2_DLL = load_dll("ws2_32.dll")
+        if WS2_DLL != 0 then do
+            FN_WSA_STARTUP = get_fn(WS2_DLL, "WSAStartup")
+            FN_WSA_CLEANUP = get_fn(WS2_DLL, "WSACleanup")
+            FN_SOCKET = get_fn(WS2_DLL, "socket")
+            FN_BIND = get_fn(WS2_DLL, "bind")
+            FN_LISTEN = get_fn(WS2_DLL, "listen")
+            FN_ACCEPT = get_fn(WS2_DLL, "accept")
+            FN_SEND = get_fn(WS2_DLL, "send")
+            FN_RECV = get_fn(WS2_DLL, "recv")
+            FN_CLOSESOCKET = get_fn(WS2_DLL, "closesocket")
+            FN_HTONS = get_fn(WS2_DLL, "htons")
+            FN_SETSOCKOPT = get_fn(WS2_DLL, "setsockopt")
+            FN_CONNECT = get_fn(WS2_DLL, "connect")
+            FN_INET_ADDR = get_fn(WS2_DLL, "inet_addr")
+            FN_GETADDRINFO = get_fn(WS2_DLL, "getaddrinfo")
+            FN_FREEADDRINFO = get_fn(WS2_DLL, "freeaddrinfo")
+            
+            // WSAStartup(0x0202, wsa_data)
+            wsa_data = alloc(512)
+            res = call_dll(FN_WSA_STARTUP, 514, wsa_data)
+            drop(wsa_data)
+            if res == 0 then 1 else 0
+        end else 0
+    end else 1
+end
+
+net_cleanup() do
+    if WS2_DLL != 0 and FN_WSA_CLEANUP != 0 then do
+        call_dll(FN_WSA_CLEANUP)
+        close_dll(WS2_DLL)
+        WS2_DLL = 0
+        0
+    end else 0
+end
+
+net_socket() do
+    if net_init() == 0 then 0 - 1
+    else do
+        // socket(AF_INET=2, SOCK_STREAM=1, IPPROTO_TCP=6)
+        call_dll(FN_SOCKET, 2, 1, 6)
+    end
+end
+
+net_listen(port) do
+    sock = net_socket()
+    if sock < 0 or sock == 18446744073709551615 then 0 - 1
+    else do
+        // Set SO_REUSEADDR (SOL_SOCKET=0xFFFF, SO_REUSEADDR=4)
+        opt = alloc(8)
+        mem_set(opt, 0, 8)
+        set_byte(opt, 0, 1)
+        call_dll(FN_SETSOCKOPT, sock, 65535, 4, opt, 4)
+        drop(opt)
+        
+        // sockaddr_in (16 bytes: sin_family=2 (i16), sin_port (htons(port)), sin_addr=0 (INADDR_ANY))
+        addr = alloc(16)
+        mem_set(addr, 0, 16)
+        set_byte(addr, 0, 2) // AF_INET = 2 (low byte)
+        set_byte(addr, 1, 0) // high byte
+        
+        port_be = call_dll(FN_HTONS, port)
+        set_byte(addr, 2, port_be & 255)
+        set_byte(addr, 3, (port_be >> 8) & 255)
+        
+        bind_res = call_dll(FN_BIND, sock, addr, 16)
+        drop(addr)
+        
+        if bind_res != 0 then do
+            call_dll(FN_CLOSESOCKET, sock)
+            0 - 1
+        end else do
+            listen_res = call_dll(FN_LISTEN, sock, 128)
+            if listen_res != 0 then do
+                call_dll(FN_CLOSESOCKET, sock)
+                0 - 1
+            end else sock
+        end
+    end
+end
+
+net_accept(server_fd) do
+    if server_fd < 0 then 0 - 1
+    else do
+        call_dll(FN_ACCEPT, server_fd, 0, 0)
+    end
+end
+
+net_send(client_fd, msg_buf, msg_len) do
+    if client_fd < 0 then 0 - 1
+    else do
+        call_dll(FN_SEND, client_fd, msg_buf, msg_len, 0)
+    end
+end
+
+net_recv(client_fd, out_buf, max_len) do
+    if client_fd < 0 then 0 - 1
+    else do
+        call_dll(FN_RECV, client_fd, out_buf, max_len, 0)
+    end
+end
+
+net_close(sock_fd) do
+    if sock_fd >= 0 and WS2_DLL != 0 and FN_CLOSESOCKET != 0 then do
+        call_dll(FN_CLOSESOCKET, sock_fd)
+    end else 0
+end
+
+// ---------------------------------------------------------------------------
+// TCP client additions (speednet / ping / download)
+// ---------------------------------------------------------------------------
+
+// net_set_timeout(fd, ms) — SO_RCVTIMEO + SO_SNDTIMEO agar connect/recv
+// tidak menggantung selamanya. return 0 ok, -1 gagal.
+net_set_timeout(fd, ms) do
+    if fd < 0 then 0 - 1
+    else do
+        opt = alloc(8)
+        mem_set(opt, 0, 8)
+        set_byte(opt, 0, ms & 255)
+        set_byte(opt, 1, (ms >> 8) & 255)
+        set_byte(opt, 2, (ms >> 16) & 255)
+        set_byte(opt, 3, (ms >> 24) & 255)
+        // SOL_SOCKET = 0xFFFF, SO_RCVTIMEO = 0x1006, SO_SNDTIMEO = 0x1005
+        call_dll(FN_SETSOCKOPT, fd, 65535, 4102, opt, 8)
+        call_dll(FN_SETSOCKOPT, fd, 65535, 4101, opt, 8)
+        drop(opt)
+        0
+    end
+end
+
+// net_connect_ip("1.2.3.4", port) — sambung TCP ke IP literal.
+// return socket fd (>= 0) atau -1 gagal.
+net_connect_ip(ip_str, port) do
+    if net_init() == 0 then 0 - 1
+    else do
+        sock = call_dll(FN_SOCKET, 2, 1, 6)
+        if sock < 0 then 0 - 1
+        else do
+            addr = alloc(16)
+            mem_set(addr, 0, 16)
+            set_byte(addr, 0, 2)        // AF_INET
+            port_be = call_dll(FN_HTONS, port)
+            set_byte(addr, 2, port_be & 255)
+            set_byte(addr, 3, (port_be >> 8) & 255)
+            ip_raw = call_dll(FN_INET_ADDR, ip_str)
+            if ip_raw == 4294967295 or ip_raw == 18446744073709551615 then do
+                // inet_addr gagal (INADDR_NONE)
+                net_close(sock)
+                drop(addr)
+                0 - 1
+            end else do
+                set_byte(addr, 4, ip_raw & 255)
+                set_byte(addr, 5, (ip_raw >> 8) & 255)
+                set_byte(addr, 6, (ip_raw >> 16) & 255)
+                set_byte(addr, 7, (ip_raw >> 24) & 255)
+                r = call_dll(FN_CONNECT, sock, addr, 16)
+                drop(addr)
+                if r != 0 then do
+                    net_close(sock)
+                    0 - 1
+                end else sock
+            end
+        end
+    end
+end
+
+// net_connect_host("example.com", port) — sambung TCP via getaddrinfo.
+net_connect_host(host, port) do
+    if net_init() == 0 then 0 - 1
+    else do
+        port_str = to_text(port)
+        res_ptr = alloc(8)
+        mem_set(res_ptr, 0, 8)
+        hints = alloc(48)
+        mem_set(hints, 0, 48)
+        set_byte(hints, 4, 2)  // ai_family = AF_INET
+        set_byte(hints, 8, 1)  // ai_socktype = SOCK_STREAM
+        gai = call_dll(FN_GETADDRINFO, host, port_str, hints, res_ptr)
+        drop(hints)
+        drop(port_str)
+        if gai != 0 then do
+            drop(res_ptr)
+            0 - 1
+        end else do
+            first = read_u64(res_ptr, 0)
+            ai = first
+            fd = 0 - 1
+            while ai != 0 and fd < 0 do
+                fam = get_byte(ai, 4) + get_byte(ai, 5) * 256
+                if fam == 2 then do
+                    sa = read_u64(ai, 32)     // ai_addr
+                    alen = read_u64(ai, 16)   // ai_addrlen
+                    if sa != 0 then do
+                        fd = call_dll(FN_SOCKET, 2, 1, 6)
+                        if fd >= 0 then do
+                            r = call_dll(FN_CONNECT, fd, sa, alen)
+                            if r != 0 then do
+                                net_close(fd)
+                                fd = 0 - 1
+                            end else 0
+                        end else 0
+                    end else 0
+                end else 0
+                ai = read_u64(ai, 40)         // ai_next
+            end
+            call_dll(FN_FREEADDRINFO, first)
+            drop(res_ptr)
+            fd
+        end
+    end
+end
+
+// net_connect("1.2.3.4" | "hostname", port) — otomatis pilih jalur.
+net_connect(host, port) do
+    L = str_len(host)
+    is_ip = 1
+    i = 0
+    while i < L and is_ip == 1 do
+        c = get_byte(host, i)
+        if c != 46 and (c < 48 or c > 57) then is_ip = 0 else i = i + 1
+    end
+    if is_ip == 1 then net_connect_ip(host, port)
+    else net_connect_host(host, port)
+end

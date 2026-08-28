@@ -1,0 +1,120 @@
+// lib/cli.pw — helper CLI & tampilan umum untuk aplikasi command-line
+// Memberikan operasi berulang yang dulu disalin manual di tiap app:
+//   nameeq(a, b)        cek dua string sama isi
+//   salin_token(cmd,k,b) ambil token ke-k dari baris perintah
+//   parse_int(buf)      parse angka dari buffer
+//   show_num_comma(n)   cetak angka dengan pemisah ribuan (1.234.567)
+//   show_us_as_ms(us)   cetak mikrodetik sebagai ms (2 desimal)
+//   show_mbps(x1000)    cetak Mbps*1000 sebagai Mbps (2 desimal)
+//   show_frac(v, d)     cetak v dengan 2 digit desimal
+
+nameeq(a, b) do
+    if a == b do
+        1
+    else do
+        i = 0
+        while get_byte(a, i) == get_byte(b, i) and get_byte(a, i) != 0 do
+            i = i + 1
+        end
+        if get_byte(a, i) == get_byte(b, i) then 1 else 0
+    end
+end
+
+// Salin token ke-`k` dari cmd ke buf. Kembalikan panjang (0 = habis).
+salin_token(cmd, k, buf, maxw) do
+    i = 0
+    ck = 0
+    w = 0
+    go = 1
+    while go == 1 do
+        while i < str_len(cmd) and (get_byte(cmd, i) == 32 or get_byte(cmd, i) == 9 or get_byte(cmd, i) == 13) do
+            i = i + 1
+        end
+        if i >= str_len(cmd) then go = 0
+        else do
+            if get_byte(cmd, i) == 34 do
+                i = i + 1
+                while i < str_len(cmd) and get_byte(cmd, i) != 34 do
+                    if ck == k do
+                        if w < maxw - 1 do
+                            set_byte(buf, w, get_byte(cmd, i))
+                            w = w + 1
+                        end
+                    end
+                    i = i + 1
+                end
+                i = i + 1
+            else do
+                while i < str_len(cmd) and get_byte(cmd, i) != 32 and get_byte(cmd, i) != 9 and get_byte(cmd, i) != 13 do
+                    if ck == k do
+                        if w < maxw - 1 do
+                            set_byte(buf, w, get_byte(cmd, i))
+                            w = w + 1
+                        end
+                    end
+                    i = i + 1
+                end
+            end
+            ck = ck + 1
+        end
+    end
+    set_byte(buf, w, 0)
+    w
+end
+
+// Parse integer (desimal) dari buffer berakhir-NUL.
+parse_int(buf) do
+    v = 0
+    i = 0
+    L = str_len(buf)
+    while i < L do
+        c = get_byte(buf, i)
+        if c >= 48 and c <= 57 then v = v * 10 + (c - 48) else 0
+        i = i + 1
+    end
+    v
+end
+
+// Cetak angka dengan pemisah ribuan.
+show_num_comma(n) do
+    if n < 1000 then show_num(n)
+    else do
+        show_num_comma(n / 1000)
+        show(",")
+        d3 = n % 1000
+        if d3 < 100 then show("0") else 0
+        if d3 < 10 then show("0") else 0
+        show_num(d3)
+    end
+end
+
+// Cetak nilai bulat dengan 2 digit desimal (misal 123 -> "1.23").
+show_frac(v) do
+    int_part = v / 100
+    frac = v % 100
+    show_num(int_part)
+    show(".")
+    if frac < 10 then show("0") else 0
+    show_num(frac)
+end
+
+// Cetak mikrodetik sebagai milidetik dengan 2 desimal.
+show_us_as_ms(us) do
+    ms = us / 1000
+    frac = (us % 1000) / 10
+    show_num(ms)
+    show(".")
+    if frac < 10 then show("0") else 0
+    show_num(frac)
+end
+
+// Cetak Mbps*1000 (nilai integer) sebagai Mbps dengan 3 desimal.
+show_mbps(mbps_x1000) do
+    int_part = mbps_x1000 / 1000
+    frac = mbps_x1000 % 1000
+    show_num(int_part)
+    show(".")
+    if frac < 100 then show("0") else 0
+    if frac < 10 then show("0") else 0
+    show_num(frac)
+end

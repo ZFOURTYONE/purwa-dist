@@ -1,0 +1,55 @@
+// lib/mathx.pw - Matematika bilangan bulat tambahan (v36.6)
+// Semua fungsi murni i64; tanpa dependensi.
+
+lcm(a, b) = do
+    x = if a < 0 then 0 - a else a;
+    y = if b < 0 then 0 - b else b;
+    g = gcd(x, y);
+    if g == 0 then 0 else x / g * y
+end;
+
+sqrt_int(n) = do
+    // Newton integer: floor(sqrt(n)) untuk n >= 0
+    if n < 2 then n
+    else do
+        x = n;
+        y = (x + 1) / 2;
+        while y < x do
+            x = y;
+            y = (x + n / x) / 2
+        end;
+        x
+    end
+end;
+
+is_prime(n) = do
+    if n < 2 then 0
+    else if n == 2 then 1
+    else if n % 2 == 0 then 0
+    else do
+        lim = sqrt_int(n);
+        d = 3;
+        go = 1;
+        while d <= lim and go == 1 do
+            if n % d == 0 then go = 0 else 0;
+            d = d + 2
+        end;
+        go
+    end
+end;
+
+mod_pow(b, e, m) = do
+    // square-and-multiply modular; hasil (b^e) mod m, m != 0
+    if m == 0 then 0
+    else do
+        r = 1;
+        base = b % m;
+        k = e;
+        while k > 0 do
+            if k % 2 == 1 then r = r * base % m else 0;
+            base = base * base % m;
+            k = k / 2
+        end;
+        r
+    end
+end;

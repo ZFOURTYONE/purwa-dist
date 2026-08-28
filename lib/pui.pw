@@ -1,0 +1,605 @@
+// ============================================================
+// lib/pui.pw - Purwa UI (PUI): framework GUI deklaratif
+// ------------------------------------------------------------
+// Buat UI tanpa piksel & tanpa menghitung koordinat. Susun
+// widget secara deklaratif, PUI yang mengukur, menata, dan
+// menggambar semuanya.
+//
+//   v = column([
+//       title("Halo Purwa"),
+//       text("Counter: " + to_text(n)),
+//       row([ button("-", AKSI_KURANG), button("+", AKSI_TAMBAH) ]),
+//       card([ text("Kartu info") ])
+//   ])
+//
+// Struktur aplikasi yang disarankan:
+//   APP.pw      entrypoint -> pui_run(...)
+//   MAIN_UI.pw  komposisi layar
+//   widget.pw   widget kustom aplikasi
+//
+// Kontrak event: setiap tombol punya id action. Setelah satu
+// frame, klik dicocokkan ke id, lalu fungsi event dipanggil:
+//   state_baru = saat_klik(state_lama, id)
+// ============================================================
+
+import "canvas"
+import "gui"
+
+// ---------------- tema (gelap modern, mirip kalkulator) ----------------
+const T_BG = 0
+const T_SURFACE = 3
+const T_SURFACE2 = 6
+const T_TEXT = 9
+const T_SUBTLE = 12
+const T_ACCENT = 15
+const T_ACCENT_DN = 18
+const T_TXT_ON_ACC = 21
+const T_DANGER = 24
+const T_OK = 27
+const T_SIZE = 30
+
+global PUI_T = 0
+
+pui_init_theme() do
+    PUI_T = make_array(T_SIZE, 0)
+    // latar slate-900
+    PUI_T[T_BG] = 15;      PUI_T[T_BG + 1] = 23;      PUI_T[T_BG + 2] = 42
+    // permukaan kartu slate-800
+    PUI_T[T_SURFACE] = 30; PUI_T[T_SURFACE + 1] = 41; PUI_T[T_SURFACE + 2] = 59
+    PUI_T[T_SURFACE2] = 22; PUI_T[T_SURFACE2 + 1] = 30; PUI_T[T_SURFACE2 + 2] = 46
+    // teks putih / redup
+    PUI_T[T_TEXT] = 255;   PUI_T[T_TEXT + 1] = 255;   PUI_T[T_TEXT + 2] = 255
+    PUI_T[T_SUBTLE] = 148; PUI_T[T_SUBTLE + 1] = 163; PUI_T[T_SUBTLE + 2] = 184
+    // aksen sky-700 + versi tekan
+    PUI_T[T_ACCENT] = 2;   PUI_T[T_ACCENT + 1] = 132; PUI_T[T_ACCENT + 2] = 199
+    PUI_T[T_ACCENT_DN] = 3; PUI_T[T_ACCENT_DN + 1] = 105; PUI_T[T_ACCENT_DN + 2] = 161
+    PUI_T[T_TXT_ON_ACC] = 255; PUI_T[T_TXT_ON_ACC + 1] = 255; PUI_T[T_TXT_ON_ACC + 2] = 255
+    // merah & hijau
+    PUI_T[T_DANGER] = 220; PUI_T[T_DANGER + 1] = 38;  PUI_T[T_DANGER + 2] = 38
+    PUI_T[T_OK] = 34;      PUI_T[T_OK + 1] = 197;     PUI_T[T_OK + 2] = 94
+    0
+end
+
+// ---------------- slot node widget (array bernama konstanta) ----------------
+const N_KIND = 0
+const N_TEXT = 1
+const N_ACTION = 2
+const N_R = 3
+const N_G = 4
+const N_B = 5
+const N_CHILDREN = 6
+const N_NA = 7
+const N_ALIGN = 8      // 0 kiri, 1 tengah, 2 kanan
+const N_MINW = 9
+const N_MINH = 10
+const N_SC = 11       // skala font utk teks
+
+const J_TEXT = 1
+const J_BUTTON = 2
+const J_COLUMN = 3
+const J_ROW = 4
+const J_BOX = 5
+const J_SPACER = 6
+
+pui_node(kind) do
+    n = make_array(12, 0)
+    n[N_KIND] = kind
+    n[N_ALIGN] = 0
+    n[N_SC] = 2
+    n
+end
+
+// ---------------- pembuat widget ----------------
+text(t) do
+    n = pui_node(J_TEXT)
+    n[N_TEXT] = t
+    n
+end
+
+title(t) do
+    n = text(t)
+    n[N_SC] = 3
+    n
+end
+
+small_text(t) do
+    n = text(t)
+    n[N_SC] = 1
+    n
+end
+
+button(label, id) do
+    n = pui_node(J_BUTTON)
+    n[N_TEXT] = label
+    n[N_ACTION] = id
+    n[N_MINH] = 36
+    n
+end
+
+column(children) do
+    n = pui_node(J_COLUMN)
+    n[N_CHILDREN] = children
+    n[N_NA] = size(children)
+    n
+end
+
+row(children) do
+    n = pui_node(J_ROW)
+    n[N_CHILDREN] = children
+    n[N_NA] = size(children)
+    n
+end
+
+box(r, g, b, children) do
+    n = pui_node(J_BOX)
+    n[N_R] = r
+    n[N_G] = g
+    n[N_B] = b
+    n[N_CHILDREN] = children
+    n[N_NA] = size(children)
+    n
+end
+
+card(children) do
+    n = box(PUI_T[T_SURFACE], PUI_T[T_SURFACE + 1], PUI_T[T_SURFACE + 2], children)
+    n
+end
+
+spacer(px) do
+    n = pui_node(J_SPACER)
+    n[N_MINH] = px
+    n
+end
+
+align(n, mode) do
+    // mode: 0 kiri, 1 tengah, 2 kanan (untuk teks & isi kolom)
+    n[N_ALIGN] = mode
+    n
+end
+
+page(children) do
+    // permukaan root: warna latar + padding bawaan; pakai sebagai pembungkus
+    // paling luar agar konten tidak menempel ke tepi jendela
+    box(PUI_T[T_BG], PUI_T[T_BG + 1], PUI_T[T_BG + 2], children)
+end
+
+height_min(n, h) do
+    n[N_MINH] = h
+    n
+end
+
+width_min(n, w) do
+    n[N_MINW] = w
+    n
+end
+
+color(n, r, g, b) do
+    n[N_R] = r
+    n[N_G] = g
+    n[N_B] = b
+    n
+end
+
+// ---------------- font 5x7 (klasik GLCD; MSB = kolom kiri) ----------------
+global PUI_FONT = 0
+
+pui_init_font() do
+    // satu baris: parser belum mendukung literal nested multi-baris
+    PUI_FONT = [[0,0,0,0,0,0,0],[4,4,4,4,0,0,4],[10,10,10,0,0,0,0],[10,10,31,10,31,10,10],[4,15,20,14,5,30,4],[25,26,2,4,8,11,19],[12,18,18,12,21,18,13],[4,4,8,0,0,0,0],[4,10,4,4,4,10,4],[14,17,1,2,4,0,4],[2,4,8,8,8,4,2],[8,4,2,2,2,4,8],[0,4,0,31,0,4,0],[0,10,4,31,4,10,0],[0,0,0,0,0,12,12],[0,0,0,31,0,0,0],[0,0,12,12,0,0,0],[31,1,2,4,8,16,31],[14,17,19,21,25,17,14],[4,12,4,4,4,4,14],[14,17,1,2,4,8,31],[31,2,4,2,1,17,14],[2,6,10,18,31,2,2],[31,16,30,1,1,17,14],[6,8,16,30,17,17,14],[31,1,2,4,8,8,8],[14,17,17,14,17,17,14],[14,17,17,15,1,2,12],[0,4,0,0,4,0,0],[0,12,12,0,12,12,0],[2,4,8,16,8,4,2],[0,0,0,31,0,0,0],[8,4,2,1,2,4,8],[31,16,16,30,17,17,30],[14,17,17,31,17,17,17],[30,17,17,30,17,17,30],[14,17,16,16,16,17,14],[30,17,17,17,17,17,30],[31,16,16,30,16,16,31],[31,16,16,30,16,16,16],[14,17,16,23,17,17,15],[17,17,17,31,17,17,17],[14,4,4,4,4,4,14],[7,2,2,2,2,18,12],[17,18,20,24,20,18,17],[16,16,16,16,16,16,31],[17,27,21,21,17,17,17],[17,25,21,19,17,17,17],[14,17,17,17,17,17,14],[30,17,17,30,16,16,16],[14,17,17,17,21,18,13],[30,17,17,30,20,18,17],[15,16,16,14,1,1,30],[31,4,4,4,4,4,4],[17,17,17,17,17,17,14],[17,17,17,17,17,10,4],[17,17,17,21,21,27,17],[17,10,4,4,10,17,17],[17,10,4,4,4,4,4],[31,1,2,4,8,16,31],[14,8,8,8,8,8,14],[16,16,8,4,2,1,1],[14,2,2,2,2,2,14],[10,31,10,10,10,31,10],[0,4,10,17,0,0,0],[0,0,0,0,0,0,31],[8,4,0,0,0,0,0]]
+    0
+end
+
+pui_glyph(code) do
+    c = code
+    if c >= 97 and c <= 122 then c = c - 32 else 0
+    if c < 32 or c > 95 do c = 63 end
+    PUI_FONT[c - 32]
+end
+
+pui_text_width(s, sc) do
+    _str_len(s) * 6 * sc
+end
+
+pui_draw_text(c: Canvas, s, x, y, sc, r, g, b) do
+    i = 0
+    while i < _str_len(s) do
+        gl = pui_glyph(get_byte(s, i))
+        dy = 0
+        while dy < 7 do
+            baris_px = gl[dy]
+            dx = 0
+            while dx < 5 do
+                if baris_px % (pw2(4 - dx) * 2) >= pw2(4 - dx) then do
+                    cy = y + dy * sc
+                    ex = 0
+                    while ex < sc do
+                        ey = 0
+                        while ey < sc do
+                            canvas_set_pixel(c, x + dx * sc + ex, cy + ey, r, g, b, 255)
+                            ey += 1
+                        end
+                        ex += 1
+                    end
+                end else 0
+                dx += 1
+            end
+            dy += 1
+        end
+        x += 6 * sc
+        i += 1
+    end
+    0
+end
+
+pw2(n) do
+    p = 1
+    i = 0
+    while i < n do
+        p = p * 2
+        i += 1
+    end
+    p
+end
+
+pui_isqrt(n) do
+    if n < 2 then n
+    else do
+        x = n
+        y = (x + 1) / 2
+        while y < x do
+            x = y
+            y = (x + n / x) / 2
+        end
+        x
+    end
+end
+
+pui_round_rect(c: Canvas, x, y, w, h, rad, r, g, b) do
+    rd = rad
+    if rd * 2 > w do rd = w / 2 end
+    if rd * 2 > h do rd = h / 2 end
+    dy = 0
+    while dy < h do
+        inset = 0
+        if dy < rd then do
+            dyy = rd - dy
+            inset = rd - pui_isqrt(rd * rd - dyy * dyy)
+        end else if dy >= h - rd then do
+            dyy = dy - (h - rd - 1)
+            inset = rd - pui_isqrt(rd * rd - dyy * dyy)
+        end else 0
+        canvas_fill_rect(c, x + inset, y + dy, w - inset * 2, 1, r, g, b, 255)
+        dy += 1
+    end
+    0
+end
+
+// ---------------- pengukuran (murni, tanpa gambar) ----------------
+const PAD = 12
+const GAP = 8
+
+pui_measure(node, w) do
+    j = node[N_KIND]
+    if j == J_TEXT then node[N_SC] * 8
+    else if j == J_SPACER then node[N_MINH]
+    else if j == J_BUTTON then node[N_MINH]
+    else if j == J_COLUMN then do
+        // kolom polos tanpa padding: total children + gap saja (konsisten dgn place)
+        tot = 0
+        i = 0
+        while i < node[N_NA] do
+            tot = tot + pui_measure(node[N_CHILDREN][i], w)
+            if i < node[N_NA] - 1 do tot = tot + GAP end
+            i += 1
+        end
+        hasil = tot
+        if tot < node[N_MINH] do hasil = node[N_MINH] end
+        hasil
+    end
+    else if j == J_ROW then do
+        mh = 0
+        i = 0
+        while i < node[N_NA] do
+            hh = pui_measure(node[N_CHILDREN][i], (w - PAD * 2) / node[N_NA])
+            if hh > mh do mh = hh end
+            i += 1
+        end
+        tot2 = mh + PAD * 2
+        if tot2 < node[N_MINH] then node[N_MINH] else tot2
+    end
+    else do
+        // kotak: seperti kolom
+        totk = PAD * 2
+        i = 0
+        na = node[N_NA]
+        while i < na do
+            totk = totk + pui_measure(node[N_CHILDREN][i], w - PAD * 2)
+            if i < na - 1 do totk = totk + GAP end
+            i += 1
+        end
+        if totk < node[N_MINH] then node[N_MINH] else totk
+    end
+end
+
+// ---------------- tabel hit (dipakai ulang tiap frame) ----------------
+global HIT_ID = 0
+global HIT_X = 0
+global HIT_Y = 0
+global HIT_W = 0
+global HIT_H = 0
+global HIT_N = 0
+const HIT_MAX = 128
+
+pui_hits_init() do
+    HIT_ID = make_array(HIT_MAX, 0)
+    HIT_X = make_array(HIT_MAX, 0)
+    HIT_Y = make_array(HIT_MAX, 0)
+    HIT_W = make_array(HIT_MAX, 0)
+    HIT_H = make_array(HIT_MAX, 0)
+    0
+end
+
+pui_hit_add(id, x, y, w, h) do
+    if HIT_N < HIT_MAX then do
+        HIT_ID[HIT_N] = id
+        HIT_X[HIT_N] = x
+        HIT_Y[HIT_N] = y
+        HIT_W[HIT_N] = w
+        HIT_H[HIT_N] = h
+        HIT_N = HIT_N + 1
+    end else 0
+    0
+end
+
+// ---------------- penempatan + penggambaran ----------------
+pui_place(c: Canvas, node, x, y, w, mx, my) do
+    j = node[N_KIND]
+    h = pui_measure(node, w)
+    if j == J_TEXT then do
+        tw = pui_text_width(node[N_TEXT], node[N_SC])
+        tx = x
+        if node[N_ALIGN] == 1 then tx = x + (w - tw) / 2
+        else if node[N_ALIGN] == 2 then tx = x + w - tw
+        else 0
+        pui_draw_text(c, node[N_TEXT], tx, y + (h - node[N_SC] * 8) / 2, node[N_SC],
+                      PUI_T[T_TEXT], PUI_T[T_TEXT + 1], PUI_T[T_TEXT + 2])
+    end
+    else if j == J_BUTTON then do
+        hover = if mx >= x and mx < x + w and my >= y and my < y + h then 1 else 0
+        // warna kustom (mis. merah utk action destruktif) mengalahkan tema
+        kustom = if node[N_R] != 0 or node[N_G] != 0 or node[N_B] != 0 then 1 else 0
+        br = PUI_T[T_ACCENT]
+        bg = PUI_T[T_ACCENT + 1]
+        bb = PUI_T[T_ACCENT + 2]
+        if kustom == 1 then do
+            br = node[N_R]
+            bg = node[N_G]
+            bb = node[N_B]
+        end else 0
+        if hover == 1 and kustom == 0 then do
+            br = PUI_T[T_ACCENT_DN]
+            bg = PUI_T[T_ACCENT_DN + 1]
+            bb = PUI_T[T_ACCENT_DN + 2]
+        end else 0
+        pui_round_rect(c, x, y, w, h, 8, br, bg, bb)
+        if hover == 1 then canvas_draw_rect(c, x, y, w, h, 255, 255, 255, 255, 0) else 0
+        tw = pui_text_width(node[N_TEXT], 2)
+        pui_draw_text(c, node[N_TEXT], x + (w - tw) / 2, y + (h - 16) / 2, 2,
+                      PUI_T[T_TXT_ON_ACC], PUI_T[T_TXT_ON_ACC + 1], PUI_T[T_TXT_ON_ACC + 2])
+        pui_hit_add(node[N_ACTION], x, y, w, h)
+    end
+    else if j == J_ROW then do
+        n = node[N_NA]
+        if n > 0 then do
+            iw = (w - PAD * 2 - GAP * (n - 1)) / n
+            cx = x + PAD
+            mh = h - PAD * 2
+            i = 0
+            while i < n do
+                an = node[N_CHILDREN][i]
+                chh = pui_measure(an, iw)
+                oy = y + PAD + (mh - chh) / 2
+                pui_place(c, an, cx, oy, iw, mx, my)
+                cx = cx + iw + GAP
+                i += 1
+            end
+        end else 0
+    end
+    else if j == J_BOX then do
+        pui_round_rect(c, x, y, w, h, 10, node[N_R], node[N_G], node[N_B])
+        cy = y + PAD
+        n = node[N_NA]
+        i = 0
+        while i < n do
+            an = node[N_CHILDREN][i]
+            pui_place(c, an, x + PAD, cy, w - PAD * 2, mx, my)
+            cy = cy + pui_measure(an, w - PAD * 2) + GAP
+            i += 1
+        end
+    end
+    else if j == J_COLUMN then do
+        cy = y
+        n = node[N_NA]
+        i = 0
+        while i < n do
+            an = node[N_CHILDREN][i]
+            ah = pui_measure(an, w)
+            pui_place(c, an, x, cy, w, mx, my)
+            cy = cy + ah + GAP
+            i += 1
+        end
+    end
+    else 0
+    h
+end
+
+// ---------------- satu frame ----------------
+pui_frame(c: Canvas, root, sw, sh, mx, my, cx, cy) do
+    HIT_N = 0
+    canvas_clear(c, PUI_T[T_BG], PUI_T[T_BG + 1], PUI_T[T_BG + 2], 255)
+    pui_measure(root, sw)
+    pui_place(c, root, 0, 0, sw, mx, my)
+    // uji klik dari atas (yang terakhir digambar menang)
+    ketemu = 0
+    i = HIT_N - 1
+    while i >= 0 and ketemu == 0 do
+        if cx >= HIT_X[i] and cx < HIT_X[i] + HIT_W[i] and cy >= HIT_Y[i] and cy < HIT_Y[i] + HIT_H[i] then do
+            ketemu = HIT_ID[i]
+        end else 0
+        i -= 1
+    end
+    ketemu
+end
+
+// ---------------- loop aplikasi ----------------
+pui_run(title, sw, sh, initial_state, build_fn, event_fn) do
+    pui_init_theme()
+    pui_init_font()
+    pui_hits_init()
+    win = gui_open_window(title, sw, sh)
+    if win == 0 then 0
+    else do
+        c = canvas_create(sw, sh)
+        state = initial_state
+        jalan = 1
+        while jalan == 1 do
+            if gui_is_open(win) == 0 then jalan = 0
+            else if gui_key_esc(win) != 0 then jalan = 0
+            else do
+                gui_poll_events(win)
+                cx = 0 - 1
+                cy = 0 - 1
+                if gui_click_pending(win) > 0 then do
+                    (cx, cy) = gui_pop_click(win)
+                end else 0
+                mx = gui_mouse_x(win)
+                my = gui_mouse_y(win)
+                root = build_fn(state)
+                id = pui_frame(c, root, sw, sh, mx, my, cx, cy)
+                if id > 0 then state = event_fn(state, id) else 0
+                gui_blit_canvas(win, c)
+            end
+        end
+        canvas_destroy(c)
+        gui_close_window(win)
+        state
+    end
+end
+
+pui_selftest_render(c: Canvas, root, sw, sh) do
+    // render offscreen deterministik untuk gate visual
+    pui_init_theme()
+    pui_init_font()
+    HIT_N = 0
+    canvas_clear(c, PUI_T[T_BG], PUI_T[T_BG + 1], PUI_T[T_BG + 2], 255)
+    pui_measure(root, sw)
+    pui_place(c, root, 0, 0, sw, 0 - 999, 0 - 999)
+    0
+end
+
+// ============================================================
+// Pengujian tanpa window - seluruh detail piksel tinggal di
+// framework. Aplikasi cukup memanggil pui_start(...); flag
+// --selftest pada baris perintah menjalankan mode uji.
+// ============================================================
+
+pui_has_flag(cmd, pat) do
+    lc = _str_len(cmd)
+    pn = _str_len(pat)
+    ketemu = 0
+    i = 0
+    while i + pn <= lc and ketemu == 0 do
+        j = 0
+        sama = 1
+        while j < pn and sama == 1 do
+            if get_byte(cmd, i + j) != get_byte(pat, j) then sama = 0 else 0
+            j += 1
+        end
+        if sama == 1 then ketemu = 1 else 0
+        i += 1
+    end
+    ketemu
+end
+
+pui_count_color(buf, n, r, g, b) do
+    // piksel berwarna persis (urutan byte buffer: B,G,R,A)
+    cnt = 0
+    i = 0
+    while i + 3 < n do
+        if get_byte(buf, i) == b and get_byte(buf, i + 1) == g and get_byte(buf, i + 2) == r then cnt += 1 else 0
+        i += 4
+    end
+    cnt
+end
+
+pui_standard_test(root, sw, sh, buf, n) do
+    // lima asersi render generik; return jumlah kegagalan
+    fails = 0
+
+    // 1. pojok kiri atas = warna latar tema (byte B,G,R)
+    if get_byte(buf, 0) != PUI_T[T_BG + 2] or get_byte(buf, 1) != PUI_T[T_BG + 1] or get_byte(buf, 2) != PUI_T[T_BG] then do
+        fails = fails + 1
+        show("uji gagal: pojok bukan warna latar\n")
+    end else 0
+
+    // 2. ada tinta teks putih (elemen label tergambar)
+    if pui_count_color(buf, n, PUI_T[T_TEXT], PUI_T[T_TEXT + 1], PUI_T[T_TEXT + 2]) == 0 then do
+        fails = fails + 1
+        show("uji gagal: tidak ada tinta teks\n")
+    end else 0
+
+    // 3. layout muat di jendela
+    th = pui_measure(root, sw)
+    if th > sh then do
+        fails = fails + 1
+        show("uji gagal: layout meluber (tinggi=")
+        show_num(th)
+        show(")\n")
+    end else 0
+
+    // 4. buffer tidak kosong: ada piksel selain latar murni
+    beda = 0
+    ambang = (sw * sh) / 200
+    i = 0
+    while i + 3 < n and beda <= ambang do
+        if get_byte(buf, i) != PUI_T[T_BG + 2] or get_byte(buf, i + 1) != PUI_T[T_BG + 1] or get_byte(buf, i + 2) != PUI_T[T_BG] then beda += 1 else 0
+        i += 4
+    end
+    if beda <= ambang then do
+        fails = fails + 1
+        show("uji gagal: kanvas nyaris kosong\n")
+    end else 0
+
+    // 5. tombol terdaftar di tabel hit bila ada (konsistensi internal)
+    if HIT_N > HIT_MAX then do
+        fails = fails + 1
+        show("uji gagal: tabel hit meluber\n")
+    end else 0
+
+    fails
+end
+
+// pinto tunggal aplikasi: deteksi --selftest, jalankan uji atau GUI
+pui_start(title, sw, sh, initial_state, build_fn, event_fn) do
+    cmdline = args()
+    if pui_has_flag(cmdline, "-selftest") == 1 then do
+        pui_init_theme()
+        pui_init_font()
+        pui_hits_init()
+        c = canvas_create(sw, sh)
+        root = build_fn(initial_state)
+        pui_selftest_render(c, root, sw, sh)
+        buf = c.buffer
+        n = c.size
+        fails = pui_standard_test(root, sw, sh, buf, n)
+        show("selftest complete, fails=")
+        show_num(fails)
+        show("\n")
+        canvas_save_bmp(c, "selftest.bmp")
+        canvas_destroy(c)
+        fails
+    end else do
+        pui_run(title, sw, sh, initial_state, build_fn, event_fn)
+        0
+    end
+end

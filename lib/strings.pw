@@ -1,0 +1,96 @@
+// lib/strings.pw - Pengayaan string tingkat lanjut (v36.6)
+// Semua fungsi murni Purwa: alokasi via alloc, NUL-terminated, ASCII.
+
+pad_left(s, w, ch) = do
+    ls = _str_len(s);
+    if ls >= w then s
+    else do
+        buf = alloc(w + 1);
+        n = w - ls;
+        i = 0;
+        while i < n do
+            set_byte(buf, i, ch);
+            i = i + 1
+        end;
+        j = 0;
+        while j < ls do
+            set_byte(buf, n + j, get_byte(s, j));
+            j = j + 1
+        end;
+        set_byte(buf, w, 0);
+        buf
+    end
+end;
+
+pad_right(s, w, ch) = do
+    ls = _str_len(s);
+    if ls >= w then s
+    else do
+        buf = alloc(w + 1);
+        i = 0;
+        while i < ls do
+            set_byte(buf, i, get_byte(s, i));
+            i = i + 1
+        end;
+        j = ls;
+        while j < w do
+            set_byte(buf, j, ch);
+            j = j + 1
+        end;
+        set_byte(buf, w, 0);
+        buf
+    end
+end;
+
+repeat_str(s, n) = do
+    ls = _str_len(s);
+    buf = alloc(ls * n + 1);
+    w = 0;
+    k = 0;
+    while k < n do
+        j = 0;
+        while j < ls do
+            set_byte(buf, w, get_byte(s, j));
+            w = w + 1;
+            j = j + 1
+        end;
+        k = k + 1
+    end;
+    set_byte(buf, w, 0);
+    buf
+end;
+
+char_is_digit(c) = if c >= 48 and c <= 57 then 1 else 0;
+
+char_is_alpha(c) =
+    if c >= 65 and c <= 90 then 1
+    else if c >= 97 and c <= 122 then 1
+    else 0;
+
+char_is_space(c) =
+    if c == 32 or c == 9 or c == 10 or c == 13 then 1
+    else 0;
+
+count_substr(s, sub) = do
+    // hitung kemunculan TIDAK tumpang-tindih
+    lb = _str_len(sub);
+    if lb == 0 then 0
+    else do
+        ls = _str_len(s);
+        cnt = 0;
+        i = 0;
+        while i <= ls - lb do
+            m = 1;
+            j = 0;
+            while j < lb and m == 1 do
+                if get_byte(s, i + j) != get_byte(sub, j) then m = 0 else 0;
+                j = j + 1
+            end;
+            if m == 1 then do
+                cnt = cnt + 1;
+                i = i + lb
+            end else i = i + 1
+        end;
+        cnt
+    end
+end;

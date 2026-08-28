@@ -1,0 +1,58 @@
+// ============================================================
+// lib/minifb.pw - jendela piksel minimalis ala emoon/minifb,
+// dibangun di atas stack berdaulat purwa (canvas + gui).
+//
+// API klasik:
+//   m = mfb_open("judul", lebar, tinggi)
+//   selama jalan:
+//       ... isi piksel canvas ...
+//       mfb_update(m)            // blit + pompa event
+//       jika mfb_should_close(m) -> keluar
+//   mfb_close(m)
+//
+// Piksel canvas: B,G,R,X per byte - tulis via canvas_set_pixel
+// atau langsung set_byte(m.c.buffer, (y*w+x)*4 + komponen).
+// ============================================================
+
+import "canvas"
+import "gui"
+
+struct Mfb {
+    win,
+    c,
+    w,
+    h
+}
+
+mfb_open(judul, w, h): Mfb do
+    win = gui_open_window(judul, w, h)
+    if win == 0 then do
+        0
+    end else do
+        c = canvas_create(w, h)
+        Mfb(win, c, w, h)
+    end
+end
+
+mfb_update(m: Mfb) do
+    // pompa event dulu agar responsif, lalu blit sekali
+    gui_poll_events(m.win)
+    gui_blit_canvas(m.win, m.c)
+    0
+end
+
+mfb_should_close(m: Mfb) do
+    if gui_is_open(m.win) == 0 then do
+        1
+    end else if gui_key_esc(m.win) != 0 then do
+        1
+    end else do
+        0
+    end
+end
+
+mfb_close(m: Mfb) do
+    canvas_destroy(m.c)
+    gui_close_window(m.win)
+    0
+end

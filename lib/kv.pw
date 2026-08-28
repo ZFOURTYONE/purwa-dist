@@ -1,0 +1,591 @@
+// ============================================================
+// lib/kv.pw - Milestone P9 tahap-1: embedded key-value store
+// model log-append (Bitcask-like), murni Purwa + kernel32 FFI.
+//
+// Format rekaman (append-only):
+//   [tag u8: A7=aktif, A8=tombstone]
+//   [klen u32-le][vlen u32-le]
+//   [key bytes][value bytes]
+//   [crc32 u32-le]   <-- 4 byte TERAKHIR, di luar rentang hash
+// crc32 atas tag+klen+vlen+key+value. Saat kv_open, rekaman
+// ber-crc salah atau terpotong dibuang deterministik -> semantik
+// recovery ala WAL tanpa berkas terpisah.
+//
+// Indeks: hash table open-addressing di memori (FNV-1a 64);
+// nilai dilayani zero-copy dari citra berkas di RAM.
+//
+// CATATAN DESAIN v1: state disimpan sebagai GLOBAL modul -> satu
+// basis data aktif per proses (singleton).
+//
+// CATATAN KONTRAK BUILTIN: set_byte(ptr, offset, value) selalu TIGA
+// argumen; get_byte(ptr, offset) dua. Aritas salah kini ditolak
+// compiler dengan pesan jelas (gerbang builtin_arity, Round 61).
+//
+//   kv_open("data.kv")             // 1 sukses / 0 gagal
+//   kv_put(key, klen, val, vlen)
+//   n  = kv_get(key, klen, out, cap)
+//   kv_del(key, klen) ; kv_sync() ; kv_close() ; kv_count()
+// ============================================================
+
+global KV_TAG_PUT = 167        // 0xA7
+global KV_TAG_DEL = 168        // 0xA8
+global KV_HDR = 9              // 1 + 4 + 4 (crc menempel di ekor rekaman)
+global K32 = 0                 // handle kernel32 (sekali load per proses)
+
+global K_HFILE = 0             // handle berkas utk append
+global K_MEM = 0               // citra berkas di RAM (pembacaan zero-copy)
+global K_MEMSZ = 0
+global K_MEMCAP = 0
+global K_COUNT = 0             // jumlah kunci hidup
+
+global K_TKEY = 0              // tabel paralel: pointer kunci (salinan)
+global K_TKLEN = 0
+global K_TVOFF = 0             // offset nilai dalam K_MEM
+global K_TVLEN = 0
+global K_TDEAD = 0             // 1 = tombstone
+global K_TCAP = 0
+global K_TUSED = 0
+global K_PATH = 0              // salinan path basis (milik modul)
+
+// duplikat string NUL-terminated ke memori milik modul
+kv_strdup(p) do
+    n = size_of(p)
+    q = alloc(n + 1)
+    mem_copy(q, p, n)
+    set_byte(q + n, 0, 0)
+    q
+end
+
+kv_k32() do
+    if K32 == 0 then K32 = load_dll("kernel32.dll") else 0
+    K32
+end
+
+// ---------- CRC32 IEEE ----------
+// Inisialisasi 4294967295 (POSITIF) + masker 32-bit tiap langkah:
+// operator >> purwa adalah SAR; nilai negatif akan meracuni shift.
+kv_crc32(p, n) do
+    crc = 4294967295
+    i = 0
+    while i < n do
+        crc = (crc ^ get_byte(p, i)) & 4294967295
+        j = 0
+        while j < 8 do
+            if (crc & 1) == 1 then do
+                crc = ((crc >> 1) ^ 3988292384) & 4294967295
+            end else do
+                crc = (crc >> 1) & 4294967295
+            end
+            j = j + 1
+        end
+        i = i + 1
+    end
+    crc ^ 4294967295
+end
+
+// ---------- FNV-1a 64 (dijaga positif) ----------
+kv_hash(p, n) do
+    h = 14695981039346656037
+    i = 0
+    while i < n do
+        h = h ^ get_byte(p, i)
+        h = h * 1099511628211
+        i = i + 1
+    end
+    h & 1152921504606846975
+end
+
+kv_u32le(p, o) =
+    get_byte(p, o) + get_byte(p, o + 1) * 256 +
+    get_byte(p, o + 2) * 65536 + get_byte(p, o + 3) * 16777216
+
+// qword ke-i dari buffer mentah
+b64_at(arr, i) do
+    p = arr + i * 8
+    get_byte(p, 0) + get_byte(p, 1) * 256 + get_byte(p, 2) * 65536 +
+    get_byte(p, 3) * 16777216 + get_byte(p, 4) * 4294967296 +
+    get_byte(p, 5) * 1099511627776 + get_byte(p, 6) * 281474976710656 +
+    get_byte(p, 7) * 72057594037927936
+end
+
+set_b64_at(arr, i, v) do
+    p = arr + i * 8
+    set_byte(p, 0, v & 255)
+    set_byte(p, 1, (v >> 8) & 255)
+    set_byte(p, 2, (v >> 16) & 255)
+    set_byte(p, 3, (v >> 24) & 255)
+    set_byte(p, 4, (v >> 32) & 255)
+    set_byte(p, 5, (v >> 40) & 255)
+    set_byte(p, 6, (v >> 48) & 255)
+    set_byte(p, 7, (v >> 56) & 255)
+    0
+end
+
+// ---------- citra memori ----------
+// PENTING: K_TKEY menyimpan POINTER mentah ke dalam gambar K_MEM. Saat
+// buffer diganti, semua pointer terindeks WAJIB direlokasi dengan delta,
+// lalu buffer lama boleh di-drop (pencegah use-after-free).
+kv_mem_reserve(need) do
+    if need > K_MEMCAP then do
+        nc = if K_MEMCAP == 0 then 65536 else K_MEMCAP * 2
+        while nc < need do nc = nc * 2 end
+        old = K_MEM
+        nm = alloc(nc)
+        mem_set(nm, 0, nc)
+        if K_MEMSZ > 0 then mem_copy(nm, old, K_MEMSZ) else 0
+        if old != 0 then do
+            delta = nm - old
+            ti = 0
+            while ti < K_TCAP do
+                kp = b64_at(K_TKEY, ti)
+                if kp != 0 then set_b64_at(K_TKEY, ti, kp + delta) else 0
+                ti = ti + 1
+            end
+            drop(old)
+        end else 0
+        K_MEM = nm
+        K_MEMCAP = nc
+    end else 0
+    0
+end
+
+// ---------- tabel hash ----------
+kv_t_alloc(cap) do
+    K_TCAP = cap
+    K_TUSED = 0
+    K_TKEY = alloc(cap * 8)
+    K_TKLEN = alloc(cap * 8)
+    K_TVOFF = alloc(cap * 8)
+    K_TVLEN = alloc(cap * 8)
+    K_TDEAD = alloc(cap * 8)
+    mem_set(K_TKEY, 0, cap * 8)
+    mem_set(K_TKLEN, 0, cap * 8)
+    mem_set(K_TVOFF, 0, cap * 8)
+    mem_set(K_TVLEN, 0, cap * 8)
+    mem_set(K_TDEAD, 0, cap * 8)
+    0
+end
+
+kv_t_rehash(ncap) do
+    okey = K_TKEY
+    okl = K_TKLEN
+    ovo = K_TVOFF
+    ovl = K_TVLEN
+    od = K_TDEAD
+    ocur = K_TCAP
+    kv_t_alloc(ncap)
+    i = 0
+    while i < ocur do
+        kp = b64_at(okey, i)
+        if kp != 0 then do
+            kv_t_insert_raw(kp, b64_at(okl, i), b64_at(ovo, i),
+                            b64_at(ovl, i), b64_at(od, i))
+        end else 0
+        i = i + 1
+    end
+    drop(okey)
+    drop(okl)
+    drop(ovo)
+    drop(ovl)
+    drop(od)
+    0
+end
+
+kv_key_eq(a, alen, bp, blen) do
+    if alen != blen then 0
+    else do
+        same = 1
+        i = 0
+        while i < alen do
+            if get_byte(a, i) != get_byte(bp, i) then do same = 0; i = alen end else i = i + 1
+        end
+        same
+    end
+end
+
+// sisip TANPA cek duplikat (rehash & jalur internal)
+kv_t_insert_raw(kp, kl, vo, vl, dd) do
+    if K_TUSED * 10 >= K_TCAP * 7 then kv_t_rehash(K_TCAP * 2) else 0
+    mask = K_TCAP - 1
+    i = kv_hash(kp, kl) & mask
+    while b64_at(K_TKEY, i) != 0 do i = (i + 1) & mask end
+    set_b64_at(K_TKEY, i, kp)
+    set_b64_at(K_TKLEN, i, kl)
+    set_b64_at(K_TVOFF, i, vo)
+    set_b64_at(K_TVLEN, i, vl)
+    set_b64_at(K_TDEAD, i, dd)
+    K_TUSED = K_TUSED + 1
+    i
+end
+
+// cari slot utk kunci (hidup/matik dicocokkan); -1 bila absen
+kv_find_slot(kp, klen) do
+    if K_TCAP == 0 then 0 - 1
+    else do
+        mask = K_TCAP - 1
+        i = kv_hash(kp, klen) & mask
+        found = 0 - 1
+        step = 0
+        while step < K_TCAP and found < 0 do
+            kptr = b64_at(K_TKEY, i)
+            if kptr == 0 then step = K_TCAP
+            else do
+                if kv_key_eq(kptr, b64_at(K_TKLEN, i), kp, klen) == 1 then found = i
+                else do
+                    i = (i + 1) & mask
+                    step = step + 1
+                end
+            end
+        end
+        found
+    end
+end
+
+// ---------- tulis fisik ----------
+kv_append(rec, total) do
+    k32 = kv_k32()
+    call_dll(get_fn(k32, "SetFilePointer"), K_HFILE, 0, 0, 2)   // FILE_END
+    br = alloc(8)
+    mem_set(br, 0, 8)
+    ok = call_dll(get_fn(k32, "WriteFile"), K_HFILE, rec, total, br, 0)
+    drop(br)
+    if ok != 0 then do
+        kv_mem_reserve(K_MEMSZ + total)
+        mem_copy(K_MEM + K_MEMSZ, rec, total)
+        K_MEMSZ = K_MEMSZ + total
+        1
+    end else 0
+end
+
+// tulis crc32 u32-le di 4 byte terakhir sebuah rekaman
+kv_write_tail(rec, total, crc) do
+    set_byte(rec, total - 4, crc & 255)
+    set_byte(rec, total - 3, (crc >> 8) & 255)
+    set_byte(rec, total - 2, (crc >> 16) & 255)
+    set_byte(rec, total - 1, (crc >> 24) & 255)
+    0
+end
+
+// ---------- API ----------
+// Buka/buat database (singleton). Hasil: 1 sukses, 0 gagal.
+kv_open(path) do
+    k32 = kv_k32()
+    if k32 == 0 then 0
+    else do
+        h = call_dll(get_fn(k32, "CreateFileA"),
+                     path, 3221225472, 0, 0, 4, 128, 0)   // OPEN_ALWAYS
+        if h == 0 or h == 0 - 1 then 0
+        else do
+            K_HFILE = h
+            // duplikasi DULU: pemanggil sah memoperkan K_PATH itu sendiri
+            // (kasus kv_compact) - drop lama hanya setelah salinan siap
+            tmp_path = kv_strdup(path)
+            if K_PATH != 0 then drop(K_PATH) else 0
+            K_PATH = tmp_path
+            K_COUNT = 0
+            kv_t_alloc(1024)
+            size = call_dll(get_fn(k32, "GetFileSize"), h, 0)
+            if size > 0 and size <= 33554432 then do
+                // Baca langsung ke buffer ber-headroom (pow2) supaya append
+                // berikutnya tak langsung memicu realloc pasca-open.
+                br = alloc(8)
+                mem_set(br, 0, 8)
+                kv_mem_reserve(size)
+                buf = K_MEM
+                call_dll(get_fn(k32, "SetFilePointer"), h, 0, 0, 0)
+                call_dll(get_fn(k32, "ReadFile"), h, buf, size, br, 0)
+                drop(br)
+                K_MEM = buf
+                K_MEMCAP = size
+                K_MEMSZ = 0
+                // pindai; berhenti di rekaman pertama yang rusak
+                off = 0
+                valid_end = 0
+                go = 1
+                while go == 1 do
+                    if off + KV_HDR > size then go = 0
+                    else do
+                        tag = get_byte(buf, off)
+                        kl = kv_u32le(buf, off + 1)
+                        vl = kv_u32le(buf, off + 5)
+                        total = KV_HDR + kl + vl + 4
+                        if (tag != KV_TAG_PUT and tag != KV_TAG_DEL) or
+                           off + total > size then go = 0
+                        else do
+                            cr = kv_u32le(buf, off + total - 4)
+                            act = kv_crc32(buf + off, total - 4)
+                            if act != cr then go = 0
+                            else do
+                                kptr = buf + off + KV_HDR
+                                slot = kv_find_slot(kptr, kl)
+                                if slot >= 0 then do
+                                    was_dead = b64_at(K_TDEAD, slot)
+                                    set_b64_at(K_TVOFF, slot, off + KV_HDR + kl)
+                                    set_b64_at(K_TVLEN, slot, vl)
+                                    if tag == KV_TAG_DEL then do
+                                        set_b64_at(K_TDEAD, slot, 1)
+                                        if was_dead == 0 then K_COUNT = K_COUNT - 1 else 0
+                                    end else do
+                                        set_b64_at(K_TDEAD, slot, 0)
+                                        if was_dead == 1 then K_COUNT = K_COUNT + 1 else 0
+                                    end
+                                end else do
+                                    nd = if tag == KV_TAG_DEL then 1 else 0
+                                    kv_t_insert_raw(kptr, kl,
+                                            off + KV_HDR + kl, vl, nd)
+                                    if nd == 0 then K_COUNT = K_COUNT + 1 else 0
+                                end
+                                off = off + total
+                                valid_end = off
+                            end
+                        end
+                    end
+                end
+                K_MEMSZ = valid_end
+                // pangkas ekor fisik rusak agar append tak tersangkut sampah
+                if valid_end < size then do
+                    call_dll(get_fn(k32, "SetFilePointer"), h, valid_end, 0, 0)
+                    call_dll(get_fn(k32, "SetEndOfFile"), h)
+                end else 0
+            end else 0
+            1
+        end
+    end
+end
+
+// simpan pasangan; 1 sukses / 0 gagal tulis
+kv_put(key, klen, val, vlen) do
+    total = KV_HDR + klen + vlen + 4
+    rec = alloc(total)
+    set_byte(rec, 0, KV_TAG_PUT)
+    set_byte(rec, 1, klen & 255)
+    set_byte(rec, 2, (klen >> 8) & 255)
+    set_byte(rec, 3, (klen >> 16) & 255)
+    set_byte(rec, 4, (klen >> 24) & 255)
+    set_byte(rec, 5, vlen & 255)
+    set_byte(rec, 6, (vlen >> 8) & 255)
+    set_byte(rec, 7, (vlen >> 16) & 255)
+    set_byte(rec, 8, (vlen >> 24) & 255)
+    mem_copy(rec + KV_HDR, key, klen)
+    mem_copy(rec + KV_HDR + klen, val, vlen)
+    kv_write_tail(rec, total, kv_crc32(rec, total - 4))
+    ok = kv_append(rec, total)
+    drop(rec)
+    if ok == 1 then do
+        base = K_MEMSZ - total
+        slot = kv_find_slot(key, klen)
+        if slot >= 0 then do
+            was_dead = b64_at(K_TDEAD, slot)
+            set_b64_at(K_TVOFF, slot, base + KV_HDR + klen)
+            set_b64_at(K_TVLEN, slot, vlen)
+            set_b64_at(K_TDEAD, slot, 0)
+            if was_dead == 1 then K_COUNT = K_COUNT + 1 else 0
+        end else do
+            kv_t_insert_raw(K_MEM + base + KV_HDR, klen,
+                            base + KV_HDR + klen, vlen, 0)
+            K_COUNT = K_COUNT + 1
+        end
+        1
+    end else 0
+end
+
+// ambil nilai; panjang / -1 tak ada / -2 kapasitas kurang
+kv_get(key, klen, out, cap) do
+    slot = kv_find_slot(key, klen)
+    if slot < 0 then 0 - 1
+    else do
+        if b64_at(K_TDEAD, slot) == 1 then 0 - 1
+        else do
+            vl = b64_at(K_TVLEN, slot)
+            if vl > cap then 0 - 2
+            else do
+                mem_copy(out, K_MEM + b64_at(K_TVOFF, slot), vl)
+                vl
+            end
+        end
+    end
+end
+
+// hapus (tombstone); 1 terhapus / 0 absen
+kv_del(key, klen) do
+    slot = kv_find_slot(key, klen)
+    if slot < 0 then 0
+    else do
+        if b64_at(K_TDEAD, slot) == 1 then 0
+        else do
+            total = KV_HDR + klen + 4
+            rec = alloc(total)
+            set_byte(rec, 0, KV_TAG_DEL)
+            set_byte(rec, 1, klen & 255)
+            set_byte(rec, 2, (klen >> 8) & 255)
+            set_byte(rec, 3, (klen >> 16) & 255)
+            set_byte(rec, 4, (klen >> 24) & 255)
+            set_byte(rec, 5, 0)
+            set_byte(rec, 6, 0)
+            set_byte(rec, 7, 0)
+            set_byte(rec, 8, 0)
+            mem_copy(rec + KV_HDR, key, klen)
+            kv_write_tail(rec, total, kv_crc32(rec, total - 4))
+            ok = kv_append(rec, total)
+            drop(rec)
+            if ok == 1 then do
+                set_b64_at(K_TDEAD, slot, 1)
+                K_COUNT = K_COUNT - 1
+                1
+            end else 0
+        end
+    end
+end
+
+kv_count() = K_COUNT
+
+// ---- kompaksi log ----
+// Tulis ulang berkas hanya dengan rekaman HIDUP terkini (tombstone dan
+// versi lama yang tertimpa dibuang fisik). Dua-pass: hitung kebutuhan,
+// lalu isi. Muat-ulang lewat kv_open sekaligus memverifikasi CRC setiap
+// rekaman yang baru ditulis (verifikasi mandiri).
+// Hasil: 1 sukses / 0 (tak ada sesi terbuka atau gagal muat-ulang).
+kv_compact() do
+    if K_HFILE == 0 then 0
+    else do
+        path = K_PATH
+        // pass 1: ukuran citra ramping
+        need = 1
+        i = 0
+        while i < K_TCAP do
+            kp = b64_at(K_TKEY, i)
+            if kp != 0 and b64_at(K_TDEAD, i) == 0 then do
+                need = need + KV_HDR + b64_at(K_TKLEN, i) +
+                       b64_at(K_TVLEN, i) + 4
+            end else 0
+            i = i + 1
+        end
+        nb_ = alloc(need)
+        mem_set(nb_, 0, need)
+        total = 0
+        // pass 2: salin rekaman hidup
+        i = 0
+        while i < K_TCAP do
+            kp = b64_at(K_TKEY, i)
+            if kp != 0 and b64_at(K_TDEAD, i) == 0 then do
+                kl = b64_at(K_TKLEN, i)
+                vo = b64_at(K_TVOFF, i)
+                vl = b64_at(K_TVLEN, i)
+                recsz = KV_HDR + kl + vl + 4
+                b = nb_ + total
+                set_byte(b, 0, KV_TAG_PUT)
+                set_byte(b, 1, kl & 255)
+                set_byte(b, 2, (kl >> 8) & 255)
+                set_byte(b, 3, (kl >> 16) & 255)
+                set_byte(b, 4, (kl >> 24) & 255)
+                set_byte(b, 5, vl & 255)
+                set_byte(b, 6, (vl >> 8) & 255)
+                set_byte(b, 7, (vl >> 16) & 255)
+                set_byte(b, 8, (vl >> 24) & 255)
+                mem_copy(nb_ + total + KV_HDR, kp, kl)
+                if vl > 0 then
+                    mem_copy(nb_ + total + KV_HDR + kl, K_MEM + vo, vl)
+                else 0
+                kv_write_tail(nb_ + total, recsz,
+                              kv_crc32(nb_ + total, recsz - 4))
+                total = total + recsz
+            end else 0
+            i = i + 1
+        end
+        // tutup berkas lama, tulis citra ramping, muat ulang penuh
+        k32 = kv_k32()
+        kv_sync()
+        call_dll(get_fn(k32, "CloseHandle"), K_HFILE)
+        K_HFILE = 0
+        if K_MEM != 0 then drop(K_MEM) else 0
+        K_MEM = 0
+        K_MEMSZ = 0
+        K_MEMCAP = 0
+        write_file(path, nb_, total)
+        drop(nb_)
+        ok = kv_open(path)
+        ok
+    end
+end
+
+kv_sync() do
+    k32 = kv_k32()
+    call_dll(get_fn(k32, "FlushFileBuffers"), K_HFILE)
+    0
+end
+
+kv_close() do
+    k32 = kv_k32()
+    call_dll(get_fn(k32, "FlushFileBuffers"), K_HFILE)
+    call_dll(get_fn(k32, "CloseHandle"), K_HFILE)
+    if K_MEM != 0 then drop(K_MEM) else 0
+    if K_TKEY != 0 then drop(K_TKEY) else 0
+    if K_TKLEN != 0 then drop(K_TKLEN) else 0
+    if K_TVOFF != 0 then drop(K_TVOFF) else 0
+    if K_TVLEN != 0 then drop(K_TVLEN) else 0
+    if K_TDEAD != 0 then drop(K_TDEAD) else 0
+    K_HFILE = 0
+    K_MEM = 0
+    K_MEMSZ = 0
+    K_MEMCAP = 0
+    K_COUNT = 0
+    K_TKEY = 0
+    K_TKLEN = 0
+    K_TVOFF = 0
+    K_TVLEN = 0
+    K_TDEAD = 0
+    K_TCAP = 0
+    K_TUSED = 0
+    if K_PATH != 0 then drop(K_PATH) else 0
+    K_PATH = 0
+    0
+end
+
+// ---- dukungan pengujian integritas ----
+kv_mkdir(path) do
+    k32 = kv_k32()
+    call_dll(get_fn(k32, "CreateDirectoryA"), path, 0)
+    0
+end
+
+// ukuran berkas dalam byte; -1 bila tak bisa dibuka.
+// Handle DITUTUP selalu (lihat ledger BL-006: read_file inti bocor).
+kv_file_size(path) do
+    k32 = kv_k32()
+    h = call_dll(get_fn(k32, "CreateFileA"),
+                 path, 2147483648, 7, 0, 3, 128, 0)   // READ | share-all
+    if h == 0 or h == 0 - 1 then 0 - 1
+    else do
+        sz = alloc(8)
+        mem_set(sz, 0, 8)
+        call_dll(get_fn(k32, "GetFileSizeEx"), h, sz)
+        v = b64_at(sz, 0)
+        call_dll(get_fn(k32, "CloseHandle"), h)
+        drop(sz)
+        v
+    end
+end
+
+// XOR-kan satu byte pada berkas data. KHUSUS pengujian: membuktikan
+// pemeriksaan crc menolak korupsi.
+kv_debug_flip_byte(path, idx) do
+    k32 = kv_k32()
+    h = call_dll(get_fn(k32, "CreateFileA"),
+                 path, 3221225472, 0, 0, 3, 128, 0)     // OPEN_EXISTING
+    if h == 0 or h == 0 - 1 then 0
+    else do
+        br = alloc(8)
+        mem_set(br, 0, 8)
+        ob = alloc(1)
+        set_byte(ob, 0, 0)
+        call_dll(get_fn(k32, "SetFilePointer"), h, idx, 0, 0)
+        call_dll(get_fn(k32, "ReadFile"), h, ob, 1, br, 0)
+        set_byte(ob, 0, get_byte(ob, 0) ^ 255)
+        call_dll(get_fn(k32, "SetFilePointer"), h, idx, 0, 0)
+        ok = call_dll(get_fn(k32, "WriteFile"), h, ob, 1, br, 0)
+        call_dll(get_fn(k32, "CloseHandle"), h)
+        drop(br)
+        drop(ob)
+        if ok != 0 then 1 else 0
+    end
+end

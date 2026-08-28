@@ -1,0 +1,55 @@
+// ============================================================
+// lib/fileio.pw - pembaca file biner via kernel32 FFI.
+// Nol dependensi, tanpa perubahan kompiler (fixpoint utuh).
+//
+//   fb = file_read("C:\jalan\ke\rom.ch8")
+//   jika fb != 0 -> fb.data = pointer byte, fb.size = jumlah
+//   file_drop(fb) saat selesai
+// ============================================================
+
+struct FileBuf {
+    data,
+    size
+}
+
+file_read(path): FileBuf do
+    k32 = load_dll("kernel32.dll")
+    if k32 == 0 then do
+        0
+    end else do
+        // CreateFileA(path, GENERIC_READ, FILE_SHARE_READ|WRITE,
+        //             0 security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0)
+        h = call_dll(get_fn(k32, "CreateFileA"),
+                     path, 2147483648, 3, 0, 3, 128, 0)
+        if h == 0 or h == 0 - 1 then do
+            0
+        end else do
+            sz = call_dll(get_fn(k32, "GetFileSize"), h, 0)
+            if sz == 0 - 1 or sz == 0 or sz > 65536 then do
+                call_dll(get_fn(k32, "CloseHandle"), h)
+                0
+            end else do
+                buf = alloc(sz)
+                mem_set(buf, 0, sz)
+                br = alloc(8)
+                mem_set(br, 0, 8)
+                ok = call_dll(get_fn(k32, "ReadFile"), h, buf, sz, br, 0)
+                nread = get_byte(br, 0) + get_byte(br, 1) * 256 +
+                        get_byte(br, 2) * 65536 + get_byte(br, 3) * 16777216
+                call_dll(get_fn(k32, "CloseHandle"), h)
+                drop(br)
+                if ok != 0 and nread > 0 then do
+                    FileBuf(buf, nread)
+                end else do
+                    drop(buf)
+                    0
+                end
+            end
+        end
+    end
+end
+
+file_drop(fb: FileBuf) do
+    drop(fb.data)
+    0
+end

@@ -1,0 +1,324 @@
+// lib/wasm.pw — Standalone WebAssembly Binary Emitter & Module Builder (Milestone P8)
+// Zero-dependency W3C WebAssembly Core 1.0 (MVP) binary generator for Purwa.
+
+const WASM_TYPE_I32  = 127 // 0x7F
+const WASM_TYPE_I64  = 126 // 0x7E
+const WASM_TYPE_F32  = 125 // 0x7D
+const WASM_TYPE_F64  = 124 // 0x7C
+const WASM_TYPE_FUNC = 96  // 0x60
+
+const WASM_SEC_TYPE   = 1
+const WASM_SEC_IMPORT = 2
+const WASM_SEC_FUNC   = 3
+const WASM_SEC_TABLE  = 4
+const WASM_SEC_MEM    = 5
+const WASM_SEC_GLOBAL = 6
+const WASM_SEC_EXPORT = 7
+const WASM_SEC_START  = 8
+const WASM_SEC_ELEM   = 9
+const WASM_SEC_CODE   = 10
+const WASM_SEC_DATA   = 11
+
+const WASM_EXPORT_FUNC = 0
+const WASM_EXPORT_MEM  = 2
+
+// Core Opcodes
+const WASM_OP_UNREACHABLE = 0   // 0x00
+const WASM_OP_NOP         = 1   // 0x01
+const WASM_OP_BLOCK       = 2   // 0x02
+const WASM_OP_LOOP        = 3   // 0x03
+const WASM_OP_IF          = 4   // 0x04
+const WASM_OP_ELSE        = 5   // 0x05
+const WASM_OP_END         = 11  // 0x0B
+const WASM_OP_BR          = 12  // 0x0C
+const WASM_OP_BR_IF       = 13  // 0x0D
+const WASM_OP_RETURN      = 15  // 0x0F
+const WASM_OP_CALL        = 16  // 0x10
+const WASM_OP_LOCAL_GET   = 32  // 0x20
+const WASM_OP_LOCAL_SET   = 33  // 0x21
+const WASM_OP_LOCAL_TEE   = 34  // 0x22
+const WASM_OP_I32_CONST   = 65  // 0x41
+const WASM_OP_I64_CONST   = 66  // 0x42
+const WASM_OP_I64_EQZ     = 80  // 0x50
+const WASM_OP_I64_EQ      = 81  // 0x51
+const WASM_OP_I64_NE      = 82  // 0x52
+const WASM_OP_I64_LT_S    = 83  // 0x53
+const WASM_OP_I64_GT_S    = 85  // 0x55
+const WASM_OP_I64_LE_S    = 87  // 0x57
+const WASM_OP_I64_GE_S    = 89  // 0x59
+const WASM_OP_I64_ADD     = 124 // 0x7C
+const WASM_OP_I64_SUB     = 125 // 0x7D
+const WASM_OP_I64_MUL     = 126 // 0x7E
+const WASM_OP_I64_DIV_S   = 127 // 0x7F
+
+struct WasmBuffer {
+    data,
+    len,
+    cap
+}
+
+wb_create(cap) do
+    buf = alloc(cap)
+    WasmBuffer(buf, 0, cap)
+end
+
+wb_push_u8(wb, b) do
+    if wb.len >= wb.cap do
+        new_cap = wb.cap * 2
+        new_buf = alloc(new_cap)
+        mem_copy(new_buf, wb.data, wb.len)
+        drop(wb.data)
+        wb.data = new_buf
+        wb.cap = new_cap
+    end
+    set_byte(wb.data, wb.len, b)
+    wb.len = wb.len + 1
+    0
+end
+
+wb_push_u32_leb(wb, v) do
+    val = v
+    more = 1
+    while more == 1 do
+        byte = val % 128
+        val = val / 128
+        if val != 0 do
+            wb_push_u8(wb, byte + 128)
+        else do
+            wb_push_u8(wb, byte)
+            more = 0
+        end
+    end
+    0
+end
+
+wb_push_i64_leb(wb, v) do
+    val = v
+    more = 1
+    while more == 1 do
+        byte = val % 128
+        val = val / 128
+        if val == 0 and (byte < 64) do
+            wb_push_u8(wb, byte)
+            more = 0
+        else if val == 0 - 1 and (byte >= 64) do
+            wb_push_u8(wb, byte)
+            more = 0
+        else do
+            wb_push_u8(wb, (byte % 128) + 128)
+        end
+    end
+    0
+end
+
+wb_push_bytes(wb, src, len) do
+    i = 0
+    while i < len do
+        wb_push_u8(wb, get_byte(src, i))
+        i += 1
+    end
+    0
+end
+
+wb_push_string(wb, s) do
+    slen = size_of(s)
+    wb_push_u32_leb(wb, slen)
+    wb_push_bytes(wb, s, slen)
+end
+
+wb_push_section(wb, sec_id, payload_wb) do
+    wb_push_u8(wb, sec_id)
+    wb_push_u32_leb(wb, payload_wb.len)
+    wb_push_bytes(wb, payload_wb.data, payload_wb.len)
+    0
+end
+
+struct WasmModule {
+    type_sec,
+    func_sec,
+    mem_sec,
+    export_sec,
+    code_sec,
+    type_count,
+    func_count,
+    export_count,
+    code_count,
+    has_mem
+}
+
+wasm_create_module() do
+    t_sec = wb_create(512)
+    f_sec = wb_create(256)
+    m_sec = wb_create(128)
+    e_sec = wb_create(512)
+    c_sec = wb_create(2048)
+    WasmModule(t_sec, f_sec, m_sec, e_sec, c_sec, 0, 0, 0, 0, 0)
+end
+
+// Tambah tipe fungsi: (params...) -> ret_type (ret_type=0 jika void)
+wasm_add_func_type(m, param_types, param_cnt, ret_type) do
+    idx = m.type_count
+    m.type_count = idx + 1
+    
+    t_wb = m.type_sec
+    wb_push_u8(t_wb, WASM_TYPE_FUNC)
+    wb_push_u32_leb(t_wb, param_cnt)
+    
+    i = 0
+    while i < param_cnt do
+        wb_push_u8(t_wb, param_types[i])
+        i += 1
+    end
+    
+    if ret_type != 0 do
+        wb_push_u32_leb(t_wb, 1)
+        wb_push_u8(t_wb, ret_type)
+    else do
+        wb_push_u32_leb(t_wb, 0)
+    end
+    idx
+end
+
+wasm_add_memory(m, min_pages) do
+    m.has_mem = 1
+    m_wb = m.mem_sec
+    wb_push_u32_leb(m_wb, 1) // 1 memory declaration
+    wb_push_u8(m_wb, 0)      // flag 0: only min limits
+    wb_push_u32_leb(m_wb, min_pages)
+    0
+end
+
+wasm_add_export_func(m, name, func_idx) do
+    e_wb = m.export_sec
+    wb_push_string(e_wb, name)
+    wb_push_u8(e_wb, WASM_EXPORT_FUNC)
+    wb_push_u32_leb(e_wb, func_idx)
+    m.export_count = m.export_count + 1
+    0
+end
+
+wasm_add_export_memory(m, name) do
+    e_wb = m.export_sec
+    wb_push_string(e_wb, name)
+    wb_push_u8(e_wb, WASM_EXPORT_MEM)
+    wb_push_u32_leb(e_wb, 0) // Memory index 0
+    m.export_count = m.export_count + 1
+    0
+end
+
+wasm_add_function_body(m, type_idx, body_wb, locals_cnt) do
+    // 1. Catat ke Function Section
+    f_wb = m.func_sec
+    wb_push_u32_leb(f_wb, type_idx)
+    m.func_count = m.func_count + 1
+    
+    // 2. Format Body ke Code Section: [total_len, local_decl_count, [local_count, local_type]*, body_bytes, 0x0B]
+    f_code = wb_create(512)
+    if locals_cnt > 0 do
+        wb_push_u32_leb(f_code, 1)
+        wb_push_u32_leb(f_code, locals_cnt)
+        wb_push_u8(f_code, WASM_TYPE_I64)
+    else do
+        wb_push_u32_leb(f_code, 0)
+    end
+    
+    wb_push_bytes(f_code, body_wb.data, body_wb.len)
+    wb_push_u8(f_code, WASM_OP_END) // 0x0B
+    
+    // Tulis ke Code Section: [code_body_len, f_code]
+    c_wb = m.code_sec
+    wb_push_u32_leb(c_wb, f_code.len)
+    wb_push_bytes(c_wb, f_code.data, f_code.len)
+    m.code_count = m.code_count + 1
+    
+    drop(f_code.data)
+    drop(f_code)
+    m.func_count - 1
+end
+
+wasm_assemble(m) do
+    out = wb_create(8192)
+    
+    // 1. WASM Header: Magic "\0asm" (0x00 0x61 0x73 0x6D)
+    wb_push_u8(out, 0)
+    wb_push_u8(out, 97)
+    wb_push_u8(out, 115)
+    wb_push_u8(out, 109)
+    
+    // 2. WASM Version 1 (0x01 0x00 0x00 0x00)
+    wb_push_u8(out, 1)
+    wb_push_u8(out, 0)
+    wb_push_u8(out, 0)
+    wb_push_u8(out, 0)
+    
+    // 3. Section 1: Type Section
+    if m.type_count > 0 do
+        payload = wb_create(m.type_sec.len + 16)
+        wb_push_u32_leb(payload, m.type_count)
+        wb_push_bytes(payload, m.type_sec.data, m.type_sec.len)
+        wb_push_section(out, WASM_SEC_TYPE, payload)
+        drop(payload.data)
+        drop(payload)
+    end
+    
+    // 4. Section 3: Function Section
+    if m.func_count > 0 do
+        payload = wb_create(m.func_sec.len + 16)
+        wb_push_u32_leb(payload, m.func_count)
+        wb_push_bytes(payload, m.func_sec.data, m.func_sec.len)
+        wb_push_section(out, WASM_SEC_FUNC, payload)
+        drop(payload.data)
+        drop(payload)
+    end
+    
+    // 5. Section 5: Memory Section
+    if m.has_mem > 0 do
+        wb_push_section(out, WASM_SEC_MEM, m.mem_sec)
+    end
+    
+    // 6. Section 7: Export Section
+    if m.export_count > 0 do
+        payload = wb_create(m.export_sec.len + 16)
+        wb_push_u32_leb(payload, m.export_count)
+        wb_push_bytes(payload, m.export_sec.data, m.export_sec.len)
+        wb_push_section(out, WASM_SEC_EXPORT, payload)
+        drop(payload.data)
+        drop(payload)
+    end
+    
+    // 7. Section 10: Code Section
+    if m.code_count > 0 do
+        payload = wb_create(m.code_sec.len + 16)
+        wb_push_u32_leb(payload, m.code_count)
+        wb_push_bytes(payload, m.code_sec.data, m.code_sec.len)
+        wb_push_section(out, WASM_SEC_CODE, payload)
+        drop(payload.data)
+        drop(payload)
+    end
+    
+    out
+end
+
+wasm_write_file(m, filepath) do
+    bin_wb = wasm_assemble(m)
+    write_file(filepath, bin_wb.data, bin_wb.len)
+    total_len = bin_wb.len
+    drop(bin_wb.data)
+    drop(bin_wb)
+    total_len
+end
+
+wasm_destroy_module(m) do
+    drop(m.type_sec.data)
+    drop(m.type_sec)
+    drop(m.func_sec.data)
+    drop(m.func_sec)
+    drop(m.mem_sec.data)
+    drop(m.mem_sec)
+    drop(m.export_sec.data)
+    drop(m.export_sec)
+    drop(m.code_sec.data)
+    drop(m.code_sec)
+    drop(m)
+    0
+end

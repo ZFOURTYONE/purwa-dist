@@ -1,0 +1,138 @@
+// lib/collections.pw - Koleksi dinamis untuk Purwa (v36.7)
+// Vec  : array dinamis yang tumbuh (amortized O(1) push)
+// Stack: LIFO di atas vec
+// Queue: FIFO dengan kepala geser (reset saat kosong)
+//
+// Konvensi: make_array(n, v) menyiapkan header panjang di slot 0 sehingga
+// size(a) == n. Vec menyimpan metadata di array 3 slot:
+//   v[0] = kapasitas data, v[1] = jumlah elemen, v[2] = pointer data.
+
+vec_new() do
+    v = make_array(3, 0)
+    v[0] = 4
+    v[1] = 0
+    v[2] = make_array(4, 0)
+    v
+end
+
+vec_len(v) do
+    v[1]
+end
+
+vec_get(v, i) do
+    d = v[2]
+    d[i]
+end
+
+vec_set(v, i, x) do
+    d = v[2]
+    d[i] = x
+    0
+end
+
+vec_push(v, x) do
+    cap = v[0]
+    n = v[1]
+    if n == cap then do
+        ncap = cap * 2
+        nd = make_array(ncap, 0)
+        i = 0
+        while i < n do
+            nd[i] = v[2][i]
+            i = i + 1
+        end
+        drop(v[2])
+        v[2] = nd
+        v[0] = ncap
+        cap = ncap
+    end else 0
+    d = v[2]
+    d[n] = x
+    v[1] = n + 1
+    0
+end
+
+vec_pop(v) do
+    // tanpa cek kosong: pasangkan dengan vec_len(v) > 0 dari penelepon
+    n = v[1]
+    if n == 0 then 0
+    else do
+        d = v[2]
+        x = d[n - 1]
+        v[1] = n - 1
+        x
+    end
+end
+
+vec_free(v) do
+    drop(v[2])
+    drop(v)
+    0
+end
+
+// ---------- Stack (LIFO di atas vec) ----------
+
+stack_new() do
+    vec_new()
+end
+
+stack_push(s, x) do
+    vec_push(s, x)
+end
+
+stack_pop(s) do
+    vec_pop(s)
+end
+
+stack_peek(s) do
+    n = s[1]
+    if n == 0 then 0
+    else do
+        d = s[2]
+        d[n - 1]
+    end
+end
+
+stack_len(s) do
+    s[1]
+end
+
+// ---------- Queue (FIFO; kepala geser, kompak saat habis) ----------
+
+queue_new() do
+    v = make_array(4, 0)
+    v[0] = 4
+    v[1] = 0
+    v[2] = make_array(4, 0)
+    v[3] = 0          // head
+    v
+end
+
+queue_len(q) do
+    q[1] - q[3]
+end
+
+queue_enqueue(q, x) do
+    vec_push(q, x)
+    0
+end
+
+queue_dequeue(q) do
+    if queue_len(q) == 0 then 0
+    else do
+        d = q[2]
+        x = d[q[3]]
+        q[3] = q[3] + 1
+        if q[3] == q[1] then do
+            q[3] = 0
+            q[1] = 0
+        end else 0
+        x
+    end
+end
+
+queue_free(q) do
+    drop(q[2])
+    drop(q)
+    0
+end

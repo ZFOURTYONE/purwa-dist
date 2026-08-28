@@ -1,0 +1,132 @@
+// ============================================================
+// lib/data.pw - Milestone P9: codec nilai bertanda (tagged
+// values) utk disimpan di lib/kv.pw. Murni Purwa.
+//
+// Tag: 'I'(73) i64 | 'S'(83) string(4B len + bytes)
+//      'A'(65) array i64 (4B len + 8B/elem) | 'R'(82)/'E'(69)
+//      amplop rekaman.
+// Semua fungsi menulis ke buffer memori dan mengembalikan jumlah
+// byte yang dikonsumsi; pembaca mengembalikan pasangan
+// (offset-berikut / -1 bila salah, nilai).
+// ============================================================
+
+global DT_I = 73
+global DT_S = 83
+global DT_A = 65
+global DT_R = 82
+global DT_E = 69
+
+dt_put_u32(buf, off, v) do
+    set_byte(buf, off, v & 255)
+    set_byte(buf, off + 1, (v >> 8) & 255)
+    set_byte(buf, off + 2, (v >> 16) & 255)
+    set_byte(buf, off + 3, (v >> 24) & 255)
+    4
+end
+
+dt_get_u32(buf, off) =
+    get_byte(buf, off) + get_byte(buf, off + 1) * 256 +
+    get_byte(buf, off + 2) * 65536 + get_byte(buf, off + 3) * 16777216
+
+dt_put_i64(buf, off, v) do
+    set_byte(buf, off, DT_I)
+    i = 0
+    while i < 8 do
+        set_byte(buf, off + 1 + i, (v >> (8 * i)) & 255)
+        i = i + 1
+    end
+    9
+end
+
+// hasil: (offset-berikut / -1 bila tag salah, nilai)
+dt_get_i64(buf, off) =
+    if get_byte(buf, off) != DT_I then (0 - 1, 0)
+    else do
+        v = get_byte(buf, off + 1) +
+            get_byte(buf, off + 2) * 256 +
+            get_byte(buf, off + 3) * 65536 +
+            get_byte(buf, off + 4) * 16777216 +
+            get_byte(buf, off + 5) * 4294967296 +
+            get_byte(buf, off + 6) * 1099511627776 +
+            get_byte(buf, off + 7) * 281474976710656 +
+            get_byte(buf, off + 8) * 72057594037927936
+        (v, off + 9)
+    end
+
+// hasil: (offset-berikut / -1, pointer salinan NUL-terminated; pemanggil
+// yang melepas via drop)
+dt_get_str(buf, off) =
+    if get_byte(buf, off) != DT_S then (0 - 1, 0)
+    else do
+        n = dt_get_u32(buf, off + 1)
+        p = alloc(n + 1)
+        mem_set(p, 0, n + 1)
+        mem_copy(p, buf + off + 5, n)
+        (off + 5 + n, p)
+    end
+
+// hasil: (offset-berikut / -1, array Purwa)
+dt_get_arr(buf, off) =
+    if get_byte(buf, off) != DT_A then (0 - 1, 0)
+    else do
+        n = dt_get_u32(buf, off + 1)
+        arr = make_array(n, 0)
+        i = 0
+        r = off + 5
+        while i < n do
+            arr[i] = get_byte(buf, r) + get_byte(buf, r + 1) * 256 +
+                     get_byte(buf, r + 2) * 65536 +
+                     get_byte(buf, r + 3) * 16777216 +
+                     get_byte(buf, r + 4) * 4294967296 +
+                     get_byte(buf, r + 5) * 1099511627776 +
+                     get_byte(buf, r + 6) * 281474976710656 +
+                     get_byte(buf, r + 7) * 72057594037927936
+            r = r + 8
+            i = i + 1
+        end
+        (r, arr)
+    end
+
+dt_put_str(buf, off, s) do
+    n = size_of(s)
+    set_byte(buf, off, DT_S)
+    dt_put_u32(buf, off + 1, n)
+    mem_copy(buf + off + 5, s, n)
+    5 + n
+end
+
+dt_put_bytes(buf, off, p, n) do
+    set_byte(buf, off, DT_S)          // bytes direpresentasikan sbg string
+    dt_put_u32(buf, off + 1, n)
+    mem_copy(buf + off + 5, p, n)
+    5 + n
+end
+
+dt_put_arr(buf, off, arr, n) do
+    set_byte(buf, off, DT_A)
+    dt_put_u32(buf, off + 1, n)
+    i = 0
+    w = off + 5
+    while i < n do
+        v = arr[i]
+        j = 0
+        while j < 8 do
+            set_byte(buf, w + j, (v >> (8 * j)) & 255)
+            j = j + 1
+        end
+        w = w + 8
+        i = i + 1
+    end
+    5 + n * 8
+end
+
+// amplop rekaman: R ... E
+dt_begin_record(buf, off) do
+    set_byte(buf, off, DT_R)
+    1
+end
+
+dt_end_record(buf, off) do
+    set_byte(buf, off, DT_E)
+    1
+end

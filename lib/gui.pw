@@ -1,0 +1,299 @@
+// lib/gui.pw — Sovereign Immediate-Mode Desktop GUI Engine (Milestone P10)
+// Provides lightweight immediate-mode GUI widgets, Win32 Desktop Windowing, and Real-Time Event Loop.
+import "canvas"
+
+struct GuiWindow {
+    hwnd,
+    hdc,
+    width,
+    height,
+    bmi_buf,
+    pt_buf,
+    msg_buf,
+    u32,
+    g32,
+    k32,
+    fn_peek,
+    fn_trans,
+    fn_disp,
+    fn_set_dib,
+    fn_cursor,
+    fn_s2c,
+    fn_asynckey,
+    fn_is_win,
+    click_cnt,
+    click_x,
+    click_y
+}
+
+// Helper: Tulis pointer 64-bit little-endian ke buffer
+gui_write_ptr(buf, offset, val) do
+    v = val
+    set_byte(buf, offset + 0, v % 256)
+    v = v / 256
+    set_byte(buf, offset + 1, v % 256)
+    v = v / 256
+    set_byte(buf, offset + 2, v % 256)
+    v = v / 256
+    set_byte(buf, offset + 3, v % 256)
+    v = v / 256
+    set_byte(buf, offset + 4, v % 256)
+    v = v / 256
+    set_byte(buf, offset + 5, v % 256)
+    v = v / 256
+    set_byte(buf, offset + 6, v % 256)
+    v = v / 256
+    set_byte(buf, offset + 7, v % 256)
+    0
+end
+
+// Widget: Panel Latar Belakang Kotak
+gui_panel(c: Canvas, x, y, w, h, r, g, b) do
+    canvas_draw_rect(c, x, y, w, h, r, g, b, 255, 1)
+    br = if r + 30 > 255 then 255 else r + 30
+    bg = if g + 30 > 255 then 255 else g + 30
+    bb = if b + 30 > 255 then 255 else b + 30
+    canvas_draw_rect(c, x, y, w, h, br, bg, bb, 255, 0)
+    0
+end
+
+// Widget: Tombol Interaktif Immediate-Mode
+gui_button(c: Canvas, x, y, w, h, label, mouse_x, mouse_y, is_down) do
+    is_hover = if mouse_x >= x and mouse_x < x + w and mouse_y >= y and mouse_y < y + h then 1 else 0
+    is_clicked = if is_hover == 1 and is_down == 1 then 1 else 0
+    
+    if is_clicked == 1 do
+        canvas_draw_rect(c, x, y, w, h, 56, 189, 248, 255, 1)
+        canvas_draw_rect(c, x, y, w, h, 255, 255, 255, 255, 0)
+    else if is_hover == 1 do
+        canvas_draw_rect(c, x, y, w, h, 2, 132, 199, 255, 1)
+        canvas_draw_rect(c, x, y, w, h, 125, 211, 252, 255, 0)
+    else do
+        canvas_draw_rect(c, x, y, w, h, 30, 41, 59, 255, 1)
+        canvas_draw_rect(c, x, y, w, h, 71, 85, 105, 255, 0)
+    end
+    
+    is_clicked
+end
+
+// Widget: Progress Bar Dinamis
+gui_progress_bar(c: Canvas, x, y, w, h, pct, fill_r, fill_g, fill_b) do
+    canvas_draw_rect(c, x, y, w, h, 15, 23, 42, 255, 1)
+    canvas_draw_rect(c, x, y, w, h, 51, 65, 85, 255, 0)
+    valid_pct = if pct < 0 then 0 else if pct > 100 then 100 else pct
+    fill_w = (w - 4) * valid_pct / 100
+    if fill_w > 0 do
+        canvas_draw_rect(c, x + 2, y + 2, fill_w, h - 4, fill_r, fill_g, fill_b, 255, 1)
+    end
+    0
+end
+
+// Widget: Checkbox
+gui_checkbox(c: Canvas, x, y, size, is_checked, mouse_x, mouse_y, is_down) do
+    is_hover = if mouse_x >= x and mouse_x < x + size and mouse_y >= y and mouse_y < y + size then 1 else 0
+    is_toggle = if is_hover == 1 and is_down == 1 then 1 else 0
+    canvas_draw_rect(c, x, y, size, size, 30, 41, 59, 255, 1)
+    canvas_draw_rect(c, x, y, size, size, 148, 163, 184, 255, 0)
+    if is_checked == 1 do
+        pad = size / 4
+        canvas_draw_rect(c, x + pad, y + pad, size - 2 * pad, size - 2 * pad, 56, 189, 248, 255, 1)
+    end
+    is_toggle
+end
+
+// --- Win32 Desktop Windowing & Hardware Blitting ---
+
+gui_open_window(title, width, height): GuiWindow do
+    u32 = load_dll("user32.dll")
+    k32 = load_dll("kernel32.dll")
+    g32 = load_dll("gdi32.dll")
+    
+    if u32 == 0 or k32 == 0 or g32 == 0 then do
+        0
+    end else do
+        fn_get_mod    = get_fn(k32, "GetModuleHandleA")
+        fn_def_proc   = get_fn(u32, "DefWindowProcA")
+        fn_reg_cls    = get_fn(u32, "RegisterClassExA")
+        fn_load_cur   = get_fn(u32, "LoadCursorA")
+        fn_create_win = get_fn(u32, "CreateWindowExA")
+        fn_show_win   = get_fn(u32, "ShowWindow")
+        fn_update_win = get_fn(u32, "UpdateWindow")
+        fn_get_dc     = get_fn(u32, "GetDC")
+        
+        hinst = call_dll(fn_get_mod, 0)
+        hcursor = call_dll(fn_load_cur, 0, 32512)
+
+        // opt out of DPI virtualization: client pixels stay 1:1 physical
+        fn_spda = get_fn(u32, "SetProcessDPIAware")
+        call_dll(fn_spda)
+
+        cls_name = "PurwaSovereignWindowClass"
+        
+        // Daftarkan WNDCLASSEXA (80 bytes pada x64)
+        wc = alloc(128)
+        mem_set(wc, 0, 128)
+        canvas_write_u32(wc, 0, 80)              // cbSize = 80
+        canvas_write_u32(wc, 4, 35)              // style = CS_HREDRAW|CS_VREDRAW|CS_OWNDC
+        gui_write_ptr(wc, 8, fn_def_proc)        // lpfnWndProc = DefWindowProcA
+        gui_write_ptr(wc, 24, hinst)              // hInstance
+        gui_write_ptr(wc, 40, hcursor)            // hCursor
+        gui_write_ptr(wc, 64, cls_name)           // lpszClassName
+        
+        call_dll(fn_reg_cls, wc)
+        drop(wc)
+        
+        // WS_OVERLAPPEDWINDOW | WS_VISIBLE
+        dwStyle = 13565952 + 268435456
+        
+        hwnd = call_dll(fn_create_win,
+            0,
+            cls_name,
+            title,
+            dwStyle,
+            150, 100,
+            width + 16, height + 39,
+            0, 0, hinst, 0
+        )
+        
+        if hwnd == 0 then do
+            0
+        end else do
+            call_dll(fn_show_win, hwnd, 5)
+            call_dll(fn_update_win, hwnd)
+            hdc = call_dll(fn_get_dc, hwnd)
+            
+            bmi = alloc(64)
+            canvas_write_u32(bmi, 0, 40)
+            canvas_write_u32(bmi, 4, width)
+            // top-down DIB: biHeight negatif. Ditulis sebagai dua-komplemen
+            // positif (2^32 - h) karena canvas_write_u32 memakai % dan /
+            // trunc yang rusak untuk nilai negatif.
+            canvas_write_u32(bmi, 8, 4294967296 - height)
+            canvas_write_u16(bmi, 12, 1)
+            canvas_write_u16(bmi, 14, 32)
+            canvas_write_u32(bmi, 16, 0)
+            canvas_write_u32(bmi, 20, width * height * 4)
+            
+            pt_buf = alloc(16)
+            msg_buf = alloc(64)
+            
+            // Cache semua function pointer Win32 agar tidak perlu get_fn setiap frame
+            fp_peek     = get_fn(u32, "PeekMessageA")
+            fp_trans    = get_fn(u32, "TranslateMessage")
+            fp_disp     = get_fn(u32, "DispatchMessageA")
+            fp_set_dib  = get_fn(g32, "SetDIBitsToDevice")
+            fp_cursor   = get_fn(u32, "GetCursorPos")
+            fp_s2c      = get_fn(u32, "ScreenToClient")
+            fp_asynckey = get_fn(u32, "GetAsyncKeyState")
+            fp_is_win   = get_fn(u32, "IsWindow")
+            
+            GuiWindow(hwnd, hdc, width, height, bmi, pt_buf, msg_buf,
+                      u32, g32, k32,
+                      fp_peek, fp_trans, fp_disp, fp_set_dib,
+                      fp_cursor, fp_s2c, fp_asynckey, fp_is_win,
+                      0, 0, 0)
+        end
+    end
+end
+
+gui_blit_canvas(win: GuiWindow, c: Canvas) do
+    call_dll(win.fn_set_dib,
+        win.hdc, 0, 0, win.width, win.height,
+        0, 0, 0, win.height,
+        c.buffer, win.bmi_buf, 0
+    )
+end
+
+gui_poll_events(win: GuiWindow) do
+    // PM_REMOVE = 1; capture WM_LBUTTONDOWN as reliable click events
+    has_msg = call_dll(win.fn_peek, win.msg_buf, 0, 0, 0, 1)
+    while has_msg != 0 do
+        mid = gui_read_i32(win.msg_buf, 8)
+        if mid == 513 do
+            // WM_LBUTTONDOWN: lParam = (y << 16) | x in client coords
+            b0 = get_byte(win.msg_buf, 24)
+            b1 = get_byte(win.msg_buf, 25)
+            b2 = get_byte(win.msg_buf, 26)
+            b3 = get_byte(win.msg_buf, 27)
+            lx = b0 + b1 * 256
+            ly = b2 + b3 * 256
+            if lx > 32767 then lx -= 65536
+            if ly > 32767 then ly -= 65536
+            win.click_x = lx
+            win.click_y = ly
+            win.click_cnt += 1
+        end
+        call_dll(win.fn_trans, win.msg_buf)
+        call_dll(win.fn_disp, win.msg_buf)
+        has_msg = call_dll(win.fn_peek, win.msg_buf, 0, 0, 0, 1)
+    end
+    0
+end
+
+// pending message-driven clicks since last poll
+gui_click_pending(win: GuiWindow) do
+    win.click_cnt
+end
+
+// consume the latest click; returns client-space (x, y)
+gui_pop_click(win: GuiWindow) do
+    win.click_cnt -= 1
+    (win.click_x, win.click_y)
+end
+
+// Helper membaca 32-bit signed integer dari buffer POINT
+gui_read_i32(buf, offset) do
+    b0 = get_byte(buf, offset + 0)
+    b1 = get_byte(buf, offset + 1)
+    b2 = get_byte(buf, offset + 2)
+    b3 = get_byte(buf, offset + 3)
+    val = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
+    if val > 2147483647 then val - 4294967296 else val
+end
+
+gui_mouse_x(win: GuiWindow) do
+    call_dll(win.fn_cursor, win.pt_buf)
+    call_dll(win.fn_s2c, win.hwnd, win.pt_buf)
+    gui_read_i32(win.pt_buf, 0)
+end
+
+gui_mouse_y(win: GuiWindow) do
+    call_dll(win.fn_cursor, win.pt_buf)
+    call_dll(win.fn_s2c, win.hwnd, win.pt_buf)
+    gui_read_i32(win.pt_buf, 4)
+end
+
+gui_mouse_down(win: GuiWindow) do
+    k = call_dll(win.fn_asynckey, 1)
+    if k != 0 then 1 else 0
+end
+
+gui_key_esc(win: GuiWindow) do
+    k = call_dll(win.fn_asynckey, 27)
+    if k != 0 then 1 else 0
+end
+
+gui_is_open(win: GuiWindow) do
+    call_dll(win.fn_is_win, win.hwnd)
+end
+
+gui_show_alert(win: GuiWindow, title, msg) do
+    fn_mb = get_fn(win.u32, "MessageBoxA")
+    call_dll(fn_mb, win.hwnd, msg, title, 64)
+end
+
+gui_close_window(win: GuiWindow) do
+    // Hanya panggil ReleaseDC/DestroyWindow jika jendela masih hidup
+    // (jika user klik X, DefWindowProcA sudah memanggil DestroyWindow)
+    if call_dll(win.fn_is_win, win.hwnd) != 0 do
+        fn_rel_dc = get_fn(win.u32, "ReleaseDC")
+        fn_dest_win = get_fn(win.u32, "DestroyWindow")
+        call_dll(fn_rel_dc, win.hwnd, win.hdc)
+        call_dll(fn_dest_win, win.hwnd)
+    end
+    drop(win.bmi_buf)
+    drop(win.pt_buf)
+    drop(win.msg_buf)
+    drop(win)
+    0
+end
