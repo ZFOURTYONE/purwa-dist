@@ -1,0 +1,208 @@
+// lib/json.pw — JSON reader/writer (human-centric, flat objects)
+// Python `json` module style: json_get_str(s, "key"), json_get_num(s, "key"),
+// json_build_str("name", "Purwa"), json_object([...]), json_array([...]).
+// Pure Purwa, zero dependencies. Handles flat objects and arrays.
+//
+// Quick start:
+//   s = json_object([json_field_str("name", "Purwa"), json_field_num("year", 2026)])
+//   n = json_get_num(s, "year")        // 2026
+//   name = json_get_str(s, "name")     // "Purwa"
+//
+// Limitation: nested objects/arrays are not parsed (v1); use explicit
+// extraction for known keys.
+
+// ---- build helpers ----
+
+// json_escape(s): escape a string for JSON (quote, backslash, control chars)
+json_escape(s) do
+    L = str_len(s)
+    // count escapes needed
+    extra = 0
+    i = 0
+    while i < L do
+        c = get_byte(s, i)
+        if c == 34 or c == 92 or c == 10 or c == 13 or c == 9 then extra = extra + 1
+        else if c < 32 then extra = extra + 5  // \uXXXX
+        else 0
+        i = i + 1
+    end
+    out = alloc(L + extra + 3)  // leading/trailing quote + NUL
+    w = 0
+    set_byte(out, w, 34); w = w + 1  // '"'
+    i = 0
+    while i < L do
+        c = get_byte(s, i)
+        if c == 34 then do set_byte(out, w, 92); set_byte(out, w+1, 34); w = w + 2
+        end else if c == 92 then do set_byte(out, w, 92); set_byte(out, w+1, 92); w = w + 2
+        end else if c == 10 then do set_byte(out, w, 92); set_byte(out, w+1, 110); w = w + 2
+        end else if c == 13 then do set_byte(out, w, 92); set_byte(out, w+1, 114); w = w + 2
+        end else if c == 9 then do set_byte(out, w, 92); set_byte(out, w+1, 116); w = w + 2
+        end else do
+            set_byte(out, w, c); w = w + 1
+        end
+        i = i + 1
+    end
+    set_byte(out, w, 34); w = w + 1  // '"'
+    set_byte(out, w, 0)
+    out
+end
+
+// json_field_str(key, value): -> "key":"value" (value is auto-escaped)
+json_field_str(key, value) do
+    concat(concat(concat("\"", key), "\":"), json_escape(value))
+end
+
+// json_field_num(key, value): -> "key":123 (value written as-is)
+json_field_num(key, value) do
+    concat(concat(concat("\"", key), "\":"), to_text(value))
+end
+
+// json_field_bool(key, value): -> "key":true/false
+json_field_bool(key, value) do
+    concat(concat(concat("\"", key), "\":"), if value == 1 then "true" else "false")
+end
+
+// json_object(fields): -> { "k1":"v1", "k2":123, ... }
+// fields = array of pre-formatted "key":value strings
+json_object(fields) do
+    n = size(fields)
+    s = "{"
+    i = 0
+    while i < n do
+        if i > 0 then s = s + "," else 0
+        s = s + fields[i]
+        i = i + 1
+    end
+    s + "}"
+end
+
+// json_array(items): -> [ item1, item2, ... ]
+// items = array of pre-formatted value strings
+json_array(items) do
+    n = size(items)
+    s = "["
+    i = 0
+    while i < n do
+        if i > 0 then s = s + "," else 0
+        s = s + items[i]
+        i = i + 1
+    end
+    s + "]"
+end
+
+// ---- parse helpers ----
+
+// json_find_key(text, key): find "key": in text, return index after ':'
+// Returns -1 if not found.
+json_find_key(text, key) do
+    L = str_len(text)
+    kL = str_len(key)
+    i = 0
+    found = 0 - 1
+    while i + kL + 2 <= L and found < 0 do
+        if get_byte(text, i) == 34 then do
+            // compare: "key":
+            s = i + 1
+            is_eq = 1
+            j = 0
+            while j < kL and is_eq == 1 do
+                if get_byte(text, s + j) != get_byte(key, j) then is_eq = 0 else 0
+                j = j + 1
+            end
+            if is_eq == 1 and get_byte(text, s + kL) == 34 then do
+                // skip "key"
+                ci = s + kL + 1
+                while ci < L and get_byte(text, ci) != 58 do ci = ci + 1 end  // ':'
+                if ci < L then found = ci + 1 else 0
+            end else 0
+            i = i + 1
+        end else i = i + 1
+    end
+    found
+end
+
+// json_skip_ws(text, i): skip whitespace from index i
+json_skip_ws(text, i) do
+    while i < str_len(text) and (get_byte(text, i) == 32 or get_byte(text, i) == 9
+           or get_byte(text, i) == 10 or get_byte(text, i) == 13) do i = i + 1 end
+    i
+end
+
+// json_read_str(text, start): read a JSON string value starting at start
+// Returns the parsed string (without quotes, unescaped) or empty string.
+json_read_str(text, start) do
+    i = json_skip_ws(text, start)
+    if i >= str_len(text) or get_byte(text, i) != 34 then ""
+    else do
+        i = i + 1  // skip opening quote
+        // pass 1: count output length
+        n = 0
+        j = i
+        while j < str_len(text) and get_byte(text, j) != 34 do
+            if get_byte(text, j) == 92 and j + 1 < str_len(text) then j = j + 1
+            n = n + 1
+            j = j + 1
+        end
+        // pass 2: build unescaped string
+        out = alloc(n + 1)
+        w = 0
+        while i < str_len(text) and get_byte(text, i) != 34 do
+            c = get_byte(text, i)
+            if c == 92 and i + 1 < str_len(text) then do
+                i = i + 1
+                c2 = get_byte(text, i)
+                if c2 == 110 then set_byte(out, w, 10)
+                else if c2 == 114 then set_byte(out, w, 13)
+                else if c2 == 116 then set_byte(out, w, 9)
+                else if c2 == 34 then set_byte(out, w, 34)
+                else if c2 == 92 then set_byte(out, w, 92)
+                else set_byte(out, w, c2)
+                w = w + 1
+            end else do
+                set_byte(out, w, c)
+                w = w + 1
+            end
+            i = i + 1
+        end
+        set_byte(out, w, 0)
+        out
+    end
+end
+
+// json_read_num(text, start): read a JSON number from start (as i64)
+// Returns 0 if not a number (or 0).
+json_read_num(text, start) do
+    i = json_skip_ws(text, start)
+    if i >= str_len(text) then 0
+    else do
+        neg = 0
+        if get_byte(text, i) == 45 then do neg = 1; i = i + 1 end else 0
+        v = 0
+        while i < str_len(text) and get_byte(text, i) >= 48 and get_byte(text, i) <= 57 do
+            v = v * 10 + (get_byte(text, i) - 48)
+            i = i + 1
+        end
+        if neg == 1 then 0 - v else v
+    end
+end
+
+// ---- public parse API ----
+
+// json_get_str(text, key): extract string value for key from JSON object
+json_get_str(text, key) do
+    pos = json_find_key(text, key)
+    if pos < 0 then ""
+    else json_read_str(text, pos)
+end
+
+// json_get_num(text, key): extract integer value for key from JSON object
+json_get_num(text, key) do
+    pos = json_find_key(text, key)
+    if pos < 0 then 0
+    else json_read_num(text, pos)
+end
+
+// json_has(text, key): 1 if key exists in JSON object
+json_has(text, key) do
+    if json_find_key(text, key) >= 0 then 1 else 0
+end

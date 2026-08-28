@@ -1,0 +1,207 @@
+// lib/csv.pw — Comma-Separated Values reader/writer (human-centric)
+// Python `csv` module style: csv_parse(text) -> rows of string cells,
+// csv_to_str(rows) -> text. Handles quoted fields with embedded commas
+// and escaped quotes ("").
+// Pure Purwa, zero dependencies. Cells are NUL-terminated strings.
+//
+// Quick start:
+//   rows = csv_parse("name,age\nPurwa,2026\n")
+//   show(rows[0][0])          // "name"
+//   show(rows[1][1])          // "2026"
+//   text = csv_to_str(rows)
+//
+// Cell storage: array of arrays of strings.
+//   rows[i]   = one row (array of cell strings)
+//   rows[i][j] = cell string
+
+// ---- internal: split one CSV line into cells (handles quotes) ----
+csv_split_line(line) do
+    L = str_len(line)
+    // pass 1: count cells (respecting quotes) so we can size the array
+    nc = 1
+    i = 0
+    in_q = 0
+    while i < L do
+        c = get_byte(line, i)
+        if c == 34 then do  // '"'
+            if in_q == 1 and i + 1 < L and get_byte(line, i + 1) == 34 then i = i + 1
+            else in_q = if in_q == 1 then 0 else 1
+        end else if c == 44 and in_q == 0 then nc = nc + 1  // ','
+        else 0
+        i = i + 1
+    end
+    cells = make_array(nc, 0)
+    // pass 2: extract each cell into its own string
+    cell = 0
+    start = 0
+    i = 0
+    in_q = 0
+    while i <= L do
+        c = if i < L then get_byte(line, i) else 44  // sentinel ',' at end
+        if c == 34 then do
+            if in_q == 1 and i + 1 < L and get_byte(line, i + 1) == 34 then i = i + 1
+            else in_q = if in_q == 1 then 0 else 1
+        end else if c == 44 and in_q == 0 then do
+            // cell = line[start..i), unquoted
+            cells[cell] = csv_cell_text(line, start, i)
+            cell = cell + 1
+            start = i + 1
+        end else 0
+        i = i + 1
+    end
+    cells
+end
+
+// csv_cell_text(line, a, b): copy line[a..b) into a new NUL-terminated
+// string, removing one layer of surrounding quotes and unescaping "".
+csv_cell_text(line, a, b) do
+    // trim surrounding quotes
+    sa = a
+    eb = b
+    if sa < eb and get_byte(line, sa) == 34 then sa = sa + 1 else 0
+    if eb > sa and get_byte(line, eb - 1) == 34 then eb = eb - 1 else 0
+    // count final length ('' -> ')
+    n = 0
+    i = sa
+    while i < eb do
+        if get_byte(line, i) == 34 and i + 1 < eb and get_byte(line, i + 1) == 34 then do
+            n = n + 1
+            i = i + 2
+        end else do
+            n = n + 1
+            i = i + 1
+        end
+    end
+    out = alloc(n + 1)
+    w = 0
+    i = sa
+    while i < eb do
+        if get_byte(line, i) == 34 and i + 1 < eb and get_byte(line, i + 1) == 34 then do
+            set_byte(out, w, 34)
+            w = w + 1
+            i = i + 2
+        end else do
+            set_byte(out, w, get_byte(line, i))
+            w = w + 1
+            i = i + 1
+        end
+    end
+    set_byte(out, w, 0)
+    out
+end
+
+// ---- public API ----
+
+// csv_parse(text): parse CSV text -> array of rows (array of cell strings)
+// Handles CRLF and quoted fields with commas / escaped quotes.
+csv_parse(text) do
+    // count rows (newline-separated; tolerate trailing newline)
+    L = str_len(text)
+    nr = 1
+    i = 0
+    while i < L do
+        if get_byte(text, i) == 10 then nr = nr + 1 else 0
+        i = i + 1
+    end
+    // trailing newline means the last "line" is empty -> drop it
+    if L > 0 and get_byte(text, L - 1) == 10 then nr = nr - 1 else 0
+    if nr < 0 then nr = 0 else 0
+    rows = make_array(nr, 0)
+    row = 0
+    start = 0
+    i = 0
+    while i <= L do
+        c = if i < L then get_byte(text, i) else 10  // sentinel newline
+        if c == 10 then do
+            // hanya proses bila masih ada slot baris (hindari overflow
+            // dari sentinel trailing empty segment)
+            if row < nr then do
+                eb = i
+                if eb > start and get_byte(text, eb - 1) == 13 then eb = eb - 1 else 0
+                line = csv_cell_text(text, start, eb)  // strip line-level chars
+                rows[row] = csv_split_line(line)
+                row = row + 1
+            end else 0
+            start = i + 1
+        end else 0
+        i = i + 1
+    end
+    rows
+end
+
+// csv_row_str(cells): render one row of cells as a CSV line (no trailing NL)
+csv_row_str(cells) do
+    n = size(cells)
+    s = ""
+    i = 0
+    while i < n do
+        if i > 0 then s = s + "," else 0
+        s = s + csv_quote(cells[i])
+        i = i + 1
+    end
+    s
+end
+
+// csv_quote(cell): quote a cell if needed (contains , " or newline)
+csv_quote(cell) do
+    L = str_len(cell)
+    need = 0
+    i = 0
+    while i < L and need == 0 do
+        c = get_byte(cell, i)
+        if c == 44 or c == 34 or c == 10 or c == 13 then need = 1 else 0
+        i = i + 1
+    end
+    if need == 1 then concat("\"", concat(csv_double_quotes(cell), "\""))
+    else cell
+end
+
+// csv_double_quotes(s): replace " with "" in a string
+csv_double_quotes(s) do
+    L = str_len(s)
+    n = 0
+    i = 0
+    while i < L do
+        if get_byte(s, i) == 34 then n = n + 1 else 0
+        i = i + 1
+    end
+    out = alloc(L + n + 1)
+    w = 0
+    i = 0
+    while i < L do
+        c = get_byte(s, i)
+        if c == 34 then do
+            set_byte(out, w, 34); w = w + 1
+            set_byte(out, w, 34); w = w + 1
+        end else do
+            set_byte(out, w, c); w = w + 1
+        end
+        i = i + 1
+    end
+    set_byte(out, w, 0)
+    out
+end
+
+// csv_to_str(rows): render all rows as CSV text (newline-separated)
+csv_to_str(rows) do
+    nr = size(rows)
+    s = ""
+    i = 0
+    while i < nr do
+        if i > 0 then s = s + "\n" else 0
+        s = s + csv_row_str(rows[i])
+        i = i + 1
+    end
+    s
+end
+
+// csv_has_col(rows, name): 1 if any cell in row 0 equals name (header check)
+csv_has_col(rows, name) do
+    n = size(rows[0])
+    f = 0
+    i = 0
+    while i < n and f == 0 do
+        if str_eq(rows[0][i], name) == 1 then f = 1 else i = i + 1
+    end
+    f
+end

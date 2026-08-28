@@ -1,0 +1,182 @@
+// lib/stats.pw — descriptive statistics for NdArray (human-centric)
+// Python `statistics` module style: stats_mean(a), stats_median(a),
+// stats_var(a), stats_std(a), stats_mode(a), stats_percentile(a, 90).
+// Pure Purwa, zero dependencies. Builds on lib/ndarray.pw.
+//
+// Quick start:
+//   a = nd_array([1, 2, 3, 4, 5])
+//   show_num(stats_mean(a))      // 3
+//   show_num(stats_median(a))    // 3
+//   show_num(stats_std(a))       // 1.58...
+//   show_num(stats_mode(a))      // most frequent value
+//
+// Variance convention (matches Python `statistics`):
+//   stats_var  = sample variance   (n-1)
+//   stats_pvar = population variance (n)
+//   stats_std  = sample stddev;  stats_pstd = population stddev
+
+import "ndarray"
+
+// ---- helpers ----
+
+// sqrt_f(x): square root of float via Newton's method (no builtin sqrt)
+sqrt_f(x) do
+    if x <= 0.0 then 0.0
+    else do
+        g = fdiv(x, 2.0)
+        i = 0
+        while i < 30 do
+            g = fdiv(fadd(g, fdiv(x, g)), 2.0)
+            i = i + 1
+        end
+        g
+    end
+end
+
+// sorted_copy(a): copy of the data, sorted ascending (insertion sort)
+sorted_copy(a) do
+    n = a.size()
+    d = make_array(n, 0)
+    i = 0
+    while i < n do
+        d[i] = a.data[i]
+        i = i + 1
+    end
+    i = 1
+    while i < n do
+        key = d[i]
+        j = i - 1
+        while j >= 0 and d[j] > key do
+            d[j + 1] = d[j]
+            j = j - 1
+        end
+        d[j + 1] = key
+        i = i + 1
+    end
+    d
+end
+
+// ---- central tendency ----
+
+// stats_mean(a): arithmetic mean (f64)
+// (inline: memanggil a.mean() memicu warning "method mean ambiguous" karena
+// receiver type hint belum terpropagasi ke parameter generik)
+stats_mean(a) do
+    n = a.size()
+    fdiv(to_float(a.sum()), to_float(n))
+end
+
+// stats_median(a): middle value; average of two middles for even count (f64)
+stats_median(a) do
+    n = a.size()
+    d = sorted_copy(a)
+    if n % 2 == 1 then to_float(d[(n - 1) / 2])
+    else fdiv(to_float(d[n / 2 - 1] + d[n / 2]), 2.0)
+end
+
+// stats_mode(a): most frequent value (i64; ties -> first encountered)
+stats_mode(a) do
+    n = a.size()
+    best = a.data[0]
+    bestc = 1
+    i = 0
+    while i < n do
+        c = 0
+        j = 0
+        while j < n do
+            if a.data[j] == a.data[i] then c = c + 1 else 0
+            j = j + 1
+        end
+        if c > bestc then do
+            best = a.data[i]
+            bestc = c
+        end else 0
+        i = i + 1
+    end
+    best
+end
+
+// ---- spread / dispersion ----
+
+// stats_var(a): sample variance (n-1) — matches Python statistics.variance
+stats_var(a) do
+    n = a.size()
+    m = stats_mean(a)
+    s = 0.0
+    i = 0
+    while i < n do
+        d = fsub(to_float(a.data[i]), m)
+        s = fadd(s, fmul(d, d))
+        i = i + 1
+    end
+    fdiv(s, to_float(n - 1))
+end
+
+// stats_pvar(a): population variance (n)
+stats_pvar(a) do
+    n = a.size()
+    m = stats_mean(a)
+    s = 0.0
+    i = 0
+    while i < n do
+        d = fsub(to_float(a.data[i]), m)
+        s = fadd(s, fmul(d, d))
+        i = i + 1
+    end
+    fdiv(s, to_float(n))
+end
+
+// stats_std(a): sample standard deviation = sqrt(sample variance)
+stats_std(a) = sqrt_f(stats_var(a))
+
+// stats_pstd(a): population standard deviation = sqrt(population variance)
+stats_pstd(a) = sqrt_f(stats_pvar(a))
+
+// ---- quantiles ----
+
+// stats_percentile(a, p): p-th percentile (linear interpolation, f64)
+// p in 0..100; position = (n-1) * p/100, like numpy.percentile
+stats_percentile(a, p) do
+    n = a.size()
+    if n == 1 then to_float(a.data[0])
+    else do
+        d = sorted_copy(a)
+        pos = fdiv(to_float((n - 1) * p), to_float(100))
+        lo = to_int(pos)
+        hi = if lo + 1 < n then lo + 1 else lo
+        frac = fsub(pos, to_float(lo))
+        fadd(to_float(d[lo]), fmul(to_float(d[hi] - d[lo]), frac))
+    end
+end
+
+// ---- random number generator (LCG, deterministic when seeded) ----
+
+global S_STATE = 0
+
+// stats_seed(s): set the PRNG seed (same seed -> same sequence)
+stats_seed(s) do
+    S_STATE = s
+end
+
+// stats_rand(): random in [0, 2^31-1]
+stats_rand() do
+    if S_STATE == 0 then S_STATE = time_ms() + 12345 else 0
+    S_STATE = (S_STATE * 1103515245 + 12345) & 2147483647
+    S_STATE
+end
+
+// stats_rand_int(lo, hi): random integer in [lo, hi] (inclusive)
+stats_rand_int(lo, hi) do
+    lo + stats_rand() % (hi - lo + 1)
+end
+
+// stats_rand_n(n): array of n random ints in [0, 2^31-1]
+stats_rand_n(n) do
+    r = make_array(n, 0)
+    i = 0
+    while i < n do
+        r[i] = stats_rand()
+        i = i + 1
+    end
+    r
+end
