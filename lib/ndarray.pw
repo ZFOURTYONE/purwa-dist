@@ -1,0 +1,244 @@
+// lib/ndarray.pw — N-dimensional array (1D/2D) for numerical computing
+// Human-centric API — reads like Python: data.sum(), m.matmul(b), nd_zeros(2,3)
+// Pure Purwa, zero dependencies. Foundation for stats, table, plot, ML.
+//
+// NdArray struct: flat row-major storage + shape.
+//   data = make_array(rows*cols, 0)  // flat array of i64
+//   rows = row count
+//   cols = column count
+//   A "vector" is rows=N, cols=1; a "matrix" is rows=R, cols=C.
+//
+// Quick start:
+//   a = nd_array([1, 2, 3, 4, 5])
+//   show_num(a.sum())       // 15
+//   show_num(a.mean())      // 3
+//   show_num(a.max())       // 5
+//
+//   m = nd_zeros(2, 3)
+//   m.set(0, 0, 99)
+//   m.show()
+//
+//   a = nd_ones(2, 2)
+//   b = nd_ones(2, 2)
+//   c = a.matmul(b)
+//   c.show()
+
+struct NdArray {
+    data,
+    rows,
+    cols
+}
+
+// ---- Factory functions (like Python np.array, np.zeros, ...) ----
+
+// nd_array(items): from array literal [1,2,3] -> 1D (rows=n, cols=1)
+nd_array(items) do
+    n = size(items)
+    a = make_array(n, 0)
+    i = 0
+    while i < n do
+        a[i] = items[i]
+        i = i + 1
+    end
+    NdArray(a, n, 1)
+end
+
+// nd_zeros(r, c): r x c matrix of zeros
+nd_zeros(r, c) do
+    NdArray(make_array(r * c, 0), r, c)
+end
+
+// nd_ones(r, c): r x c matrix of ones
+nd_ones(r, c) do
+    NdArray(make_array(r * c, 1), r, c)
+end
+
+// nd_arange(n): 0, 1, 2, ..., n-1 (1D)
+nd_arange(n) do
+    a = make_array(n, 0)
+    i = 0
+    while i < n do
+        a[i] = i
+        i = i + 1
+    end
+    NdArray(a, n, 1)
+end
+
+// nd_copy(a): deep copy
+nd_copy(a) do
+    n = a.rows * a.cols
+    d = make_array(n, 0)
+    i = 0
+    while i < n do
+        d[i] = a.data[i]
+        i = i + 1
+    end
+    NdArray(d, a.rows, a.cols)
+end
+
+// ---- Property methods (like Python arr.mean(), arr.sum(), ...) ----
+
+NdArray.sum(self) do
+    tot = 0
+    i = 0
+    n = self.rows * self.cols
+    while i < n do
+        tot = tot + self.data[i]
+        i = i + 1
+    end
+    tot
+end
+
+NdArray.mean(self) do
+    n = self.rows * self.cols
+    // Note: Purwa float aritmatika pakai builtin fdiv (bukan operator /)
+    fdiv(to_float(self.sum()), to_float(n))
+end
+
+NdArray.max(self) do
+    mx = self.data[0]
+    i = 1
+    n = self.rows * self.cols
+    while i < n do
+        if self.data[i] > mx then mx = self.data[i] else 0
+        i = i + 1
+    end
+    mx
+end
+
+NdArray.min(self) do
+    mn = self.data[0]
+    i = 1
+    n = self.rows * self.cols
+    while i < n do
+        if self.data[i] < mn then mn = self.data[i] else 0
+        i = i + 1
+    end
+    mn
+end
+
+NdArray.size(self) = self.rows * self.cols
+
+// ---- Access & mutation ----
+
+// get(i, j): get element at row i, column j
+NdArray.get(self, i, j) = self.data[i * self.cols + j]
+
+// set(i, j, v): set element at row i, column j
+// Note: `self.data[i*cols+j] = v` (write to struct-field array) belum
+// didukung compiler — salin ke lokal dulu (emit_set array target).
+NdArray.set(self, i, j, v) do
+    d = self.data
+    d[i * self.cols + j] = v
+end
+
+// ---- Element-wise operations ----
+
+// add(other): element-wise addition (same shape)
+NdArray.add(self, other) do
+    n = self.rows * self.cols
+    out = make_array(n, 0)
+    i = 0
+    while i < n do
+        out[i] = self.data[i] + other.data[i]
+        i = i + 1
+    end
+    NdArray(out, self.rows, self.cols)
+end
+
+// sub(other): element-wise subtraction
+NdArray.sub(self, other) do
+    n = self.rows * self.cols
+    out = make_array(n, 0)
+    i = 0
+    while i < n do
+        out[i] = self.data[i] - other.data[i]
+        i = i + 1
+    end
+    NdArray(out, self.rows, self.cols)
+end
+
+// mul(other): element-wise multiplication
+NdArray.mul(self, other) do
+    n = self.rows * self.cols
+    out = make_array(n, 0)
+    i = 0
+    while i < n do
+        out[i] = self.data[i] * other.data[i]
+        i = i + 1
+    end
+    NdArray(out, self.rows, self.cols)
+end
+
+// scale(k): multiply every element by scalar k
+NdArray.scale(self, k) do
+    n = self.rows * self.cols
+    out = make_array(n, 0)
+    i = 0
+    while i < n do
+        out[i] = self.data[i] * k
+        i = i + 1
+    end
+    NdArray(out, self.rows, self.cols)
+end
+
+// ---- Linear algebra ----
+
+// matmul(other): matrix multiplication
+// self: rows x cols | other: cols x m -> result: rows x m
+NdArray.matmul(self, other) do
+    r = self.rows
+    c = self.cols
+    m = other.cols
+    out = make_array(r * m, 0)
+    i = 0
+    while i < r do
+        j = 0
+        while j < m do
+            s = 0
+            k = 0
+            while k < c do
+                s = s + self.data[i * c + k] * other.data[k * m + j]
+                k = k + 1
+            end
+            out[i * m + j] = s
+            j = j + 1
+        end
+        i = i + 1
+    end
+    NdArray(out, r, m)
+end
+
+// transpose(): swap rows and columns
+NdArray.transpose(self) do
+    r = self.rows
+    c = self.cols
+    t = make_array(r * c, 0)
+    i = 0
+    while i < r do
+        j = 0
+        while j < c do
+            t[j * r + i] = self.data[i * c + j]
+            j = j + 1
+        end
+        i = i + 1
+    end
+    NdArray(t, c, r)
+end
+
+// ---- Display ----
+
+// show(): print the matrix (like Python print(arr))
+NdArray.show(self) do
+    i = 0
+    while i < self.rows do
+        j = 0
+        while j < self.cols do
+            show_num(self.data[i * self.cols + j])
+            if j < self.cols - 1 then show(" ") else 0
+            j = j + 1
+        end
+        show("\n")
+        i = i + 1
+    end
+end
