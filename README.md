@@ -1,19 +1,26 @@
-# Purwa
+# ⚡ Purwa
 
 **A self-hosting systems programming language that compiles straight to native
 x86-64 machine code — no LLVM, no GCC, no external linker, no CRT.**
 
-Purwa is a small, fast, and human-centric systems language. Its compiler is a
-single zero-dependency binary that emits Windows PE32+ executables directly —
+![Version](https://img.shields.io/badge/version-v37.11-6d28d9)
+![Platform](https://img.shields.io/badge/Platform-Windows%20PE32%2B-informational)
+![License](https://img.shields.io/badge/License-MIT-brightgreen)
+![Compiler](https://img.shields.io/badge/Compiler-%7E228%20KB-blue)
+![Hello-world](https://img.shields.io/badge/Hello--world-2.048%20bytes-orange)
+![Security](https://img.shields.io/badge/Security-W%5EX%20sections-success)
+
+Purwa is a small, fast, and **human-centric** systems language. Its compiler is
+a single zero-dependency binary that emits Windows PE32+ executables directly —
 and can cross-compile to Linux ELF64 from the same command line.
 
-This package contains everything you need: compiler, formatter, editor
-language server, and a speed-testing tool. No installation required — download,
-unzip, and run.
+This package contains everything you need: **compiler, formatter, editor
+language server, and a speed-testing tool**. No installation required —
+download, unzip, and run.
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
 ```text
 # 1. Write a program
@@ -31,7 +38,7 @@ That's it. No runtime, no libraries, no PATH setup beyond where you put
 
 ---
 
-## What's Included
+## 📦 What's Included
 
 | Binary | Description |
 |---|---|
@@ -42,7 +49,7 @@ That's it. No runtime, no libraries, no PATH setup beyond where you put
 
 ---
 
-## Features
+## ✨ Features
 
 - **Zero dependencies** — no toolchain, no runtime, no linker. One binary
   does everything.
@@ -61,7 +68,7 @@ That's it. No runtime, no libraries, no PATH setup beyond where you put
 
 ---
 
-## Command Line
+## 🛠️ Command Line
 
 ```text
 purwac app.pw -o app.exe             build a Windows executable
@@ -76,7 +83,7 @@ purwac --version                      show the compiler version
 
 ---
 
-## A Quick Taste
+## 📖 A Quick Taste
 
 ```purwa
 // functions without ceremony: name(params), do-end block, last value wins
@@ -96,7 +103,7 @@ stack are all part of the language — no third-party packages.
 
 ---
 
-## File Integrity
+## 🔐 File Integrity
 
 Verify the downloaded binaries against the published checksums:
 
@@ -111,10 +118,10 @@ this release.
 
 ---
 
-## License
+## 📄 License
 
 **MIT** — free to use, modify, and redistribute. See [LICENSE.txt](LICENSE.txt).
 
 ---
 
-**Purwa v37.11** · Windows x86-64 (PE32+) · [SHA256SUMS.txt](SHA256SUMS.txt)
+*Purwa v37.11* · Windows x86-64 (PE32+) · [SHA256SUMS.txt](SHA256SUMS.txt)
