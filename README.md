@@ -4,24 +4,25 @@
 x86-64 machine code — no LLVM, no GCC, no external linker, no CRT.**
 
 ![Version](https://img.shields.io/badge/version-v37.13-6d28d9)
-![Platform](https://img.shields.io/badge/Platform-Windows%20PE32%2B-informational)
+![Platform](https://img.shields.io/badge/Platform-Windows%20PE32%2B%20%7C%20Linux%20ELF64-informational)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen)
 ![Compiler](https://img.shields.io/badge/Compiler-%7E228%20KB-blue)
 ![Hello-world](https://img.shields.io/badge/Hello--world-2.048%20bytes-orange)
 ![Security](https://img.shields.io/badge/Security-W%5EX%20sections-success)
 
 Purwa is a small, fast, and **human-centric** systems language. Its compiler is
-a single zero-dependency binary that emits Windows PE32+ executables directly —
-and can cross-compile to Linux ELF64 from the same command line.
+a single zero-dependency binary that emits Windows PE32+ and Linux ELF64 executables directly —
+with single-pass compilation and bit-for-bit reproducible self-hosting fixpoints.
 
 This package contains everything you need: **compiler, formatter, editor
-language server, and a speed-testing tool**. No installation required —
-download, unzip, and run.
+language server, and a speed-testing tool** for both **Windows and Linux x86-64**. No installation required —
+download, chmod/run, and enjoy.
 
 ---
 
 ## 🚀 Quick Start
 
+### Windows (PowerShell / CMD)
 ```text
 # 1. Write a program
 echo main() do show("Hello from Purwa!\n") end > hello.pw
@@ -33,19 +34,28 @@ purwac hello.pw -o hello.exe
 hello.exe
 ```
 
-That's it. No runtime, no libraries, no PATH setup beyond where you put
-`purwac.exe`.
+### Linux (Bash / Zsh)
+```bash
+# 1. Make executable
+chmod +x purwac-linux
+
+# 2. Compile
+./purwac-linux hello.pw --target linux -o hello
+
+# 3. Run
+chmod +x hello && ./hello
+```
 
 ---
 
 ## 📦 What's Included
 
-| Binary | Description |
-|---|---|
-| `purwac.exe` | The compiler — build, cross-compile, JIT, REPL, watch mode |
-| `purwa-fmt.exe` | Source code formatter |
-| `purwa-lsp.exe` | Language Server Protocol (LSP 3.17) server for editor support |
-| `speednet.exe` | Internet speed & ping tester (command-line) |
+| Windows Binary | Linux Binary | Description |
+|---|---|---|
+| `purwac.exe` | `purwac-linux` | The compiler — build, cross-compile, JIT, REPL, watch mode |
+| `purwa-fmt.exe` | `purwa-fmt-linux` | Source code formatter |
+| `purwa-lsp.exe` | `purwa-lsp-linux` | Language Server Protocol (LSP 3.17) server for editor support |
+| `speednet.exe` | `speednet-linux` | Internet speed & ping tester (command-line) |
 
 ---
 
