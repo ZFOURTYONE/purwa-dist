@@ -1,5 +1,6 @@
 # ⚡ Purwa
 
+> **Feels like Python. Runs like C.**  
 > **A self-hosting, zero-dependency systems programming language that compiles straight to native x86-64 machine code — no LLVM, no GCC, no external linker, and no CRT.**
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%20PE32%2B%20%7C%20Linux%20ELF64-informational)
@@ -11,36 +12,54 @@
 
 ---
 
-Purwa is engineered for developers who crave the raw speed and direct hardware control of **C/Assembly** combined with the elegance, expressive joy, and ergonomics of **modern languages**.
+## 🌟 The Core Superpower: Why Purwa?
 
-This official distribution contains everything you need: **standalone compiler binaries, code formatter, language server (LSP), and full standard libraries** for both **Windows and Linux x86-64**. No installation or external dependencies required — download, chmod/run, and enjoy.
+| 🐍 Feels like Python (Ergonomic & Fast Iteration) | ⚡ Runs like C / Rust (Native Systems Power) |
+|---|---|
+| **Zero-ceremony syntax** (`do ... end`, no boilerplate, no `return`) | **Native x86-64 machine code** emitted in 1 fast pass |
+| **Instant In-RAM JIT execution** (`purwac run app.pw`) | **Standalone 2,048-byte executables** (PE32+ & ELF64) |
+| **Interactive REPL** (`purwac -i`) and CLI eval (`purwac -e "40+2"`) | **Zero external dependencies** (no LLVM, no GCC, no CRT, no VM) |
+| **Live hot-reload** (`purwac --watch app.pw`) | **Zero-GC memory control** (`alloc`/`drop` & sub-nanosecond bump arenas) |
+| **High-level stdlib** (JSON, CSV, Regex/Glob, Unicode, Tensors) | **Direct hardware access** (RDTSC cycle counter, SSE2 math, threads, raw syscalls) |
 
 ---
 
-## 🚀 Quick Start (Under 1 Minute)
+This official distribution package contains everything you need: **standalone compiler binaries, code formatter, language server (LSP), and full standard libraries** for both **Windows and Linux x86-64**. No installation or external dependencies required — download, chmod/run, and enjoy.
 
-### 🪟 Windows (PowerShell / CMD)
+---
+
+## 🚀 Quick Start in 30 Seconds
+
+### 1. Minimal Hello World (`hello.pw`)
+
+```purwa
+main() do
+    show("Hello from Purwa!\n")
+end
+```
+
+### 2. Run It Like a Script, or Compile to a 2 KB Binary
+
+#### 🪟 Windows (PowerShell / CMD)
 ```powershell
-# 1. Write a program
-Set-Content hello.pw 'main() do show("Hello from Purwa!\n") end'
+# 1. Run instantly in memory (Zero disk artifacts, sub-millisecond startup)
+.\purwac.exe run hello.pw
 
-# 2. Compile to a native standalone executable (~2 KB)
+# 2. Or compile to a standalone native PE32+ executable (~2 KB)
 .\purwac.exe hello.pw -o hello.exe
-
-# 3. Run
 .\hello.exe
 ```
 
-### 🐧 Linux (Bash / Zsh)
+#### 🐧 Linux (Bash / Zsh)
 ```bash
-# 1. Make the standalone binary executable
+# 1. Make the compiler executable
 chmod +x purwac-linux
 
-# 2. Write and compile
-echo 'main() do show("Hello from Linux Purwa!\n") end' > hello.pw
-./purwac-linux hello.pw --target linux -o hello
+# 2. Run instantly in memory via JIT
+./purwac-linux run hello.pw
 
-# 3. Run
+# 3. Or compile to a native Linux ELF64 binary
+./purwac-linux hello.pw --target linux -o hello
 chmod +x hello && ./hello
 ```
 
@@ -62,24 +81,24 @@ chmod +x hello && ./hello
 ## ✨ CLI Toolbelt
 
 ```text
-purwac app.pw -o app.exe             build a native Windows executable (W^X sections)
-purwac app.pw --target linux -o app  cross-compile directly to native Linux ELF64
-purwac run app.pw                    zero-artifact In-RAM JIT execution
+purwac run app.pw                    zero-artifact In-RAM JIT execution (instant start)
 purwac app.pw --watch                live hot-reload: instantly re-JIT on file save
-purwac app.pw --strict               treat type annotations as strict contracts
 purwac -i                            interactive In-RAM REPL with live evaluation
 purwac -e "40+2"                     evaluate a single expression from CLI
+purwac app.pw -o app.exe             build a native Windows executable (W^X sections)
+purwac app.pw --target linux -o app  cross-compile directly to native Linux ELF64
+purwac app.pw --strict               treat type annotations as strict contracts
 purwac --version                     display compiler version and fixpoint hash
 ```
 
 ---
 
-## 💡 The Purwa Experience (Ergonomics Meets Power)
+## 💡 Level 1: Pythonic Simplicity & Clean Syntax
 
-Purwa is **expression-oriented**: every block returns its last value (no `return` keyword). It is designed to be effortless to learn yet capable of bare-metal systems work:
+Purwa is **expression-oriented**: every block returns its last evaluated value (no `return` keyword). Clean, intuitive, and readable:
 
-### 1. Functions, Struct Methods & Interpolation
 ```purwa
+// Simple functions without ceremony: name(params), do-end block, last value wins
 c_to_f(c) do c * 9 / 5 + 32 end
 
 struct Point { x, y }
@@ -101,7 +120,40 @@ main() do
 end
 ```
 
-### 2. Zero-GC Memory & High-Speed Bump Arenas
+### Pattern Matching & Control Flow
+```purwa
+grade_for(score: i64): string do
+    if score >= 90 do
+        "A"
+    else if score >= 80 do
+        "B"
+    else do
+        "C"
+    end
+end
+
+main() do
+    for k in 0..5 do
+        status = match k do
+            0 => "start"
+            4 => "end"
+            _ => "running"
+        end
+        show($"step {k}: {status}\n")
+    end
+    show(grade_for(85))
+    show("\n")
+    0
+end
+```
+
+---
+
+## ⚡ Level 2: Hardcore Systems Engineering Under the Hood
+
+When your application demands bare-metal efficiency, Purwa gives you full low-level power with zero abstractions:
+
+### 1. Zero-GC Memory Management & Bump Arenas
 Deterministic memory release with `cleanup drop`, or sub-nanosecond allocations using custom memory arenas:
 ```purwa
 main() do
@@ -126,7 +178,7 @@ main() do
 end
 ```
 
-### 3. Native Multi-Threading & Mutex Synchronization
+### 2. Native Multi-Threading & Mutex Synchronization
 True OS kernel threads (Win32 threads on Windows, `sys_clone` + `futex_wait` pthread model on Linux):
 ```purwa
 global COUNTER = 0
@@ -155,7 +207,7 @@ main() do
 end
 ```
 
-### 4. Direct Hardware Intrinsics & SSE2 Math
+### 3. Direct Hardware Intrinsics & SSE2 Math
 ```purwa
 main() do
     // High-resolution CPU cycle counter
@@ -172,7 +224,7 @@ end
 
 ---
 
-## ⚡ Performance
+## 🏎️ Performance Benchmarks
 
 | Benchmark | C (GCC -O2) | **Purwa** | Rust | Go | Python |
 |---|---|---|---|---|---|
