@@ -55,7 +55,7 @@ async_set_timeout(loop, delay_ticks, cb, ud) do
     idx = 0 - 1
     i = 0
     while i < t_cnt and idx < 0 do
-        if t_acts[i] == 0 then idx = i else 0
+        if t_acts[i] == 0 then idx = i
         i += 1
     end
     
@@ -98,7 +98,7 @@ async_set_interval(loop, interval_ticks, cb, ud) do
     idx = 0 - 1
     i = 0
     while i < t_cnt and idx < 0 do
-        if t_acts[i] == 0 then idx = i else 0
+        if t_acts[i] == 0 then idx = i
         i += 1
     end
     
@@ -138,12 +138,12 @@ async_clear_timer(loop, tid) do
     t_ids  = loop.timer_ids
     t_cnt  = loop.timer_count
     
-    found = 0
+    found = false
     i = 0
-    while i < t_cnt and found == 0 do
+    while i < t_cnt and not found do
         if t_acts[i] == 1 and t_ids[i] == tid do
             t_acts[i] = 0
-            found = 1
+            found = true
         end
         i += 1
     end
@@ -158,7 +158,7 @@ async_add_fd(loop, fd, events, cb, ud) do
     idx = 0 - 1
     i = 0
     while i < s_cnt and idx < 0 do
-        if s_acts[i] == 0 then idx = i else 0
+        if s_acts[i] == 0 then idx = i
         i += 1
     end
     
@@ -193,12 +193,12 @@ async_remove_fd(loop, fd) do
     s_fds  = loop.sock_fds
     s_cnt  = loop.sock_count
     
-    found = 0
+    found = false
     i = 0
     while i < s_cnt do
         if s_acts[i] == 1 and s_fds[i] == fd do
             s_acts[i] = 0
-            found = 1
+            found = true
         end
         i += 1
     end
@@ -226,7 +226,7 @@ async_run_once(loop) do
                 ud = t_uds[i]
                 
                 // Panggil callback function pointer
-                if cb != 0 then cb(ud) else 0
+                if cb != 0 then cb(ud)
                 
                 // Evaluasi apakah single-shot atau interval
                 rpt = t_rpts[i]
@@ -248,7 +248,7 @@ async_run_once(loop) do
     s_cnt  = loop.sock_count
     j = 0
     while j < s_cnt do
-        if s_acts[j] == 1 then pending += 1 else 0
+        if s_acts[j] == 1 then pending += 1
         j += 1
     end
     
@@ -256,11 +256,11 @@ async_run_once(loop) do
 end
 
 async_run(loop) do
-    loop.is_running = 1
-    while loop.is_running == 1 do
+    loop.is_running = true
+    while loop.is_running do
         active_items = async_run_once(loop)
         if active_items <= 0 do
-            loop.is_running = 0
+            loop.is_running = false
         else do
             sleep(1)
         end
@@ -269,7 +269,7 @@ async_run(loop) do
 end
 
 async_stop(loop) do
-    loop.is_running = 0
+    loop.is_running = false
     0
 end
 

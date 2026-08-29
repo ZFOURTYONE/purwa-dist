@@ -1,39 +1,4 @@
-// lib/tcp.pw — High-Level TCP Stream Server & Client for Purwa
+// lib/tcp.pw — SHIM. Seluruh API stream TCP (struct TcpServer, tcp_*) sudah
+// pindah ke lib/net.pw sejak konsolidasi jaringan (satu `import "net"`).
+// File ini hanya meneruskan agar `import "tcp"` lama tetap sah.
 import "net"
-
-struct TcpServer {
-    port: i64,
-    socket_fd: i64
-}
-
-tcp_bind_listener(port: i64): TcpServer do
-    sfd = net_listen(port)
-    TcpServer(port, sfd)
-end
-
-tcp_accept_client(srv: TcpServer): i64 do
-    net_accept(srv.socket_fd)
-end
-
-tcp_send_text(client_fd: i64, text: string): i64 do
-    L = str_len(text)
-    net_send(client_fd, text, L)
-end
-
-tcp_send_bytes(client_fd: i64, buf: ptr, len: i64): i64 do
-    net_send(client_fd, buf, len)
-end
-
-tcp_recv_text(client_fd: i64, buf: ptr, max_len: i64): i64 do
-    n = net_recv(client_fd, buf, max_len)
-    if n > 0 then set_byte(buf, n, 0) else 0
-    n
-end
-
-tcp_close_client(client_fd: i64): i64 do
-    net_close(client_fd)
-end
-
-tcp_close_server(srv: TcpServer): i64 do
-    net_close(srv.socket_fd)
-end

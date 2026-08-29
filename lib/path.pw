@@ -1,0 +1,199 @@
+// lib/path.pw — Pustaka Manipulasi Path Lintas Platform (Milestone L1)
+// Murni Purwa untuk menangani berkas dan direktori di Windows & Linux.
+// Tanpa dependensi eksternal.
+
+// Karakter pemisah direktori sistem ("\" di Windows, "/" di Linux)
+path_sep() do
+    if is_linux() then "/" else "\\"
+end
+
+// Cek apakah kode byte adalah pemisah direktori ('/' = 47, '\' = 92)
+path_is_sep(c) do
+    if c == 47 or c == 92 then true else false
+end
+
+// Cek apakah path bersifat absolut
+path_is_abs(p) do
+    L = str_len(p)
+    if L == 0 do
+        false
+    else if path_is_sep(get_byte(p, 0)) do
+        true
+    else if L >= 2 and get_byte(p, 1) == 58 do
+        // Bentuk Windows drive: "C:" atau "C:\"
+        true
+    else do
+        false
+    end
+end
+
+// Menggabungkan dua komponen path secara aman
+path_join(a, b) do
+    la = str_len(a)
+    lb = str_len(b)
+    if la == 0 do
+        b
+    else if lb == 0 do
+        a
+    else if path_is_abs(b) do
+        b
+    else do
+        last_a = get_byte(a, la - 1)
+        first_b = get_byte(b, 0)
+        sep_a = path_is_sep(last_a)
+        sep_b = path_is_sep(first_b)
+        
+        if sep_a and sep_b do
+            sub_b = slice(b, 1, lb)
+            concat(a, sub_b)
+        else if sep_a or sep_b do
+            concat(a, b)
+        else do
+            s = path_sep()
+            concat(concat(a, s), b)
+        end
+    end
+end
+
+// Mengambil komponen nama berkas/direktori terakhir (basename)
+path_base(p) do
+    L = str_len(p)
+    if L == 0 do
+        ""
+    else do
+        // Abaikan trailing slash di ujung
+        end_idx = L
+        while end_idx > 1 and path_is_sep(get_byte(p, end_idx - 1)) do
+            end_idx = end_idx - 1
+        end
+        
+        // Cari pemisah terakhir dari belakang
+        idx = end_idx - 1
+        found = false
+        sep_pos = 0 - 1
+        while idx >= 0 and not found do
+            c = get_byte(p, idx)
+            if path_is_sep(c) do
+                sep_pos = idx
+                found = true
+            else do
+                idx = idx - 1
+            end
+        end
+        
+        if found do
+            slice(p, sep_pos + 1, end_idx)
+        else do
+            slice(p, 0, end_idx)
+        end
+    end
+end
+
+// Mengambil direktori induk dari path (dirname)
+path_dir(p) do
+    L = str_len(p)
+    if L == 0 do
+        "."
+    else do
+        // Abaikan trailing slash di ujung
+        end_idx = L
+        while end_idx > 1 and path_is_sep(get_byte(p, end_idx - 1)) do
+            end_idx = end_idx - 1
+        end
+        
+        idx = end_idx - 1
+        found = false
+        sep_pos = 0 - 1
+        while idx >= 0 and not found do
+            c = get_byte(p, idx)
+            if path_is_sep(c) do
+                sep_pos = idx
+                found = true
+            else do
+                idx = idx - 1
+            end
+        end
+        
+        if not found do
+            "."
+        else if sep_pos == 0 do
+            // Root "/" atau "\"
+            slice(p, 0, 1)
+        else if sep_pos == 2 and L >= 2 and get_byte(p, 1) == 58 do
+            // Root Windows drive "C:\"
+            slice(p, 0, 3)
+        else do
+            slice(p, 0, sep_pos)
+        end
+    end
+end
+
+// Mengambil ekstensi berkas termasuk titik (misal ".pw", ".exe", atau "" jika tidak ada)
+path_ext(p) do
+    base = path_base(p)
+    L = str_len(base)
+    if L <= 1 do
+        ""
+    else do
+        idx = L - 1
+        found = false
+        dot_pos = 0 - 1
+        while idx > 0 and not found do
+            if get_byte(base, idx) == 46 do
+                dot_pos = idx
+                found = true
+            else do
+                idx = idx - 1
+            end
+        end
+        
+        if found do
+            slice(base, dot_pos, L)
+        else do
+            ""
+        end
+    end
+end
+
+// Mengambil nama berkas tanpa ekstensi (stem)
+path_stem(p) do
+    base = path_base(p)
+    ext = path_ext(p)
+    le = str_len(ext)
+    lb = str_len(base)
+    if le > 0 do
+        slice(base, 0, lb - le)
+    else do
+        base
+    end
+end
+
+// Normalisasi pemisah path ke separator target ("/" atau "\")
+path_normalize(p, target_sep) do
+    L = str_len(p)
+    if L == 0 do
+        ""
+    else do
+        tsep_code = get_byte(target_sep, 0)
+        buf = alloc(L + 1)
+        i = 0
+        w = 0
+        while i < L do
+            c = get_byte(p, i)
+            if path_is_sep(c) do
+                // Hindari duplikasi pemisah berurutan
+                prev_is_sep = if w > 0 then get_byte(buf, w - 1) == tsep_code else false
+                if not prev_is_sep do
+                    set_byte(buf, w, tsep_code)
+                    w = w + 1
+                end
+            else do
+                set_byte(buf, w, c)
+                w = w + 1
+            end
+            i = i + 1
+        end
+        set_byte(buf, w, 0)
+        buf
+    end
+end

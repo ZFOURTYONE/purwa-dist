@@ -1,53 +1,60 @@
-// lib/bytes.pw — low-level byte helpers for buffers
-// Memberikan operasi byte level-tinggi pada memori mentah:
-//   read_u64(p, off)    baca 8 byte little-endian
-//   write_u64(p, off,v) tulis 8 byte little-endian
-//   read_u32(p, off)    baca 4 byte little-endian
-//   write_u32(p, off,v) tulis 4 byte little-endian
-//   read_u16(p, off)    baca 2 byte little-endian
-//   write_u16(p, off,v) tulis 2 byte little-endian
+// lib/bytes.pw — low-level byte & integer helpers for raw memory buffers
+// Memanfaatkan instruksi mesin CPU presisi tinggi untuk pembacaan memori:
+//   read_u64 / write_u64 (8 byte little-endian, 1-instruksi CPU)
+//   read_u32 / write_u32 (4 byte little-endian, 1-instruksi CPU)
+//   read_u16 / write_u16 (2 byte little-endian, 1-instruksi CPU)
+//   read_u8  / write_u8  (1 byte)
 
-read_u64(p, off) do
-    b0 = get_byte(p, off + 0)
-    b1 = get_byte(p, off + 1)
-    b2 = get_byte(p, off + 2)
-    b3 = get_byte(p, off + 3)
-    b4 = get_byte(p, off + 4)
-    b5 = get_byte(p, off + 5)
-    b6 = get_byte(p, off + 6)
-    b7 = get_byte(p, off + 7)
-    b0 + b1 * 256 + b2 * 65536 + b3 * 16777216 + b4 * 4294967296 +
-    b5 * 1099511627776 + b6 * 281474976710656 + b7 * 72057594037927936
+read_u8(p, off) do
+    get_byte(p, off)
 end
 
-write_u64(p, off, v) do
-    set_byte(p, off + 0, v & 255)
-    set_byte(p, off + 1, (v >> 8) & 255)
-    set_byte(p, off + 2, (v >> 16) & 255)
-    set_byte(p, off + 3, (v >> 24) & 255)
-    set_byte(p, off + 4, (v >> 32) & 255)
-    set_byte(p, off + 5, (v >> 40) & 255)
-    set_byte(p, off + 6, (v >> 48) & 255)
-    set_byte(p, off + 7, (v >> 56) & 255)
-end
-
-read_u32(p, off) do
-    get_byte(p, off + 0) + get_byte(p, off + 1) * 256 +
-    get_byte(p, off + 2) * 65536 + get_byte(p, off + 3) * 16777216
-end
-
-write_u32(p, off, v) do
-    set_byte(p, off + 0, v & 255)
-    set_byte(p, off + 1, (v >> 8) & 255)
-    set_byte(p, off + 2, (v >> 16) & 255)
-    set_byte(p, off + 3, (v >> 24) & 255)
+write_u8(p, off, v) do
+    set_byte(p, off, v)
 end
 
 read_u16(p, off) do
-    get_byte(p, off + 0) + get_byte(p, off + 1) * 256
+    get_u16(p, off)
 end
 
 write_u16(p, off, v) do
-    set_byte(p, off + 0, v & 255)
-    set_byte(p, off + 1, (v >> 8) & 255)
+    set_u16(p, off, v)
+end
+
+read_u32(p, off) do
+    get_u32(p, off)
+end
+
+write_u32(p, off, v) do
+    set_u32(p, off, v)
+end
+
+read_u64(p, off) do
+    get_u64(p, off)
+end
+
+write_u64(p, off, v) do
+    set_u64(p, off, v)
+end
+
+// Big-endian utilities
+read_u16_be(p, off) do
+    (get_byte(p, off) << 8) | get_byte(p, off + 1)
+end
+
+write_u16_be(p, off, v) do
+    set_byte(p, off, (v >> 8) & 255)
+    set_byte(p, off + 1, v & 255)
+end
+
+read_u32_be(p, off) do
+    (get_byte(p, off) << 24) | (get_byte(p, off + 1) << 16) |
+    (get_byte(p, off + 2) << 8) | get_byte(p, off + 3)
+end
+
+write_u32_be(p, off, v) do
+    set_byte(p, off, (v >> 24) & 255)
+    set_byte(p, off + 1, (v >> 16) & 255)
+    set_byte(p, off + 2, (v >> 8) & 255)
+    set_byte(p, off + 3, v & 255)
 end

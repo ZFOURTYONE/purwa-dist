@@ -101,7 +101,7 @@ nui_dark_install(win: GuiWindow) do
 
     // tema kontrol gelap bila tersedia (abaikan kegagalan dengan tenang)
     ux = load_dll("uxtheme.dll")
-    if ux != 0 then NU_F_THEME = get_fn(ux, "SetWindowTheme") else 0
+    if ux != 0 then NU_F_THEME = get_fn(ux, "SetWindowTheme")
 
     // kuas latar slate-900: COLORREF 0x002A170F (r15 g23 b42)
     fn_csbrush = get_fn(win.g32, "CreateSolidBrush")
@@ -186,7 +186,7 @@ nui_setup(win: GuiWindow) do
     NU_HFONT_BODY = nui_make_font(0 - 16, 400)
     NU_HFONT_HEAD = nui_make_font(0 - 26, 600)
     nui_init_tables()
-    if NU_DARK == 1 then nui_dark_install(win) else 0
+    if NU_DARK == 1 then nui_dark_install(win)
     0
 end
 
@@ -211,7 +211,7 @@ nui_theme_ctl(hwnd) do
         nm = nui_utf16("DarkMode_Explorer")
         call_dll(NU_F_THEME, hwnd, nm, 0)
         drop(nm)
-    end else 0
+    end
     0
 end
 
@@ -219,7 +219,7 @@ end
 
 nui_apply_font(hwnd, text_kind) do
     f = NU_HFONT_BODY
-    if text_kind == 1 then f = NU_HFONT_HEAD else 0
+    if text_kind == 1 then f = NU_HFONT_HEAD
     call_dll(NU_F_SEND, hwnd, WM_SETFONT, f, 1)
     0
 end
@@ -237,7 +237,7 @@ nui_create_static(parent, text, x, y, w, h, scale) do
         CTL_N += 1
         nui_apply_font(hwnd, scale)
         nui_theme_ctl(hwnd)
-    end else 0
+    end
     hwnd
 end
 
@@ -253,7 +253,7 @@ nui_create_button(parent, label, x, y, w, h, action) do
         CTL_N += 1
         nui_apply_font(hwnd, 0)
         nui_theme_ctl(hwnd)
-    end else 0
+    end
     hwnd
 end
 
@@ -270,7 +270,7 @@ nui_create_group(parent, title, x, y, w, h) do
         CTL_N += 1
         nui_apply_font(hwnd, 0)
         nui_theme_ctl(hwnd)
-    end else 0
+    end
     hwnd
 end
 
@@ -312,7 +312,7 @@ nui_build_child(parent, node, x, y, w) do
         hh = pui_measure(node, w)
         if j == J_BOX then do
             nui_create_group(parent, "", x, y, w, hh)
-        end else 0
+        end
         // isi
         inner_x = x
         inner_y = y
@@ -321,7 +321,7 @@ nui_build_child(parent, node, x, y, w) do
             inner_x = x + PAD
             inner_y = y + PAD + 8
             inner_w = w - PAD * 2
-        end else 0
+        end
         cy = inner_y
         n = node[N_NA]
         mh = 0
@@ -344,7 +344,7 @@ nui_build_child(parent, node, x, y, w) do
                     cx = cx + iw + GAP
                     i += 1
                 end
-            end else 0
+            end
             cy = cy + mh
         end else do
             i = 0
@@ -378,7 +378,7 @@ nui_rebuild(parent, root, sw) do
         call_dll(fn_fr, hdc, rc, NU_HBR_BG)
         call_dll(fn_rdc, parent, hdc)
         drop(rc)
-    end else 0
+    end
     i = 0
     while i < CTL_N do
         call_dll(NU_F_DESTROY, CTL_HWND[i])
@@ -396,10 +396,10 @@ nui_poll_click() do
     while i < CTL_N do
         if CTL_KIND[i] == 2 then do
             st = call_dll(NU_F_SEND, CTL_HWND[i], BM_GETSTATE, 0, 0)
-            pushed = if st % (BST_PUSHED * 2) >= BST_PUSHED then 1 else 0
-            if pushed == 1 and CTL_PREV[i] == 0 then ketemu = CTL_AKSI[i] else 0
+            pushed = if st % (BST_PUSHED * 2) >= BST_PUSHED then true else false
+            if pushed == 1 and CTL_PREV[i] == 0 then ketemu = CTL_AKSI[i]
             CTL_PREV[i] = pushed
-        end else 0
+        end
         i += 1
     end
     ketemu
@@ -422,12 +422,12 @@ nui_selftest_offscreen(title, sw, sh, build_fn) do
         if CTL_N < 2 then do
             fails = fails + 1
             show("uji gagal: kontrol terlalu sedikit\n")
-        end else 0
+        end
         // cari satu statis: roundtrip teks
         ketemu_statis = 0 - 1
         i = 0
         while i < CTL_N and ketemu_statis < 0 do
-            if CTL_KIND[i] == 1 then ketemu_statis = i else 0
+            if CTL_KIND[i] == 1 then ketemu_statis = i
             i += 1
         end
         if ketemu_statis < 0 then do
@@ -439,7 +439,7 @@ nui_selftest_offscreen(title, sw, sh, build_fn) do
             rcv = alloc(64)
             mem_set(rcv, 0, 64)
             call_dll(NU_F_GETTXT, hw, rcv, 63)
-            if str_eq(rcv, "UJI123") == 1 then 0 else do
+            if str_eq(rcv, "UJI123") then 0 else do
                 fails = fails + 1
                 show("uji gagal: roundtrip teks\n")
             end
@@ -452,7 +452,7 @@ nui_selftest_offscreen(title, sw, sh, build_fn) do
             if call_dll(fn_iswin, CTL_HWND[i]) == 0 then do
                 fails = fails + 1
                 show("uji gagal: kontrol mati\n")
-            end else 0
+            end
             i += 1
         end
         // bersih-bersih
@@ -469,7 +469,7 @@ end
 
 nui_start(title, sw, sh, initial_state, build_fn, event_fn) do
     cmdline = args()
-    if pui_has_flag(cmdline, "-selftest") == 1 then do
+    if pui_has_flag(cmdline, "-selftest") then do
         nui_selftest_offscreen(title, sw, sh, build_fn)
     end else do
         pui_init_theme()
@@ -482,7 +482,7 @@ nui_start(title, sw, sh, initial_state, build_fn, event_fn) do
             nui_rebuild(win.hwnd, root, sw)
             jalan = 1
             while jalan == 1 do
-                if gui_is_open(win) == 0 then jalan = 0
+                if not gui_is_open(win) then jalan = 0
                 else if gui_key_esc(win) != 0 then jalan = 0
                 else do
                     gui_poll_events(win)
@@ -491,7 +491,7 @@ nui_start(title, sw, sh, initial_state, build_fn, event_fn) do
                         state = event_fn(state, id)
                         root = build_fn(state)
                         nui_rebuild(win.hwnd, root, sw)
-                    end else 0
+                    end
                 end
             end
             i = 0

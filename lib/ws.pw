@@ -54,7 +54,7 @@ ws_recv_text(client_fd: i64, buf: ptr, buf_size: i64): ptr do
         if payload_len == 126 then do
             payload_len = get_byte(buf, 2) << 8 | get_byte(buf, 3)
             pos = 4
-        end else 0
+        end
         mask_key = 0
         if masked == 1 then do
             mask_key = alloc(4)
@@ -63,7 +63,7 @@ ws_recv_text(client_fd: i64, buf: ptr, buf_size: i64): ptr do
             set_byte(mask_key, 2, get_byte(buf, pos + 2))
             set_byte(mask_key, 3, get_byte(buf, pos + 3))
             pos = pos + 4
-        end else 0
+        end
         if buf_size < pos + payload_len then 0
         else do
             payload = alloc(payload_len + 1)
@@ -75,7 +75,7 @@ ws_recv_text(client_fd: i64, buf: ptr, buf_size: i64): ptr do
                 i = i + 1
             end
             set_byte(payload, payload_len, 0)
-            if mask_key != 0 then drop(mask_key) else 0
+            if mask_key != 0 then drop(mask_key)
             if opcode == WS_OP_TEXT then payload
             else if opcode == WS_OP_PING then do ws_send_pong(client_fd); drop(payload); 0 end
             else if opcode == WS_OP_CLOSE then do ws_send_close(client_fd); drop(payload); 0 end
@@ -95,7 +95,7 @@ ws_handshake(client_fd: i64, buf: ptr, buf_size: i64): i64 do
             m = 1
             j = 0
             while j < 19 and m == 1 do
-                if get_byte(buf, i + j) != get_byte(key_header, j) then m = 0 else 0
+                if get_byte(buf, i + j) != get_byte(key_header, j) then m = 0
                 j = j + 1
             end
             if m == 1 then key_pos = i else i = i + 1

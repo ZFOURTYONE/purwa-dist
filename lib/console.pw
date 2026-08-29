@@ -1,0 +1,488 @@
+// lib/console.pw — helper konsol terminal (Windows & Linux): ANSI CSI,
+// mode mentah, input keyboard, ukuran layar, warna, timer.
+// Lexer Purwa tidak punya escape \e, jadi byte ESC (27) dirakit runtime
+// di sini — konsumen cukup menulis string parameter biasa.
+//
+// Semua operasi berguard: di luar terminal (output di-pipe) fungsi jadi
+// no-op aman tanpa crash. Windows: kernel32 FFI (VT mode, CP 65001,
+// timeBeginPeriod). Linux: syscall murni (ioctl termios/TIOCGWINSZ,
+// select, clock_gettime) — Round 91 H3#2 Fase 1.
+//
+// Pemakaian:
+//   import "console"
+//   con_setup()            // VT mode + SetConsoleOutputCP(65001) + timeBeginPeriod(1)
+//   csi("H")               // kirim ESC[H  (juga "J", "2J", "32m", "?25l", ...)
+//   con_clear()            // ESC[2J + ESC[H
+//   con_goto(3, 10)        // ESC[3;10H
+//   con_hide() / con_show()        // kursor
+//   con_fg(32) / con_reset()       // warna SGR
+//   con_sleep(50)          // tidur ms presisi 1 ms (butuh con_setup)
+//   con_restore()          // restore CP lama + timeEndPeriod — panggil saat keluar
+//
+// Input keyboard (agent/TUI):
+//   con_raw_on()           // mode mentah: tombol tiba per-keypress, tanpa Enter/echo
+//   con_read_key()         // BLOCKING; kode tombol (lihat KEY_*), -1 = non-konsol
+//   con_key_wait(ms)       // 1 = ada tombol dalam timeout, 0 = timeout, -1 = unsupported
+//   con_poll_key()         // non-blocking: 0 = tidak ada, else kode tombol
+//   con_raw_off()          // kembalikan mode input semula
+// Panah/F1/Home datang sebagai KEY_* terstruktur (bukan ESC-sequence mentah)
+// karena ReadConsoleInputW membaca record, bukan stream ANSI.
+import "bytes"
+
+global g_con_k32 = 0
+global g_con_winmm = 0
+global g_con_oldcp = 0
+global g_con_out = 0
+global g_con_ready = 0
+global g_con_in = 0        // STD_INPUT_HANDLE
+global g_con_inmode = 0    // mode input asli (untuk con_raw_off)
+global g_con_rci = 0       // ReadConsoleInputW
+global g_con_wso = 0       // WaitForSingleObject
+global g_con_gn = 0        // GetNumberOfConsoleInputEvents
+global g_con_scm = 0       // SetConsoleMode
+// --- cabang Linux (Round 91, H3#2 Fase 1) ---
+global g_con_tio = 0       // termios asli fd 0 (60 byte), disimpan saat setup
+global g_con_tty = 0       // 1 = stdin terminal (raw/key siap)
+
+// Kode tombol con_read_key(): ASCII (<128) apa adanya; khusus = 256+VK.
+global KEY_ENTER = 13
+global KEY_ESC = 27
+global KEY_TAB = 9
+global KEY_BACK = 8
+global KEY_PGUP = 289      // 256+33
+global KEY_PGDN = 290      // 256+34
+global KEY_END = 291       // 256+35
+global KEY_HOME = 292      // 256+36
+global KEY_LEFT = 331      // 256+75
+global KEY_UP = 328        // 256+72
+global KEY_RIGHT = 333     // 256+77
+global KEY_DOWN = 336      // 256+80
+global KEY_DELETE = 302    // 256+46
+// F1..F12 = 368..379 (256+112..123); Ctrl+huruf = ASCII 1..26.
+
+// ---------- capture sink (untuk frame/per-turn render) ----------
+// Saat `frame_cap_on` aktif, SEMUA output terminal (show/csi) dialihkan ke
+// buffer percakapan alih-alih stdout. Ini memungkinkan frame TUI merender
+// ulang riwayat + input terkunci dari satu sumber, tanpa output agent yang
+// "bocor" ke layar selama panggilan agent berjalan.
+global g_frame_cap = 0   // buffer percakapan (0 = capture off / tulis stdout)
+global g_capmax = 0      // kapasitas buffer
+global g_caplen = 0      // offset tulis saat ini (akhir percakapan)
+global g_linestart = 0   // offset awal baris terakhir yg belum commit (\n)
+
+frame_cap_on(buf, off, max) do
+    g_frame_cap = buf
+    g_capmax = max
+    g_caplen = off
+    g_linestart = off
+    if buf != 0 then set_byte(buf, off, 0)
+    0
+end
+
+frame_cap_off() do
+    g_frame_cap = 0
+    0
+end
+
+// Output terarah: stdout bila capture off, atau append mentah ke percakapan.
+// Pemanggil TUI diharapkan tidak mengirim \r / ESC[K saat capture kecuali
+// untuk "tulis ulang baris" — itu di-no-op-kan oleh lapisan TUI (tui_clear_line).
+dout(s) do
+    if g_frame_cap == 0 then show(s)
+    else do
+        n = _str_len(s)
+        i = 0
+        while i < n do
+            if g_caplen < g_capmax - 1 then do
+                set_byte(g_frame_cap, g_caplen, get_byte(s, i))
+                g_caplen = g_caplen + 1
+            end
+            i = i + 1
+        end
+        set_byte(g_frame_cap, g_caplen, 0)
+        0
+    end
+    0
+end
+
+// ---------- primitif ----------
+// Kirim ESC '[' + s. Buffer sementara: build+show+drop dalam satu blok
+// (disiplin cleanup: helper yang mengembalikan string tak boleh drop hasil).
+csi(s) do
+    n = _str_len(s)
+    buf = alloc(n + 3)
+    cleanup drop(buf)
+    set_byte(buf, 0, 27)
+    set_byte(buf, 1, 91)
+    i = 0
+    while i < n do
+        set_byte(buf, i + 2, get_byte(s, i))
+        i = i + 1
+    end
+    set_byte(buf, n + 2, 0)
+    dout(buf)
+    0
+end
+
+// Inisialisasi sekali (idempotent): VT mode untuk conhost lama, codepage
+// output UTF-8 agar byte UTF-8 sumber tidak disalahbaca CP437/CP852, dan
+// resolusi timer 1 ms agar sleep() tidak meleset per-tick 15.6 ms.
+con_setup() do
+    if g_con_ready != 0 then 1
+    else if is_linux() then do
+        // Linux: ANSI + UTF-8 sudah native, timer sudah 1 ms.
+        // Cukup probe: ioctl(0, TCGETS=21505) == 0 -> stdin terminal.
+        g_con_ready = 1
+        g_con_tio = alloc(60)
+        if syscall(16, 0, 21505, g_con_tio) == 0 then g_con_tty = 1
+        1
+    end
+    else do
+        g_con_ready = 1
+        g_con_k32 = load_dll("kernel32.dll")
+        if g_con_k32 != 0 then do
+            g_con_out = call_dll(get_fn(g_con_k32, "GetStdHandle"), 0 - 11)
+            mp = alloc(8)
+            cleanup drop(mp)
+            write_u64(mp, 0, 0)
+            if call_dll(get_fn(g_con_k32, "GetConsoleMode"), g_con_out, mp) != 0 then
+                call_dll(get_fn(g_con_k32, "SetConsoleMode"), g_con_out, read_u64(mp, 0) | 4)
+            g_con_oldcp = call_dll(get_fn(g_con_k32, "GetConsoleOutputCP"))
+            call_dll(get_fn(g_con_k32, "SetConsoleOutputCP"), 65001)
+            g_con_scm = get_fn(g_con_k32, "SetConsoleMode")
+            g_con_rci = get_fn(g_con_k32, "ReadConsoleInputW")
+            g_con_wso = get_fn(g_con_k32, "WaitForSingleObject")
+            g_con_gn = get_fn(g_con_k32, "GetNumberOfConsoleInputEvents")
+            g_con_in = call_dll(get_fn(g_con_k32, "GetStdHandle"), 0 - 10)
+            write_u64(mp, 0, 0)
+            if call_dll(get_fn(g_con_k32, "GetConsoleMode"), g_con_in, mp) != 0 then
+                g_con_inmode = read_u64(mp, 0)
+        end
+        g_con_winmm = load_dll("winmm.dll")
+        if g_con_winmm != 0 then
+            call_dll(get_fn(g_con_winmm, "timeBeginPeriod"), 1)
+        1
+    end
+end
+
+// Kembalikan keadaan terminal seperti semula (sopan: CP + timer sistem-wide).
+con_restore() do
+    if is_linux() then do
+        if g_con_tty != 0 then syscall(16, 0, 21506, g_con_tio)   // TCSETS asli
+        g_con_ready = 0
+        0
+    end else do
+        if g_con_k32 != 0 then do
+            if g_con_oldcp != 0 then
+                call_dll(get_fn(g_con_k32, "SetConsoleOutputCP"), g_con_oldcp)
+        end
+        if g_con_winmm != 0 then do
+            call_dll(get_fn(g_con_winmm, "timeEndPeriod"), 1)
+            close_dll(g_con_winmm)
+            g_con_winmm = 0
+        end
+        g_con_ready = 0
+        0
+    end
+end
+
+// ---------- input keyboard ----------
+// Mode mentah: matikan processed+line-input+echo (mode = 0) supaya tombol
+// tiba per-keypress tanpa Enter/echo, dan Ctrl+C jadi ASCII 3 (bukan sinyal).
+// con_raw_off() mengembalikan mode asli.
+// Linux: termios — bersihkan lflag ISIG|ICANON|ECHO (0xB) dan iflag
+// ICRNL|IXON (0x300), VMIN=1 VTIME=0; lalu TCSETS.
+con_raw_on() do
+    if is_linux() then do
+        if g_con_tty == 0 then 0
+        else do
+            cur = alloc(60)
+            cleanup drop(cur)
+            mem_copy(cur, g_con_tio, 60)
+            lf = read_u32(cur, 12)
+            write_u32(cur, 12, lf & 4294967284)          // ~0xB
+            ifl = read_u32(cur, 0)
+            write_u32(cur, 0, ifl & 4294966999)          // ~0x300
+            set_byte(cur, 22, 0)                         // VTIME
+            set_byte(cur, 23, 1)                         // VMIN
+            syscall(16, 0, 21506, cur)                   // TCSETS
+            0
+        end
+    end else do
+        if g_con_scm != 0 then
+            call_dll(g_con_scm, g_con_in, 0)
+        0
+    end
+end
+
+con_raw_off() do
+    if is_linux() then do
+        if g_con_tty != 0 then syscall(16, 0, 21506, g_con_tio)
+        0
+    end else do
+        if g_con_scm != 0 then
+            call_dll(g_con_scm, g_con_in, g_con_inmode)
+        0
+    end
+end
+
+// Baca satu keydown. INPUT_RECORD x64 = 20 byte:
+//   [0] EventType WORD (1=KEY) | [4] bKeyDown DWORD | [10] wVK WORD
+//   [14] UnicodeChar WORD | [16] ControlKeyState DWORD
+// Key-up & event non-key (mouse/resize) dilewati. -1 = stdin bukan konsol.
+// Linux: read(0) per-byte; LF->13, DEL->8; rangkaian ESC dipetakan ke
+// kode VK Windows yang sama (panah=256+72/75/77/80, Home/End/PgUp/PgDn/Del).
+con_read_key() do
+    if is_linux() then do
+        if g_con_tty == 0 then 0 - 1
+        else do
+            c = con_linux_read1(-1)
+            if c < 0 then 0 - 1
+            else if c == 10 then 13                 // LF -> KEY_ENTER
+            else if c == 127 then 8                 // DEL -> KEY_BACK
+            else if c != 27 then c
+            else con_linux_esc_seq()
+        end
+    end else do
+        if g_con_rci == 0 then 0 - 1
+        else do
+            rec = alloc(20)
+            cleanup drop(rec)
+            cnt = alloc(8)
+            cleanup drop(cnt)
+            k = 0
+            while k == 0 do
+                write_u64(cnt, 0, 0)
+                ok = call_dll(g_con_rci, g_con_in, rec, 1, cnt)
+                if not ok then k = 0 - 1
+                if ok and get_byte(rec, 0) == 1 and read_u32(rec, 4) != 0 then do
+                    uc = get_byte(rec, 14) + get_byte(rec, 15) * 256
+                    vk = get_byte(rec, 10) + get_byte(rec, 11) * 256
+                    if uc != 0 then k = uc else k = 256 + vk
+                end
+            end
+            k
+        end
+    end
+end
+
+// Baca 1 byte stdin dengan timeout ms (-1 = tunggu selamanya). -1 = tak ada.
+con_linux_read1(ms) do
+    if not con_key_wait(ms) then 0 - 1
+    else do
+        b = alloc(1)
+        cleanup drop(b)
+        if syscall(0, 0, b, 1) == 1 then get_byte(b, 0) else 0 - 1
+    end
+end
+
+// Rangkaian ESC sudah dimulai (ESC termakan). Jeda antar-byte 20 ms.
+con_linux_esc_seq() do
+    c0 = con_linux_read1(20)
+    if c0 < 0 then 27                       // ESC polos
+    else if c0 == 79 then do                // 'O' -> F1..F4
+        c1 = con_linux_read1(20)
+        if c1 == 80 then 368 else if c1 == 81 then 369
+        else if c1 == 82 then 370 else if c1 == 83 then 371 else 27
+    end
+    else if c0 != 91 then 27                // '[' = 91
+    else do
+        c1 = con_linux_read1(20)
+        if c1 == 65 then 328                // A UP
+        else if c1 == 66 then 336           // B DOWN
+        else if c1 == 67 then 333           // C RIGHT
+        else if c1 == 68 then 331           // D LEFT
+        else if c1 == 72 then 292           // H HOME
+        else if c1 == 70 then 291           // F END
+        else do
+            // ESC[n~ : 3=Del 5=PgUp 6=PgDn
+            c2 = con_linux_read1(20)
+            if c2 == 126 then do
+                if c1 == 51 then 302 else if c1 == 53 then 289
+                else if c1 == 54 then 290 else 27
+            end else 27
+        end
+    end
+end
+
+// Tunggu hingga ada input; true = siap dibaca, false = timeout, -1 = unsupported.
+con_key_wait(ms) do
+    if is_linux() then do
+        if g_con_tty == 0 then 0 - 1
+        else do
+            m = alloc(8)
+            cleanup drop(m)
+            write_u64(m, 0, 1)                          // bit fd 0
+            tv = alloc(16)
+            cleanup drop(tv)
+            mem_set(tv, 0, 16)
+            tp = 0
+            if ms >= 0 then do
+                write_u64(tv, 0, ms / 1000)
+                write_u64(tv, 8, (ms - (ms / 1000) * 1000) * 1000000)
+                tp = tv
+            end
+            // select(1, &rd, 0, 0, tp) — syscall 23
+            r = syscall(23, 1, m, 0, 0, tp)
+            if r > 0 then true else false
+        end
+    end else if g_con_wso == 0 then 0 - 1
+    else if call_dll(g_con_wso, g_con_in, ms) == 0 then true else false
+end
+
+// Non-blocking: 0 = tidak ada antrean, else kode tombol.
+con_poll_key() do
+    if is_linux() then do
+        if g_con_tty == 0 then 0
+        else if con_key_wait(0) then con_read_key() else 0
+    end else do
+        if g_con_gn == 0 then 0
+        else do
+            n = alloc(8)
+            cleanup drop(n)
+            write_u64(n, 0, 0)
+            if call_dll(g_con_gn, g_con_in, n) == 0 then false
+            if read_u32(n, 0) == 0 then 0 else con_read_key()
+        end
+    end
+end
+
+// ---------- pembantu layar ----------
+con_clear() do
+    csi("2J")
+    csi("H")
+end
+
+con_home() do
+    csi("H")
+end
+
+con_erase_down() do
+    csi("J")
+end
+
+// Ukuran layar via GetConsoleScreenBufferInfo (Windows) / TIOCGWINSZ (Linux).
+// Windows dwSize (COORD) offset 0: rendah=kolom, tinggi=baris.
+// Linux winsize: ws_row u16 DI RENDAH, ws_col di tinggi — terbalik!
+con_rows() do
+    if is_linux() then do
+        ws = alloc(8)
+        cleanup drop(ws)
+        mem_set(ws, 0, 8)
+        if syscall(16, 1, 21523, ws) != 0 then 0        // TIOCGWINSZ stdout
+        else do
+            v = read_u32(ws, 0)
+            v - (v / 65536) * 65536
+        end
+    end else if g_con_k32 == 0 then 0
+    else do
+        h = call_dll(get_fn(g_con_k32, "GetStdHandle"), 0 - 11)
+        info = alloc(32)
+        cleanup drop(info)
+        if call_dll(get_fn(g_con_k32, "GetConsoleScreenBufferInfo"), h, info) == 0 then 0
+        else read_u32(info, 0) / 65536
+    end
+end
+
+con_cols() do
+    if is_linux() then do
+        ws = alloc(8)
+        cleanup drop(ws)
+        mem_set(ws, 0, 8)
+        if syscall(16, 1, 21523, ws) != 0 then 0
+        else read_u32(ws, 0) / 65536
+    end else if g_con_k32 == 0 then 0
+    else do
+        h = call_dll(get_fn(g_con_k32, "GetStdHandle"), 0 - 11)
+        info = alloc(32)
+        cleanup drop(info)
+        if call_dll(get_fn(g_con_k32, "GetConsoleScreenBufferInfo"), h, info) == 0 then 0
+        else do
+            v = read_u32(info, 0)
+            v - (v / 65536) * 65536
+        end
+    end
+end
+
+con_goto(r, c) do
+    csi(concat(concat(to_text(r), ";"), concat(to_text(c), "H")))
+end
+
+con_hide() do
+    csi("?25l")
+end
+
+con_show() do
+    csi("?25h")
+end
+
+// ---------- warna & tidur ----------
+con_fg(n) do
+    csi(concat(to_text(n), "m"))
+end
+
+con_reset() do
+    csi("0m")
+end
+
+// ---------- warna ekstended (256 & TrueColor) & gaya ----------
+// Helper: kirim satu parameter SGR (sisanya "m" ditambah di sini).
+sgr(s) do
+    csi(concat(s, "m"))
+end
+
+// Warna foreground 256-ans (38;5;n)
+con_fg256(n) do
+    sgr(concat("38;5;", to_text(n)))
+end
+
+// Warna background 256-ans (48;5;n)
+con_bg256(n) do
+    sgr(concat("48;5;", to_text(n)))
+end
+
+// TrueColor foreground (38;2;r;g;b)
+con_fg_rgb(r, g, b) do
+    sgr(concat(concat(concat("38;2;", to_text(r)), concat(";", to_text(g))), concat(";", to_text(b))))
+end
+
+// TrueColor background (48;2;r;g;b)
+con_bg_rgb(r, g, b) do
+    sgr(concat(concat(concat("48;2;", to_text(r)), concat(";", to_text(g))), concat(";", to_text(b))))
+end
+
+con_bold() do
+    sgr("1")
+end
+
+con_dim() do
+    sgr("2")
+end
+
+con_italic() do
+    sgr("3")
+end
+
+// Jam milidetik. Windows: GetTickCount (wrap 49 hari). Linux:
+// clock_gettime(CLOCK_MONOTONIC=1) — syscall 228, ts = {sec u64, nsec u64}.
+con_now_ms() do
+    if is_linux() then do
+        ts = alloc(16)
+        cleanup drop(ts)
+        mem_set(ts, 0, 16)
+        if syscall(228, 1, ts) != 0 then 0
+        else do
+            sec = read_u64(ts, 0)
+            nsec = read_u64(ts, 8)
+            sec * 1000 + nsec / 1000000
+        end
+    end else if g_con_k32 == 0 then 0
+    else call_dll(get_fn(g_con_k32, "GetTickCount"))
+end
+
+// Tidur milidetik presisi ~1 ms; tanpa con_setup() tetap jalan,
+// hanya sekurasi turun ke tick default 15.6 ms.
+con_sleep(ms) do
+    sleep(ms)
+    0
+end

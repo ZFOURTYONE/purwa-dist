@@ -1,0 +1,179 @@
+// lib/unicode.pw — Pustaka Manipulasi Unicode & UTF-8 (Milestone L1)
+// Murni Purwa tanpa dependensi libc eksternal.
+
+struct RuneDecode {
+    cp,
+    len
+}
+
+// Mendekode 1–4 byte UTF-8 dari string pada byte_offset
+// Mengembalikan RuneDecode(code_point, byte_len)
+utf8_decode_rune(str, byte_offset) do
+    b0 = get_byte(str, byte_offset)
+    if b0 < 128 then RuneDecode(b0, 1)
+    else if (b0 & 224) == 192 then do // 110xxxxx -> 2 bytes
+        b1 = get_byte(str, byte_offset + 1)
+        cp = ((b0 & 31) << 6) | (b1 & 63)
+        RuneDecode(cp, 2)
+    end else if (b0 & 240) == 224 then do // 1110xxxx -> 3 bytes
+        b1 = get_byte(str, byte_offset + 1)
+        b2 = get_byte(str, byte_offset + 2)
+        cp = ((b0 & 15) << 12) | ((b1 & 63) << 6) | (b2 & 63)
+        RuneDecode(cp, 3)
+    end else if (b0 & 248) == 240 then do // 11110xxx -> 4 bytes
+        b1 = get_byte(str, byte_offset + 1)
+        b2 = get_byte(str, byte_offset + 2)
+        b3 = get_byte(str, byte_offset + 3)
+        cp = ((b0 & 7) << 18) | ((b1 & 63) << 12) | ((b2 & 63) << 6) | (b3 & 63)
+        RuneDecode(cp, 4)
+    end else RuneDecode(65533, 1) // Unicode Replacement Character 
+end
+
+// Mengenkode Unicode code point ke dalam buffer UTF-8 pada byte_offset
+// Mengembalikan jumlah byte yang ditulis (1–4)
+utf8_encode_rune(cp, buf, byte_offset) do
+    if cp <= 127 then do // 1 byte
+        set_byte(buf, byte_offset, cp)
+        1
+    end else if cp <= 2047 then do // 2 bytes
+        set_byte(buf, byte_offset, 192 | (cp >> 6))
+        set_byte(buf, byte_offset + 1, 128 | (cp & 63))
+        2
+    end else if cp <= 65535 then do // 3 bytes
+        set_byte(buf, byte_offset, 224 | (cp >> 12))
+        set_byte(buf, byte_offset + 1, 128 | ((cp >> 6) & 63))
+        set_byte(buf, byte_offset + 2, 128 | (cp & 63))
+        3
+    end else if cp <= 1114111 then do // 4 bytes
+        set_byte(buf, byte_offset, 240 | (cp >> 18))
+        set_byte(buf, byte_offset + 1, 128 | ((cp >> 12) & 63))
+        set_byte(buf, byte_offset + 2, 128 | ((cp >> 6) & 63))
+        set_byte(buf, byte_offset + 3, 128 | (cp & 63))
+        4
+    end else do
+        // Fallback replacement character
+        set_byte(buf, byte_offset, 239)
+        set_byte(buf, byte_offset + 1, 191)
+        set_byte(buf, byte_offset + 2, 189)
+        3
+    end
+end
+
+// Menghitung jumlah karakter (rune) dalam string UTF-8
+utf8_len(str) do
+    byte_len = str_len(str)
+    count = 0
+    i = 0
+    while i < byte_len do
+        res = utf8_decode_rune(str, i)
+        step = res.len
+        drop(res)
+        i = i + step
+        count = count + 1
+    end
+    count
+end
+
+// Mengambil code point karakter ke-n (0-indexed)
+utf8_rune_at(str, rune_index) do
+    byte_len = str_len(str)
+    cur = 0
+    i = 0
+    res_cp = 0
+    found = 0
+    while i < byte_len and found == 0 do
+        res = utf8_decode_rune(str, i)
+        cp = res.cp
+        step = res.len
+        drop(res)
+        if cur == rune_index then do
+            res_cp = cp
+            found = 1
+        end
+        i = i + step
+        cur = cur + 1
+    end
+    res_cp
+end
+
+// Mengambil karakter ke-n sebagai string baru
+utf8_char_at(str, rune_index) do
+    byte_len = str_len(str)
+    cur = 0
+    i = 0
+    res_str = ""
+    found = 0
+    while i < byte_len and found == 0 do
+        res = utf8_decode_rune(str, i)
+        step = res.len
+        drop(res)
+        if cur == rune_index then do
+            res_str = slice(str, i, i + step)
+            found = 1
+        end
+        i = i + step
+        cur = cur + 1
+    end
+    res_str
+end
+
+// Pemotongan substring berdasarkan indeks rune [start_rune, end_rune)
+utf8_slice(str, start_rune, end_rune) do
+    byte_len = str_len(str)
+    cur = 0
+    i = 0
+    byte_start = byte_len
+    byte_end = byte_len
+    
+    while i < byte_len do
+        if cur == start_rune then byte_start = i
+        if cur == end_rune then byte_end = i
+        res = utf8_decode_rune(str, i)
+        step = res.len
+        drop(res)
+        i = i + step
+        cur = cur + 1
+    end
+    if cur == end_rune then byte_end = i
+    if byte_start > byte_end then byte_start = byte_end
+    slice(str, byte_start, byte_end)
+end
+
+// Menentukan lebar kolom visual terminal untuk satu code point
+// 0: zero-width / control
+// 1: single-width (ASCII, Latin, Cyrillic, dll)
+// 2: double-width (CJK, Emoji, Fullwidth)
+utf8_rune_width(cp) do
+    if cp == 0 then 0
+    else if cp < 32 or (cp >= 127 and cp < 160) then 0
+    // Combining characters
+    else if (cp >= 768 and cp <= 879) or (cp >= 6832 and cp <= 6879) then 0
+    // CJK Radicals, Ideographs, Hangul, Katakana, Hiragana
+    else if (cp >= 4352 and cp <= 4607) then 2 // Hangul Jamo
+    else if (cp >= 11904 and cp <= 42191) then 2 // CJK Radicals, Ideographs, Hangul Syllables
+    else if (cp >= 44032 and cp <= 55215) then 2 // Hangul Syllables
+    else if (cp >= 63744 and cp <= 64255) then 2 // CJK Compatibility Ideographs
+    else if (cp >= 65281 and cp <= 65376) then 2 // Fullwidth Forms
+    else if (cp >= 65504 and cp <= 65510) then 2 // Fullwidth Symbols
+    // Emojis & Misc Symbols
+    else if (cp >= 127744 and cp <= 129791) then 2 // Miscellaneous Symbols and Pictographs, Emoticons, Transport
+    else if (cp >= 9728 and cp <= 10175) then 2 // Misc Symbols & Dingbats
+    else 1
+end
+
+// Menghitung total lebar tampilan string pada terminal (untuk TUI/CLI layout)
+utf8_str_width(str) do
+    byte_len = str_len(str)
+    total_w = 0
+    i = 0
+    while i < byte_len do
+        res = utf8_decode_rune(str, i)
+        cp = res.cp
+        step = res.len
+        drop(res)
+        w = utf8_rune_width(cp)
+        total_w = total_w + w
+        i = i + step
+    end
+    total_w
+end

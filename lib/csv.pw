@@ -27,7 +27,6 @@ csv_split_line(line) do
             if in_q == 1 and i + 1 < L and get_byte(line, i + 1) == 34 then i = i + 1
             else in_q = if in_q == 1 then 0 else 1
         end else if c == 44 and in_q == 0 then nc = nc + 1  // ','
-        else 0
         i = i + 1
     end
     cells = make_array(nc, 0)
@@ -46,7 +45,7 @@ csv_split_line(line) do
             cells[cell] = csv_cell_text(line, start, i)
             cell = cell + 1
             start = i + 1
-        end else 0
+        end
         i = i + 1
     end
     cells
@@ -58,8 +57,8 @@ csv_cell_text(line, a, b) do
     // trim surrounding quotes
     sa = a
     eb = b
-    if sa < eb and get_byte(line, sa) == 34 then sa = sa + 1 else 0
-    if eb > sa and get_byte(line, eb - 1) == 34 then eb = eb - 1 else 0
+    if sa < eb and get_byte(line, sa) == 34 then sa = sa + 1
+    if eb > sa and get_byte(line, eb - 1) == 34 then eb = eb - 1
     // count final length ('' -> ')
     n = 0
     i = sa
@@ -100,12 +99,12 @@ csv_parse(text) do
     nr = 1
     i = 0
     while i < L do
-        if get_byte(text, i) == 10 then nr = nr + 1 else 0
+        if get_byte(text, i) == 10 then nr = nr + 1
         i = i + 1
     end
     // trailing newline means the last "line" is empty -> drop it
-    if L > 0 and get_byte(text, L - 1) == 10 then nr = nr - 1 else 0
-    if nr < 0 then nr = 0 else 0
+    if L > 0 and get_byte(text, L - 1) == 10 then nr = nr - 1
+    if nr < 0 then nr = 0
     rows = make_array(nr, 0)
     row = 0
     start = 0
@@ -117,13 +116,13 @@ csv_parse(text) do
             // dari sentinel trailing empty segment)
             if row < nr then do
                 eb = i
-                if eb > start and get_byte(text, eb - 1) == 13 then eb = eb - 1 else 0
+                if eb > start and get_byte(text, eb - 1) == 13 then eb = eb - 1
                 line = csv_cell_text(text, start, eb)  // strip line-level chars
                 rows[row] = csv_split_line(line)
                 row = row + 1
-            end else 0
+            end
             start = i + 1
-        end else 0
+        end
         i = i + 1
     end
     rows
@@ -135,7 +134,7 @@ csv_row_str(cells) do
     s = ""
     i = 0
     while i < n do
-        if i > 0 then s = s + "," else 0
+        if i > 0 then s = s + ","
         s = s + csv_quote(cells[i])
         i = i + 1
     end
@@ -145,14 +144,14 @@ end
 // csv_quote(cell): quote a cell if needed (contains , " or newline)
 csv_quote(cell) do
     L = str_len(cell)
-    need = 0
+    need = false
     i = 0
-    while i < L and need == 0 do
+    while i < L and not need do
         c = get_byte(cell, i)
-        if c == 44 or c == 34 or c == 10 or c == 13 then need = 1 else 0
+        if c == 44 or c == 34 or c == 10 or c == 13 then need = true
         i = i + 1
     end
-    if need == 1 then concat("\"", concat(csv_double_quotes(cell), "\""))
+    if need then concat("\"", concat(csv_double_quotes(cell), "\""))
     else cell
 end
 
@@ -162,7 +161,7 @@ csv_double_quotes(s) do
     n = 0
     i = 0
     while i < L do
-        if get_byte(s, i) == 34 then n = n + 1 else 0
+        if get_byte(s, i) == 34 then n = n + 1
         i = i + 1
     end
     out = alloc(L + n + 1)
@@ -188,7 +187,7 @@ csv_to_str(rows) do
     s = ""
     i = 0
     while i < nr do
-        if i > 0 then s = s + "\n" else 0
+        if i > 0 then s = s + "\n"
         s = s + csv_row_str(rows[i])
         i = i + 1
     end
@@ -201,7 +200,7 @@ csv_has_col(rows, name) do
     f = 0
     i = 0
     while i < n and f == 0 do
-        if str_eq(rows[0][i], name) == 1 then f = 1 else i = i + 1
+        if str_eq(rows[0][i], name) then f = 1 else i = i + 1
     end
     f
 end

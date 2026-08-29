@@ -104,8 +104,7 @@ Master these five and you avoid 90% of mistakes:
    rejects them with messages that state the correct shape.
 2. **No `return`.** The last line of a block is its value. In `main()`,
    that value becomes the OS exit code (an empty block exits 0).
-3. **Compare strings with `str_eq(a, b)`**, never `==` (`==` on two string
-   variables compares pointers).
+3. **String Equality is Type-Directed.** Comparing string literals or typed variables with `a == "test"` or `a == b` automatically uses `str_eq(a, b)` (content comparison).
 4. **Print numbers with `show_num(n)`**, text with `show(s)`.
 5. **Pair every `alloc` with `cleanup drop(...)`** immediately after
    acquisition. For many small objects, use an arena.
@@ -344,8 +343,9 @@ end
 main() do
     a = "Purwa"
     b = concat(a, " v37")            // join
-    same = str_eq(b, "Purwa v37")    // compares CONTENTS
-    head = slice(b, 0, 5)            // "Purwa"
+    same = b == "Purwa v37"          // compares CONTENTS (type-directed)
+    same_fn = str_eq(b, "Purwa v37") // explicit content check
+    head = slice(b, 0, 5)            // "Purwa" (supports negative slice)
     clean = trim("  hi  ")
     starts = starts_with(clean, "ha")
     swapped = replace(b, "v37", "three-seven")
@@ -423,8 +423,10 @@ end
 Low level: `set_byte` / `get_byte` / `mem_copy` / `mem_set` / `size_of`;
 JIT: `alloc_exec(n)` then `call_exec(fn, ...)`.
 
-> **Interpolation caveat:** integers >= 65536 must go through `to_text`
-> before interpolation — see the Specification's known-limitation note.
+> **Automatic Number Formatting:** In Purwa v37, string interpolation
+> `$"value = {x}"` automatically handles numbers, large 64-bit integers,
+> and high-precision floats seamlessly. `to_text(v)` is also available
+> whenever manual string conversion is desired.
 
 ## 9. Modules & Imports
 
@@ -527,7 +529,7 @@ Other useful CLI switches: `--jit` (run from RAM), `-i` (REPL),
 | 3 | bare `if` | `if c show("x")` | `if c do show("x") end` or `if c then ...` |
 | 4 | `match` without `do` | `match v 1 => ... end` | `match v do 1 => ... end` |
 | 5 | `return` keyword | `return 5` | write `5` as the last line |
-| 6 | comparing string contents | `if a == "hi"` | `if str_eq(a, "hi")` |
+| 6 | comparing unannotated dynamic params | `if a == b` in `fn(a, b)` | annotate `fn(a: string, b: string)` or use `str_eq(a, b)` |
 | 7 | printing numbers via `show` | `show(x)` (x integer) | `show_num(x)` |
 | 8 | giant array literal | `[1, 2, ..., 500]` | `make_array(500, 0)` + init |
 | 9 | semicolons between statements | `a = 1; b = 2` | one per line |
@@ -744,45 +746,68 @@ capture source bytes, capture loaded result, compare.
 
 ## 17. Library Toolkit — write apps without boilerplate
 
-Since v37.3, reusable helpers are extracted into libraries so applications
-contain only **logic** (the "human-centric" style). Just `import` and use:
+Since v37.3, reusable helpers are extracted into standard libraries under `lib/` so applications contain only **logic** (the "human-centric" style). Just `import` and use:
+
+### Core Data, Text & Collections
 
 | Library | Import | Contents |
 |---|---|---|
-| `lib/cli.pw` | `import "cli"` | `nameeq`, `salin_token` (parse CLI), `parse_int`, `show_num_comma`, `show_us_as_ms`, `show_mbps` |
-| `lib/bytes.pw` | `import "bytes"` | `read_u64`, `write_u64`, `read_u32`, `read_u16` (byte I/O on buffers) |
-| `lib/hrtimer.pw` | `import "hrtimer"` | `hrt_init`, `hrt_us` (microseconds), `hrt_ms`, `hrt_sleep_us` — QueryPerformanceCounter timer |
-| `lib/net.pw` | `import "net"` | TCP server (`net_listen`/`net_accept`) **and client** (`net_connect`, `net_set_timeout`, `net_send`/`net_recv`) **+ HTTPS GET/POST** (`https_init`, `https_get`, `https_post`, `https_close`) **+ stream API** (`net_stream_open`/`read`/`close`) |
-| `lib/console.pw` | `import "console"` | Keyboard & console modes: `con_raw_on`/`con_raw_off`, `con_read_key` (blocking), `con_poll_key` (non-blocking), `con_key_wait(ms)`, `KEY_ENTER`/`KEY_ESC`/… constants; ANSI cursor (`con_clear`, `con_goto`, `con_hide`/`con_show`); colors & styles (`con_fg256`, `con_fg_rgb`, `con_bold`/`dim`/`italic`); `frame_cap_on/off` (redirect output to a buffer — also handy for tests) |
-| `lib/async.pw` | `import "async"` | Event loop: `async_create_loop`, `async_set_timeout`/`set_interval`, `async_add_fd`, `async_run_once`/`async_run`, `async_stop` |
-| `lib/canvas.pw` | `import "canvas"` | Off-screen RGBA buffer: `canvas_create`, `canvas_set_pixel`, `canvas_fill_rect`, `canvas_draw_line`/`circle`, `canvas_write_u32`/`u16`, `canvas_save_bmp` |
-| `lib/gui.pw` | `import "gui"` | Immediate widgets over minifb: `gui_open_window`, `gui_button`/`checkbox`/`progress_bar`/`panel`, `gui_blit_canvas`, click queue (`gui_click_pending`/`gui_pop_click`) |
-| `lib/data.pw` | `import "data"` | Tagged-value records: `dt_put_u32`/`i64`/`str`/`bytes`/`arr`, `dt_get_*`, `dt_begin_record`/`dt_end_record` |
-| `lib/kv.pw` | `import "kv"` | Embedded key-value store: `kv_open(path)`, `kv_put`, `kv_get`, `kv_del`, `kv_count`, `kv_close` |
-| `lib/simd.pw` | `import "simd"` | vec4/mat4 math + array kernels: `vec4_new`/`add`/`dot`, `mat4_identity`/`mat4_mul`, `simd_array_add`/`scale`/`dot` |
+| `lib/collections.pw` | `import "collections"` | Dynamic data structures: `Vec`, `Stack`, `Queue` with push/pop/peek/len operations |
+| `lib/format.pw` | `import "format"` | Formatting utilities: `format_num` (thousand separators), `join` |
+| `lib/strings.pw` | `import "strings"` | Extra string helpers: `pad_left`, `pad_right`, `repeat_str`, `count_substr`, `char_is_*` |
 | `lib/str_arena.pw` | `import "str_arena"` | Bump string arena: `create_string_arena`, `arena_concat`, `arena_slice`, `arena_str_repeat`, `arena_reset_strings` |
-| `lib/wasm.pw` | `import "wasm"` | WASM module builder: `wb_push_u8`/`u32_leb`/`string`/`section`, `wasm_create_module`, `wasm_add_function_body`, `wasm_assemble` |
-| `lib/ws.pw` | `import "ws"` | WebSocket server over `net`: `ws_listen`, `ws_accept`, `ws_handshake`, `ws_send_text`, `ws_recv_text`, `ws_close` |
-| `lib/minifb.pw` | `import "minifb"` | Pixel window backend — see §15 |
-| `lib/pui.pw` + `lib/nui.pw` | `import "pui"` | Widget tree UI, two backends — see §14 |
+| `lib/unicode.pw` | `import "unicode"` | Unicode/UTF-8 codec: `utf8_decode_rune`, `utf8_encode_rune`, `utf8_len`, `utf8_char_at`, `utf8_slice`, `utf8_str_width` (CJK/Emoji terminal visual width) |
+| `lib/match.pw` | `import "match"` | Glob matching: `glob_match` (`*`, `?`, `[a-z]`, `[!abc]`), `glob_match_icase`, recursive path globs `glob_match_path` (`**`) |
+| `lib/time.pw` | `import "time"` | Date & calendar: `time_now_epoch`, `DateTime`, `time_epoch_to_datetime`, `time_format_iso`, `time_parse_iso`, leap year calculation, duration math |
+| `lib/functional.pw` | `import "functional"` | First-class functional utilities: `apply`, `map_array`, `filter_array`, `fold` |
 
-`lib/http.pw` and `lib/tcp.pw` are compatibility shims only: since the
-network consolidation everything lives in `import "net"` (one import for
-TCP + HTTP builders + HTTPS).
-| `lib/collections.pw` | `import "collections"` | `Vec`, `Stack`, `Queue` |
-| `lib/format.pw` | `import "format"` | `format_num` (thousand separators), `join` |
-| `lib/strings.pw` | `import "strings"` | `pad_left`, `pad_right`, `repeat_str`, `count_substr` |
-| `lib/mathx.pw` | `import "mathx"` | `lcm`, `sqrt_int`, `is_prime`, `mod_pow` |
-| `lib/functional.pw` | `import "functional"` | `apply`, `map_array`, `fold` |
-| `lib/fileio.pw` | `import "fileio"` | binary reads via kernel32 FFI |
-| `lib/ndarray.pw` | `import "ndarray"` | 1D/2D arrays: `sum`/`mean`/`min`/`max`, element-wise ops, `matmul`, `transpose` — Python-like API (`a.sum()`, `m.matmul(b)`) |
-| `lib/stats.pw` | `import "stats"` | descriptive statistics: `stats_mean/median/mode/var/std/percentile` + deterministic LCG RNG (`stats_seed/rand/rand_int`) |
-| `lib/csv.pw` | `import "csv"` | CSV reader/writer: `csv_parse(text)`, `csv_to_str(rows)`, quoted fields with commas + `""` escapes |
-| `lib/json.pw` | `import "json"` | flat JSON build/parse: `json_object`/`json_array`/`json_field_*` build, `json_get_str`/`json_get_num`/`json_has` parse, `\uXXXX` → UTF-8 decode |
-| `lib/jsonpath.pw` | `import "jsonpath"` | nested JSON navigation: `jp_get_str`/`jp_get_num`/`jp_get_raw`/`jp_has` with dot + index paths (`"choices[0].message.content"`) |
-| `lib/otui.pw` | `import "otui"` | full terminal grid UI over ANSI: `otui_init(rows, cols)`, `otui_put`/`put_str` (codepoint + fg/bg/style), `otui_present` (diff-based repaint), headless assertions via `otui_cell`/`otui_cell_fg` |
-| `lib/dirlist.pw` | `import "dirlist"` | directory listing (FFI `FindFirstFileA`): `dir_list(path, buf, max)` → newline-separated names, count returned |
-| `lib/env.pw` | `import "env"` | environment variables (FFI `GetEnvironmentVariableA`): `get_env(name, buf, max)`, `get_env_str(name)`, `env_set(name, value)` |
+### Data Formats & Storage
+
+| Library | Import | Contents |
+|---|---|---|
+| `lib/bytes.pw` | `import "bytes"` | Byte-level buffer I/O: `read_u64`, `write_u64`, `read_u32`, `write_u32`, `read_u16`, `write_u16` |
+| `lib/data.pw` | `import "data"` | Tagged-value binary records: `dt_put_u32`/`i64`/`str`/`bytes`/`arr`, `dt_get_*`, `dt_begin_record`/`dt_end_record` |
+| `lib/kv.pw` | `import "kv"` | Embedded Bitcask-style key-value store: `kv_open(path)`, `kv_put`, `kv_get`, `kv_del`, `kv_count`, `kv_compact`, `kv_close` |
+| `lib/csv.pw` | `import "csv"` | CSV reader/writer: `csv_parse(text)`, `csv_to_str(rows)`, supports quoted fields with commas + `""` escapes |
+| `lib/json.pw` | `import "json"` | JSON builder & parser: `json_object`/`json_array`/`json_field_*`, `json_get_str`/`json_get_num`/`json_has`, `\uXXXX` UTF-8 decode |
+| `lib/jsonpath.pw` | `import "jsonpath"` | Nested JSON navigation: `jp_get_str`/`jp_get_num`/`jp_get_raw`/`jp_has` with dot + index paths (`"choices[0].message.content"`) |
+
+### Math, Science & Vectors
+
+| Library | Import | Contents |
+|---|---|---|
+| `lib/mathf.pw` | `import "mathf"` | SSE2 floating-point math: `math_sqrt`, `math_sin`, `math_cos`, `math_tan`, `math_atan`/`atan2`, `math_exp`, `math_log`/`log10`, `math_pow`, `math_hypot`, `math_floor`/`ceil`/`round` |
+| `lib/mathx.pw` | `import "mathx"` | Extended integer math: `lcm`, `sqrt_int`, `is_prime`, `mod_pow` |
+| `lib/ndarray.pw` | `import "ndarray"` | N-Dimensional array engine: `sum`/`mean`/`min`/`max`, element-wise arithmetic, matrix multiplication (`matmul`), `transpose` |
+| `lib/stats.pw` | `import "stats"` | Descriptive statistics: `stats_mean`, `stats_median`, `stats_mode`, `stats_var`, `stats_std`, `stats_percentile` + deterministic LCG RNG |
+| `lib/simd.pw` | `import "simd"` | 128-bit SIMD kernels: `vec4_new`/`add`/`dot`, `mat4_identity`/`mat4_mul`, `simd_array_add`/`scale`/`dot` |
+
+### System, Networking & Hardware
+
+| Library | Import | Contents |
+|---|---|---|
+| `lib/cli.pw` | `import "cli"` | CLI argument parsing: `nameeq`, `salin_token`, `parse_int`, `show_num_comma`, `show_us_as_ms`, `show_mbps` |
+| `lib/hrtimer.pw` | `import "hrtimer"` | Microsecond hardware timer: `hrt_init`, `hrt_us`, `hrt_ms`, `hrt_sleep_us` (QueryPerformanceCounter / POSIX clock) |
+| `lib/console.pw` | `import "console"` | Terminal engine: raw mode `con_raw_on`/`off`, `con_read_key`, `con_poll_key`, ANSI cursor/colors (`con_fg256`, `con_fg_rgb`), frame buffer capture |
+| `lib/net.pw` | `import "net"` | Networking stack: TCP server & client (`net_connect`, `net_listen`), HTTPS GET/POST (`https_get`, `https_post`), streaming API |
+| `lib/ws.pw` | `import "ws"` | WebSocket server: `ws_listen`, `ws_accept`, `ws_handshake`, `ws_send_text`, `ws_recv_text`, `ws_close` |
+| `lib/async.pw` | `import "async"` | Asynchronous event loop: `async_create_loop`, `async_set_timeout`/`set_interval`, `async_add_fd`, `async_run`, `async_stop` |
+| `lib/fileio.pw` | `import "fileio"` | Direct binary file I/O via kernel32 / POSIX FFI |
+| `lib/dirlist.pw` | `import "dirlist"` | Cross-platform directory listing: `dir_list(path, buf, max)` |
+| `lib/env.pw` | `import "env"` | Environment variables: `get_env`, `get_env_str`, `env_set` |
+| `lib/path.pw` | `import "path"` | Cross-platform path operations: `path_join`, `path_dir`, `path_base`, `path_ext`, `path_stem`, `path_is_abs`, `path_normalize` |
+
+### UI, Graphics & WebAssembly
+
+| Library | Import | Contents |
+|---|---|---|
+| `lib/pui.pw` | `import "pui"` | Declarative widget tree GUI with software canvas rendering (dark theme) |
+| `lib/nui.pw` | `import "nui"` | Declarative widget tree GUI with native Win32 controls & ClearType font |
+| `lib/minifb.pw` | `import "minifb"` | Lightweight pixel window backend for animations and game loops |
+| `lib/gui.pw` | `import "gui"` | Immediate-mode UI over minifb (`gui_button`, `gui_checkbox`, `gui_progress_bar`) |
+| `lib/canvas.pw` | `import "canvas"` | Off-screen 32-bit RGBA rasterizer: `canvas_create`, `canvas_set_pixel`, `canvas_fill_rect`, `canvas_draw_line`/`circle`, BMP exporter |
+| `lib/otui.pw` | `import "otui"` | Terminal grid UI over ANSI with diff-based repainting |
+| `lib/wasm.pw` | `import "wasm"` | Standalone WebAssembly binary builder and assembler |
 
 **Example — `apps/speednet.pw` (internet speed tester):** ~12 KB source, ~35 KB
 standalone exe, using four libraries at once:

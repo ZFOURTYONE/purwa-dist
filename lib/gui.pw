@@ -59,13 +59,13 @@ end
 
 // Widget: Tombol Interaktif Immediate-Mode
 gui_button(c: Canvas, x, y, w, h, label, mouse_x, mouse_y, is_down) do
-    is_hover = if mouse_x >= x and mouse_x < x + w and mouse_y >= y and mouse_y < y + h then 1 else 0
-    is_clicked = if is_hover == 1 and is_down == 1 then 1 else 0
+    is_hover = if mouse_x >= x and mouse_x < x + w and mouse_y >= y and mouse_y < y + h then true else false
+    is_clicked = if is_hover and is_down then true else false
     
-    if is_clicked == 1 do
+    if is_clicked do
         canvas_draw_rect(c, x, y, w, h, 56, 189, 248, 255, 1)
         canvas_draw_rect(c, x, y, w, h, 255, 255, 255, 255, 0)
-    else if is_hover == 1 do
+    else if is_hover do
         canvas_draw_rect(c, x, y, w, h, 2, 132, 199, 255, 1)
         canvas_draw_rect(c, x, y, w, h, 125, 211, 252, 255, 0)
     else do
@@ -90,11 +90,11 @@ end
 
 // Widget: Checkbox
 gui_checkbox(c: Canvas, x, y, size, is_checked, mouse_x, mouse_y, is_down) do
-    is_hover = if mouse_x >= x and mouse_x < x + size and mouse_y >= y and mouse_y < y + size then 1 else 0
-    is_toggle = if is_hover == 1 and is_down == 1 then 1 else 0
+    is_hover = if mouse_x >= x and mouse_x < x + size and mouse_y >= y and mouse_y < y + size then true else false
+    is_toggle = if is_hover and is_down then true else false
     canvas_draw_rect(c, x, y, size, size, 30, 41, 59, 255, 1)
     canvas_draw_rect(c, x, y, size, size, 148, 163, 184, 255, 0)
-    if is_checked == 1 do
+    if is_checked do
         pad = size / 4
         canvas_draw_rect(c, x + pad, y + pad, size - 2 * pad, size - 2 * pad, 56, 189, 248, 255, 1)
     end
@@ -207,7 +207,7 @@ end
 gui_poll_events(win: GuiWindow) do
     // PM_REMOVE = 1; capture WM_LBUTTONDOWN as reliable click events
     has_msg = call_dll(win.fn_peek, win.msg_buf, 0, 0, 0, 1)
-    while has_msg != 0 do
+    while has_msg do
         mid = gui_read_i32(win.msg_buf, 8)
         if mid == 513 do
             // WM_LBUTTONDOWN: lParam = (y << 16) | x in client coords
@@ -265,12 +265,12 @@ end
 
 gui_mouse_down(win: GuiWindow) do
     k = call_dll(win.fn_asynckey, 1)
-    if k != 0 then 1 else 0
+    if k != 0 then true else false
 end
 
 gui_key_esc(win: GuiWindow) do
     k = call_dll(win.fn_asynckey, 27)
-    if k != 0 then 1 else 0
+    if k != 0 then true else false
 end
 
 gui_is_open(win: GuiWindow) do

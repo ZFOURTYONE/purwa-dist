@@ -42,7 +42,7 @@ mfb_update(m: Mfb) do
 end
 
 mfb_should_close(m: Mfb) do
-    if gui_is_open(m.win) == 0 then do
+    if not gui_is_open(m.win) then do
         1
     end else if gui_key_esc(m.win) != 0 then do
         1

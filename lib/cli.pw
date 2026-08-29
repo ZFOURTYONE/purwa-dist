@@ -16,7 +16,7 @@ nameeq(a, b) do
         while get_byte(a, i) == get_byte(b, i) and get_byte(a, i) != 0 do
             i = i + 1
         end
-        if get_byte(a, i) == get_byte(b, i) then 1 else 0
+        if get_byte(a, i) == get_byte(b, i) then true else false
     end
 end
 
@@ -69,7 +69,7 @@ parse_int(buf) do
     L = str_len(buf)
     while i < L do
         c = get_byte(buf, i)
-        if c >= 48 and c <= 57 then v = v * 10 + (c - 48) else 0
+        if c >= 48 and c <= 57 then v = v * 10 + (c - 48)
         i = i + 1
     end
     v
@@ -82,8 +82,8 @@ show_num_comma(n) do
         show_num_comma(n / 1000)
         show(",")
         d3 = n % 1000
-        if d3 < 100 then show("0") else 0
-        if d3 < 10 then show("0") else 0
+        if d3 < 100 then show("0")
+        if d3 < 10 then show("0")
         show_num(d3)
     end
 end
@@ -94,7 +94,7 @@ show_frac(v) do
     frac = v % 100
     show_num(int_part)
     show(".")
-    if frac < 10 then show("0") else 0
+    if frac < 10 then show("0")
     show_num(frac)
 end
 
@@ -104,7 +104,7 @@ show_us_as_ms(us) do
     frac = (us % 1000) / 10
     show_num(ms)
     show(".")
-    if frac < 10 then show("0") else 0
+    if frac < 10 then show("0")
     show_num(frac)
 end
 
@@ -114,7 +114,7 @@ show_mbps(mbps_x1000) do
     frac = mbps_x1000 % 1000
     show_num(int_part)
     show(".")
-    if frac < 100 then show("0") else 0
-    if frac < 10 then show("0") else 0
+    if frac < 100 then show("0")
+    if frac < 10 then show("0")
     show_num(frac)
 end

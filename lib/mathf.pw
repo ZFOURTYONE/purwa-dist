@@ -1,0 +1,271 @@
+// lib/mathf.pw — Pustaka Matematika Floating-Point & Transendental (Milestone L1)
+// Murni Purwa berbasis instruksi SSE2 & aproksimasi numerik presisi tinggi.
+// Tanpa dependensi CRT / libc eksternal.
+
+const MATH_PI     = 3.141592653589793
+const MATH_TAU    = 6.283185307179586
+const MATH_E      = 2.718281828459045
+const MATH_LN2    = 0.6931471805599453
+const MATH_LN10   = 2.302585092994046
+const MATH_SQRT2  = 1.4142135623730951
+
+// Nilai absolut floating-point
+math_abs(x) do
+    if flt(x, 0.0) then fneg(x) else x
+end
+
+// Konversi derajat ke radian
+math_deg2rad(deg) do
+    fmul(deg, fdiv(MATH_PI, 180.0))
+end
+
+// Konversi radian ke derajat
+math_rad2deg(rad) do
+    fmul(rad, fdiv(180.0, MATH_PI))
+end
+
+// Nilai maksimum antara dua float
+math_max(a, b) do
+    if fgt(a, b) then a else b
+end
+
+// Nilai minimum antara dua float
+math_min(a, b) do
+    if flt(a, b) then a else b
+end
+
+// Pembatasan nilai dalam rentang [min_val, max_val]
+math_clamp(x, min_val, max_val) do
+    math_min(math_max(x, min_val), max_val)
+end
+
+// Pembulatan ke bawah (floor)
+math_floor(x) do
+    i = to_int(x)
+    fi = to_float(i)
+    if flt(x, 0.0) and fgt(fi, x) then fsub(fi, 1.0) else fi
+end
+
+// Pembulatan ke atas (ceil)
+math_ceil(x) do
+    i = to_int(x)
+    fi = to_float(i)
+    if fgt(x, 0.0) and flt(fi, x) then fadd(fi, 1.0) else fi
+end
+
+// Pembulatan ke integer terdekat (round)
+math_round(x) do
+    math_floor(fadd(x, 0.5))
+end
+
+// Modulo floating-point: x - floor(x / y) * y
+math_fmod(x, y) do
+    if feq(y, 0.0) do
+        0.0
+    else do
+        q = math_floor(fdiv(x, y))
+        fsub(x, fmul(q, y))
+    end
+end
+
+// Akar kuadrat presisi tinggi menggunakan instruksi hardware SSE2
+math_sqrt(x) do
+    if flt(x, 0.0) or feq(x, 0.0) do
+        0.0
+    else do
+        fsqrt(x)
+    end
+end
+
+// Hipotenusa: sqrt(x^2 + y^2)
+math_hypot(x, y) do
+    math_sqrt(fadd(fmul(x, x), fmul(y, y)))
+end
+
+// Sinus menggunakan reduksi rentang modulo TAU & polinomial Taylor
+math_sin(x) do
+    // Reduksi rentang ke [-PI, PI]
+    r = math_fmod(x, MATH_TAU)
+    if fgt(r, MATH_PI) do
+        r = fsub(r, MATH_TAU)
+    else if flt(r, fneg(MATH_PI)) do
+        r = fadd(r, MATH_TAU)
+    end
+    
+    // Polinomial Taylor untuk sin(r):
+    // r - r^3/6 + r^5/120 - r^7/5040 + r^9/362880 - r^11/39916800 + r^13/6227020800
+    r2 = fmul(r, r)
+    term13 = fdiv(1.0, 6227020800.0)
+    term11 = fdiv(1.0, 39916800.0)
+    term9  = fdiv(1.0, 362880.0)
+    term7  = fdiv(1.0, 5040.0)
+    term5  = fdiv(1.0, 120.0)
+    term3  = fdiv(1.0, 6.0)
+    
+    poly = fsub(term9, fmul(r2, fsub(term11, fmul(r2, term13))))
+    poly = fsub(term5, fmul(r2, fsub(term7, fmul(r2, poly))))
+    poly = fsub(1.0, fmul(r2, fsub(term3, fmul(r2, poly))))
+    
+    fmul(r, poly)
+end
+
+// Kosinus menggunakan sin(x + PI/2)
+math_cos(x) do
+    math_sin(fadd(x, fdiv(MATH_PI, 2.0)))
+end
+
+// Tangen: sin(x) / cos(x)
+math_tan(x) do
+    c = math_cos(x)
+    if feq(c, 0.0) then 0.0 else fdiv(math_sin(x), c)
+end
+
+// Arkus tangen (atan) untuk [-1, 1] via Taylor, dan range reduction untuk |x| > 1
+math_atan(x) do
+    if feq(x, 0.0) do
+        0.0
+    else if flt(x, 0.0) do
+        fneg(math_atan(fneg(x)))
+    else if fgt(x, 1.0) do
+        // atan(x) = PI/2 - atan(1/x)
+        fsub(fdiv(MATH_PI, 2.0), math_atan(fdiv(1.0, x)))
+    else do
+        // Polinomial untuk x dalam [0, 1]
+        x2 = fmul(x, x)
+        term15 = fdiv(1.0, 15.0)
+        term13 = fdiv(1.0, 13.0)
+        term11 = fdiv(1.0, 11.0)
+        term9  = fdiv(1.0, 9.0)
+        term7  = fdiv(1.0, 7.0)
+        term5  = fdiv(1.0, 5.0)
+        term3  = fdiv(1.0, 3.0)
+        
+        poly = fsub(term9, fmul(x2, fsub(term11, fmul(x2, fsub(term13, fmul(x2, term15))))))
+        poly = fsub(term5, fmul(x2, fsub(term7, fmul(x2, poly))))
+        poly = fsub(1.0, fmul(x2, fsub(term3, fmul(x2, poly))))
+        
+        fmul(x, poly)
+    end
+end
+
+// Arkus tangen dua variabel (atan2)
+math_atan2(y, x) do
+    if fgt(x, 0.0) do
+        math_atan(fdiv(y, x))
+    else if flt(x, 0.0) and not flt(y, 0.0) do
+        fadd(math_atan(fdiv(y, x)), MATH_PI)
+    else if flt(x, 0.0) and flt(y, 0.0) do
+        fsub(math_atan(fdiv(y, x)), MATH_PI)
+    else if feq(x, 0.0) and fgt(y, 0.0) do
+        fdiv(MATH_PI, 2.0)
+    else if feq(x, 0.0) and flt(y, 0.0) do
+        fneg(fdiv(MATH_PI, 2.0))
+    else do
+        0.0
+    end
+end
+
+// Eksponensial alami e^x
+math_exp(x) do
+    if feq(x, 0.0) do
+        1.0
+    else if flt(x, fneg(700.0)) do
+        0.0
+    else if fgt(x, 700.0) do
+        1000000000000000.0
+    else do
+        // Reduksi rentang: x = k * LN2 + r
+        k = to_int(math_round(fdiv(x, MATH_LN2)))
+        r = fsub(x, fmul(to_float(k), MATH_LN2))
+        
+        // Taylor untuk e^r
+        r2 = fmul(r, r)
+        r3 = fmul(r2, r)
+        r4 = fmul(r2, r2)
+        
+        term8 = fdiv(1.0, 40320.0)
+        term7 = fdiv(1.0, 5040.0)
+        term6 = fdiv(1.0, 720.0)
+        term5 = fdiv(1.0, 120.0)
+        term4 = fdiv(1.0, 24.0)
+        term3 = fdiv(1.0, 6.0)
+        term2 = 0.5
+        
+        er = fadd(1.0, fadd(r, fadd(fmul(r2, term2), fadd(fmul(r3, term3), fadd(fmul(r4, term4), fadd(fmul(fmul(r4, r), term5), fadd(fmul(fmul(r4, r2), term6), fadd(fmul(fmul(r4, r3), term7), fmul(fmul(r4, r4), term8)))))))))
+        
+        // Skalakan dengan 2^k
+        if k == 0 do
+            er
+        else if k > 0 do
+            p = 1.0
+            idx = 0
+            while idx < k do
+                p = fmul(p, 2.0)
+                idx = idx + 1
+            end
+            fmul(er, p)
+        else do
+            p = 1.0
+            idx = 0
+            abs_k = 0 - k
+            while idx < abs_k do
+                p = fmul(p, 2.0)
+                idx = idx + 1
+            end
+            fdiv(er, p)
+        end
+    end
+end
+
+// Logaritma alami ln(x)
+math_log(x) do
+    if flt(x, 0.0) or feq(x, 0.0) do
+        0.0
+    else do
+        v = x
+        k = 0
+        while fgt(v, 2.0) do
+            v = fdiv(v, 2.0)
+            k = k + 1
+        end
+        while flt(v, 1.0) do
+            v = fmul(v, 2.0)
+            k = k - 1
+        end
+        
+        // v dalam [1.0, 2.0]. z = (v - 1) / (v + 1) dalam [0, 1/3]
+        z = fdiv(fsub(v, 1.0), fadd(v, 1.0))
+        z2 = fmul(z, z)
+        z4 = fmul(z2, z2)
+        
+        term13 = fdiv(1.0, 13.0)
+        term11 = fdiv(1.0, 11.0)
+        term9  = fdiv(1.0, 9.0)
+        term7  = fdiv(1.0, 7.0)
+        term5  = fdiv(1.0, 5.0)
+        term3  = fdiv(1.0, 3.0)
+        
+        poly = fadd(1.0, fadd(fmul(z2, term3), fadd(fmul(z4, term5), fadd(fmul(fmul(z4, z2), term7), fadd(fmul(fmul(z4, z4), term9), fadd(fmul(fmul(fmul(z4, z4), z2), term11), fmul(fmul(fmul(z4, z4), z4), term13)))))))
+        
+        ln_v = fmul(2.0, fmul(z, poly))
+        fadd(ln_v, fmul(to_float(k), MATH_LN2))
+    end
+end
+
+// Logaritma basis 10
+math_log10(x) do
+    fdiv(math_log(x), MATH_LN10)
+end
+
+// Pangkat: base^exp
+math_pow(base, exp) do
+    if feq(exp, 0.0) do
+        1.0
+    else if feq(base, 0.0) do
+        0.0
+    else if feq(base, 1.0) do
+        1.0
+    else do
+        math_exp(fmul(exp, math_log(base)))
+    end
+end

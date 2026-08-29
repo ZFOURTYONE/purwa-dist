@@ -30,7 +30,7 @@ filter_array(arr, len, pred_ptr) do
         if keep != 0 then do
             tmp[cnt] = val
             cnt = cnt + 1
-        end else 0
+        end
         i = i + 1
     end
     

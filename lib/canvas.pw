@@ -141,12 +141,12 @@ canvas_draw_line(c: Canvas, x0, y0, x1, y1, r, g, b, a) do
     
     cur_x = x0
     cur_y = y0
-    running = 1
+    running = true
     
-    while running == 1 do
+    while running do
         canvas_set_pixel(c, cur_x, cur_y, r, g, b, a)
         if cur_x == x1 and cur_y == y1 do
-            running = 0
+            running = false
         else do
             e2 = 2 * err
             if e2 >= dy do

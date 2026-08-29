@@ -219,7 +219,7 @@ simd_find_byte(buf, len, target_byte) do
     found_idx = 0 - 1
     i = 0
     while i < len and found_idx < 0 do
-        if get_byte(buf, i) == target_byte then found_idx = i else 0
+        if get_byte(buf, i) == target_byte then found_idx = i
         i += 1
     end
     found_idx

@@ -3,7 +3,7 @@
 **A self-hosting systems programming language that compiles straight to native
 x86-64 machine code — no LLVM, no GCC, no external linker, no CRT.**
 
-![Version](https://img.shields.io/badge/version-v37.11-6d28d9)
+![Version](https://img.shields.io/badge/version-v37.13-6d28d9)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20PE32%2B-informational)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen)
 ![Compiler](https://img.shields.io/badge/Compiler-%7E228%20KB-blue)
@@ -124,4 +124,4 @@ this release.
 
 ---
 
-*Purwa v37.11* · Windows x86-64 (PE32+) · [SHA256SUMS.txt](SHA256SUMS.txt)
+*Purwa v37.13* · Windows x86-64 (PE32+) · [SHA256SUMS.txt](SHA256SUMS.txt)

@@ -60,7 +60,7 @@ repeat_str(s, n) = do
     buf
 end;
 
-char_is_digit(c) = if c >= 48 and c <= 57 then 1 else 0;
+char_is_digit(c) = if c >= 48 and c <= 57 then true else false;
 
 char_is_alpha(c) =
     if c >= 65 and c <= 90 then 1

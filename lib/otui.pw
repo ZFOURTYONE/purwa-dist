@@ -1,0 +1,1041 @@
+// lib/otui.pw — OpenTUI/Ink-level terminal UI framework untuk Purwa
+// ----------------------------------------------------------------
+// Level target: cell-grid double-buffer + diff renderer (tanpa flicker,
+// hanya emit sel yang berubah) + layout engine flexbox-lite + komponen
+// (Box/Text) + style (TrueColor fg/bg, bold/dim/italic/underline/reverse)
+// + event loop. Dibangun di atas primitif `console`.
+//
+// Koordinat 1-based (konvensi terminal). Grid: baris 1..rows, kolom 1..cols.
+//
+// API inti:
+//   otui_init(rows, cols)      — alokasi grid + buffer front/back
+//   otui_clear()               — isi back buffer dengan spasi/default
+//   otui_put(x,y,cp,fg,bg,st)  — tulis satu sel ke back buffer
+//   otui_put_str(x,y,s,fg,bg,st) — tulis string UTF-8 (newline aware)
+//   otui_present()             — diff front<-back, emit escape ke terminal
+//   otui_dump()                — grid (back) sebagai teks polos (utk test)
+//   otui_box(dir) / otui_text(s) — buat node
+//   otui_add(parent, child)    — pasang anak
+//   otui_layout(root)          — measure + flex layout (isi grid penuh)
+//   otui_render(root)          — render pohon node ke back buffer
+//   otui_run(root, handler)    — event loop: render -> key -> handler -> render
+import "console"
+
+// ---------- style bits ----------
+const ST_BOLD = 1
+const ST_DIM = 2
+const ST_ITALIC = 4
+const ST_UNDERLINE = 8
+const ST_REVERSE = 16
+
+// ---------- node field offsets ----------
+const N_KIND = 0       // 0=box, 1=text
+const N_X = 1
+const N_Y = 2
+const N_W = 3
+const N_H = 4
+const N_DIR = 5        // 0=row, 1=col
+const N_GROW = 6
+const N_PAD = 7
+const N_ALIGN = 8      // 0=start, 1=center, 2=end (sepanjang cross axis)
+const N_JUSTIFY = 9    // 0=start, 1=center, 2=end (sepanjang main axis)
+const N_FG = 10        // -1 = default
+const N_BG = 11
+const N_ST = 12
+const N_TEXT = 13      // string (node text) / buffer input (node input)
+const N_WRAP = 14      // 0/1 (cadangan; v1 truncate)
+const N_PARENT = 15
+const N_CHILDREN = 16  // array node id
+const N_NCHILD = 17    // jumlah anak (kapasitas = size(ch))
+const N_CARET = 18     // posisi caret (node input)
+const N_DW = 19        // lebar diinginkan (box fixed; 0 = auto)
+const N_DH = 20        // tinggi diinginkan (box fixed; 0 = auto)
+const N_SIZE = 21
+
+// ---------- state grid ----------
+global g_rows = 24
+global g_cols = 80
+global g_cp_b = 0      // back: codepoint per sel
+global g_fg_b = 0
+global g_bg_b = 0
+global g_st_b = 0
+global g_cp_f = 0      // front
+global g_fg_f = 0
+global g_bg_f = 0
+global g_st_f = 0
+global g_initialized = 0
+global g_runs = 0      // jumlah run yang dipancarkan present() terakhir (test)
+
+otui_init(rows, cols) do
+    if rows < 1 then rows = 24 else rows
+    if cols < 1 then cols = 80 else cols
+    g_rows = rows
+    g_cols = cols
+    n = rows * cols
+    g_cp_b = make_array(n, 32)
+    g_fg_b = make_array(n, -1)
+    g_bg_b = make_array(n, -1)
+    g_st_b = make_array(n, 0)
+    g_cp_f = make_array(n, 32)
+    g_fg_f = make_array(n, -1)
+    g_bg_f = make_array(n, -1)
+    g_st_f = make_array(n, 0)
+    g_initialized = 1
+    0
+end
+
+otui_rows() do g_rows end
+otui_cols() do g_cols end
+
+// Baca codepoint sel (back buffer) utk asersi headless.
+otui_cell(x, y) do
+    if x >= 1 and x <= g_cols and y >= 1 and y <= g_rows then
+        g_cp_b[(y - 1) * g_cols + (x - 1)]
+    else do
+        0 - 1
+    end
+end
+
+// Baca fg / style sel (back buffer) utk asersi headless.
+otui_cell_fg(x, y) do
+    if x >= 1 and x <= g_cols and y >= 1 and y <= g_rows then
+        g_fg_b[(y - 1) * g_cols + (x - 1)]
+    else do
+        0 - 1
+    end
+end
+
+otui_cell_st(x, y) do
+    if x >= 1 and x <= g_cols and y >= 1 and y <= g_rows then
+        g_st_b[(y - 1) * g_cols + (x - 1)]
+    else do
+        0 - 1
+    end
+end
+
+// ---------- sel ----------
+
+otui_clear() do
+    n = g_rows * g_cols
+    i = 0
+    while i < n do
+        g_cp_b[i] = 32
+        g_fg_b[i] = -1
+        g_bg_b[i] = -1
+        g_st_b[i] = 0
+        i = i + 1
+    end
+    0
+end
+
+otui_put(x, y, cp, fg, bg, st) do
+    if x >= 1 and x <= g_cols and y >= 1 and y <= g_rows do
+        idx = (y - 1) * g_cols + (x - 1)
+        g_cp_b[idx] = cp
+        g_fg_b[idx] = fg
+        g_bg_b[idx] = bg
+        g_st_b[idx] = st
+        1
+    else do
+        0
+    end
+end
+
+// Decode satu codepoint UTF-8 di posisi p; return (cp, byte_len)
+utf8_at(s, p) do
+    b = get_byte(s, p)
+    if b < 128 then (b, 1)
+    else if b < 224 then
+        ((b - 192) * 64 + get_byte(s, p + 1) - 128, 2)
+    else if b < 240 then
+        ((b - 224) * 4096 + (get_byte(s, p + 1) - 128) * 64 + get_byte(s, p + 2) - 128, 3)
+    else
+        ((b - 240) * 262144 + (get_byte(s, p + 1) - 128) * 4096 +
+         (get_byte(s, p + 2) - 128) * 64 + get_byte(s, p + 3) - 128, 4)
+end
+
+// Tulis string UTF-8 mulai (x,y); \n pindah baris (x kembali ke awal).
+otui_put_str(x, y, s, fg, bg, st) do
+    n = str_len(s)
+    p = 0
+    cx = x
+    cy = y
+    while p < n do
+        (cp, adv) = utf8_at(s, p)
+        if cp == 10 then do
+            cy = cy + 1
+            cx = x
+        end else do
+            otui_put(cx, cy, cp, fg, bg, st)
+            cx = cx + 1
+        end
+        p = p + adv
+    end
+    0
+end
+
+// Encode codepoint ke UTF-8 di buffer; return panjang byte.
+utf8_enc(buf, cp) do
+    if cp < 128 then do
+        set_byte(buf, 0, cp)
+        1
+    end else if cp < 2048 then do
+        set_byte(buf, 0, 192 + cp / 64)
+        set_byte(buf, 1, 128 + cp % 64)
+        2
+    end else if cp < 65536 then do
+        set_byte(buf, 0, 224 + cp / 4096)
+        set_byte(buf, 1, 128 + (cp / 64) % 64)
+        set_byte(buf, 2, 128 + cp % 64)
+        3
+    end else do
+        set_byte(buf, 0, 240 + cp / 262144)
+        set_byte(buf, 1, 128 + (cp / 4096) % 64)
+        set_byte(buf, 2, 128 + (cp / 64) % 64)
+        set_byte(buf, 3, 128 + cp % 64)
+        4
+    end
+end
+
+// Varian append: tulis UTF-8 cp ke buf pada off; return offset baru (off+len).
+utf8_enc_at(buf, off, cp) do
+    if cp < 128 then do
+        set_byte(buf, off, cp)
+        off + 1
+    end else if cp < 2048 then do
+        set_byte(buf, off, 192 + cp / 64)
+        set_byte(buf, off + 1, 128 + cp % 64)
+        off + 2
+    end else if cp < 65536 then do
+        set_byte(buf, off, 224 + cp / 4096)
+        set_byte(buf, off + 1, 128 + (cp / 64) % 64)
+        set_byte(buf, off + 2, 128 + cp % 64)
+        off + 3
+    end else do
+        set_byte(buf, off, 240 + cp / 262144)
+        set_byte(buf, off + 1, 128 + (cp / 4096) % 64)
+        set_byte(buf, off + 2, 128 + (cp / 64) % 64)
+        set_byte(buf, off + 3, 128 + cp % 64)
+        off + 4
+    end
+end
+
+// ---------- present (diff front<->back) ----------
+
+// Tulis digit desimal v ke buf pada off; return offset baru.
+itoa(buf, off, v) do
+    t = to_text(v)
+    n = str_len(t)
+    i = 0
+    while i < n do
+        set_byte(buf, off + i, get_byte(t, i))
+        i = i + 1
+    end
+    off + n
+end
+
+// Emit SGR penuh \x1b[0;...m sesuai fg/bg/st (-1 = default).
+otui_sgr(fg, bg, st) do
+    buf = alloc(64)
+    w = 0
+    set_byte(buf, w, 27)
+    w = w + 1
+    set_byte(buf, w, 91)
+    w = w + 1
+    set_byte(buf, w, 48)
+    w = w + 1
+    if fg >= 0 then do
+        set_byte(buf, w, 59)
+        w = w + 1
+        set_byte(buf, w, 51)
+        w = w + 1
+        set_byte(buf, w, 56)
+        w = w + 1
+        set_byte(buf, w, 59)
+        w = w + 1
+        set_byte(buf, w, 50)
+        w = w + 1
+        set_byte(buf, w, 59)
+        w = w + 1
+        w = itoa(buf, w, (fg / 65536) % 256)
+        set_byte(buf, w, 59)
+        w = w + 1
+        w = itoa(buf, w, (fg / 256) % 256)
+        set_byte(buf, w, 59)
+        w = w + 1
+        w = itoa(buf, w, fg % 256)
+    end
+    if bg >= 0 then do
+        set_byte(buf, w, 59)
+        w = w + 1
+        set_byte(buf, w, 52)
+        w = w + 1
+        set_byte(buf, w, 56)
+        w = w + 1
+        set_byte(buf, w, 59)
+        w = w + 1
+        set_byte(buf, w, 50)
+        w = w + 1
+        set_byte(buf, w, 59)
+        w = w + 1
+        w = itoa(buf, w, (bg / 65536) % 256)
+        set_byte(buf, w, 59)
+        w = w + 1
+        w = itoa(buf, w, (bg / 256) % 256)
+        set_byte(buf, w, 59)
+        w = w + 1
+        w = itoa(buf, w, bg % 256)
+    end
+    if (st & ST_BOLD) != 0 then do
+        set_byte(buf, w, 59)
+        w = w + 1
+        set_byte(buf, w, 49)
+        w = w + 1
+    end
+    if (st & ST_DIM) != 0 then do
+        set_byte(buf, w, 59)
+        w = w + 1
+        set_byte(buf, w, 50)
+        w = w + 1
+    end
+    if (st & ST_ITALIC) != 0 then do
+        set_byte(buf, w, 59)
+        w = w + 1
+        set_byte(buf, w, 51)
+        w = w + 1
+    end
+    if (st & ST_UNDERLINE) != 0 then do
+        set_byte(buf, w, 59)
+        w = w + 1
+        set_byte(buf, w, 52)
+        w = w + 1
+    end
+    if (st & ST_REVERSE) != 0 then do
+        set_byte(buf, w, 59)
+        w = w + 1
+        set_byte(buf, w, 55)
+        w = w + 1
+    end
+    set_byte(buf, w, 109)
+    w = w + 1
+    set_byte(buf, w, 0)
+    show(buf)
+    drop(buf)
+    0
+end
+
+// Present: hanya sel yang BERUBAH (back != front) yang di-emit.
+otui_present() do
+    n = g_rows * g_cols
+    g_runs = 0
+    last_fg = 0 - 99
+    last_bg = 0 - 99
+    last_st = 0 - 99
+    i = 0
+    while i < n do
+        changed = g_cp_b[i] != g_cp_f[i] or g_fg_b[i] != g_fg_f[i] or
+                  g_bg_b[i] != g_bg_f[i] or g_st_b[i] != g_st_f[i]
+        if changed then do
+            g_runs = g_runs + 1
+            x = i % g_cols + 1
+            y = i / g_cols + 1
+            // satu lompat kursor utk seluruh run
+            mb = alloc(24)
+            w = 0
+            set_byte(mb, w, 27)
+            w = w + 1
+            set_byte(mb, w, 91)
+            w = w + 1
+            w = itoa(mb, w, y)
+            set_byte(mb, w, 59)
+            w = w + 1
+            w = itoa(mb, w, x)
+            set_byte(mb, w, 72)
+            w = w + 1
+            set_byte(mb, w, 0)
+            show(mb)
+            drop(mb)
+            if g_fg_b[i] != last_fg or g_bg_b[i] != last_bg or g_st_b[i] != last_st then do
+                otui_sgr(g_fg_b[i], g_bg_b[i], g_st_b[i])
+                last_fg = g_fg_b[i]
+                last_bg = g_bg_b[i]
+                last_st = g_st_b[i]
+            end
+            // run-length: gabung sel BERURUTAN SEBARIS bergaya identik
+            rb = alloc(g_cols * 4 + 8)
+            rw = 0
+            j = i
+            cont = true
+            while cont do
+                cj = g_cp_b[j] != g_cp_f[j] or g_fg_b[j] != g_fg_f[j] or
+                     g_bg_b[j] != g_bg_f[j] or g_st_b[j] != g_st_f[j]
+                same = g_fg_b[j] == g_fg_b[i] and g_bg_b[j] == g_bg_b[i] and
+                       g_st_b[j] == g_st_b[i]
+                inrow = (j - i) < (g_cols - x + 1)
+                if cj and same and inrow do
+                    rw = utf8_enc_at(rb, rw, g_cp_b[j])
+                    g_cp_f[j] = g_cp_b[j]
+                    g_fg_f[j] = g_fg_b[j]
+                    g_bg_f[j] = g_bg_b[j]
+                    g_st_f[j] = g_st_b[j]
+                    j = j + 1
+                else do
+                    cont = false
+                end
+            end
+            set_byte(rb, rw, 0)
+            show(rb)
+            drop(rb)
+            i = j - 1
+        end
+        i = i + 1
+    end
+    con_reset()
+    0
+end
+
+// ---------- dump (headless test) ----------
+
+// Jumlah run yang dipancarkan present() terakhir (untuk uji run-length).
+otui_runs() do
+    g_runs
+end
+
+// Grid (back) sebagai teks polos, baris dipisah \n. Warna diabaikan.
+otui_dump() do
+    out = alloc(g_cols * (g_rows + 1) + 8)
+    ow = 0
+    y = 1
+    while y <= g_rows do
+        x = 1
+        while x <= g_cols do
+            idx = (y - 1) * g_cols + (x - 1)
+            cp = g_cp_b[idx]
+            if cp >= 32 and cp < 127 then do
+                set_byte(out, ow, cp)
+                ow = ow + 1
+            end else do
+                set_byte(out, ow, 32)
+                ow = ow + 1
+            end
+            x = x + 1
+        end
+        set_byte(out, ow, 10)
+        ow = ow + 1
+        y = y + 1
+    end
+    set_byte(out, ow, 0)
+    slice(out, 0, ow)
+end
+
+// ---------- boxfill / border / perataan / input ----------
+
+// Isi region (x..x+w-1, y..y+h-1) dengan spasi + bg.
+otui_boxfill(x, y, w, h, bg) do
+    cy = y
+    while cy < y + h do
+        cx = x
+        while cx < x + w do
+            otui_put(cx, cy, 32, -1, bg, 0)
+            cx = cx + 1
+        end
+        cy = cy + 1
+    end
+    0
+end
+
+// Border rounded (0) atau box (1) di region (x,y,w,h) — border di batas region.
+// fg = warna border, bg = latar (isi di dalam dgn bg agar rapi).
+otui_border(x, y, w, h, fg, bg, round) do
+    if w < 2 or h < 2 do
+        0
+    else do
+        tl = 9581
+        tr = 9582
+        bl = 9584
+        br = 9583
+        if round == 0 do
+            tl = 9581
+            tr = 9582
+            bl = 9584
+            br = 9583
+        else do
+            tl = 9484
+            tr = 9488
+            bl = 9492
+            br = 9496
+        end
+        hln = 9472
+        vln = 9474
+        otui_boxfill(x, y, w, h, bg)
+        otui_put(x, y, tl, fg, -1, 0)
+        cx = x + 1
+        while cx < x + w - 1 do
+            otui_put(cx, y, hln, fg, -1, 0)
+            cx = cx + 1
+        end
+        otui_put(x + w - 1, y, tr, fg, -1, 0)
+        cy = y + 1
+        while cy < y + h - 1 do
+            otui_put(x, cy, vln, fg, -1, 0)
+            otui_put(x + w - 1, cy, vln, fg, -1, 0)
+            cy = cy + 1
+        end
+        otui_put(x, y + h - 1, bl, fg, -1, 0)
+        cx = x + 1
+        while cx < x + w - 1 do
+            otui_put(cx, y + h - 1, hln, fg, -1, 0)
+            cx = cx + 1
+        end
+        otui_put(x + w - 1, y + h - 1, br, fg, -1, 0)
+        0
+    end
+end
+
+// ---------- node tree ----------
+
+otui_box(dir) do
+    n = make_array(N_SIZE, 0)
+    n[N_KIND] = 0
+    n[N_DIR] = dir
+    n[N_FG] = -1
+    n[N_BG] = -1
+    n[N_CHILDREN] = make_array(8, 0)
+    n
+end
+
+otui_text(s) do
+    n = make_array(N_SIZE, 0)
+    n[N_KIND] = 1
+    n[N_FG] = -1
+    n[N_BG] = -1
+    n[N_TEXT] = s
+    n[N_CHILDREN] = make_array(1, 0)
+    n
+end
+
+// Node teks yang memuat escape SGR (hasil capture output agent) — dirender
+// dengan parse ESC[...m -> gaya sel, plus wrap. kind=3.
+otui_text_sgr(s) do
+    n = make_array(N_SIZE, 0)
+    n[N_KIND] = 3
+    n[N_FG] = -1
+    n[N_BG] = -1
+    n[N_TEXT] = s
+    n[N_CHILDREN] = make_array(1, 0)
+    n
+end
+
+otui_add(parent, child) do
+    ch = parent[N_CHILDREN]
+    n = parent[N_NCHILD]
+    if n == size(ch) then do
+        // grow: array lebih besar, salin
+        nc = make_array(n + 8, 0)
+        i = 0
+        while i < n do
+            nc[i] = ch[i]
+            i = i + 1
+        end
+        parent[N_CHILDREN] = nc
+        ch = nc
+    end
+    ch[n] = child
+    child[N_PARENT] = parent
+    parent[N_NCHILD] = n + 1
+    0
+end
+
+otui_children(n) do
+    n[N_CHILDREN]
+end
+
+// ---------- measure ----------
+
+otui_measure(n) do
+    if n[N_KIND] == 1 then
+        (str_len(n[N_TEXT]), 1)
+    else if n[N_KIND] == 3 then
+        (1, 1)   // sgr-text: lebar visual tak tetap; biarkan parent clamp/grow
+    else do
+        // box: ukuran diinginkan (fixed) atau intrinsic (1,1)
+        dw = n[N_DW]
+        dh = n[N_DH]
+        if dw < 1 do
+            dw = 1
+        end
+        if dh < 1 do
+            dh = 1
+        end
+        (dw, dh)
+    end
+end
+
+// ---------- layout (flexbox-lite) ----------
+
+otui_layout(n, x, y, w, h) do
+    n[N_X] = x
+    n[N_Y] = y
+    n[N_W] = w
+    n[N_H] = h
+    if n[N_KIND] == 0 then otui_layout_box(n)
+    0
+end
+
+otui_layout_box(n) do
+    ch = n[N_CHILDREN]
+    nc = n[N_NCHILD]
+    if nc == 0 then 0
+    else do
+        pad = n[N_PAD]
+        ix = n[N_X] + pad
+        iy = n[N_Y] + pad
+        iw = n[N_W] - pad * 2
+        ih = n[N_H] - pad * 2
+        if iw < 1 then iw = 1 else iw
+        if ih < 1 then ih = 1 else ih
+        dir = n[N_DIR]
+        if dir == 0 then do
+            // row: main axis = X
+            used = 0
+            grows = 0
+            i = 0
+            while i < nc do
+                c = ch[i]
+                (cw, chh) = otui_measure(c)
+                if c[N_KIND] == 1 and cw > iw then cw = iw else cw
+                if c[N_GROW] != 0 then grows = grows + c[N_GROW]
+                else used = used + cw
+                i = i + 1
+            end
+            free = iw - used
+            if free < 0 then free = 0 else free
+            cx = ix
+            i = 0
+            while i < nc do
+                c = ch[i]
+                (cw, chh) = otui_measure(c)
+                if c[N_KIND] == 1 and cw > iw then cw = iw else cw
+                if c[N_GROW] != 0 and grows != 0 then
+                    cw = free * c[N_GROW] / grows
+                otui_layout(c, cx, iy, cw, ih)
+                cx = cx + cw
+                i = i + 1
+            end
+        end else do
+            // col: main axis = Y
+            used = 0
+            grows = 0
+            i = 0
+            while i < nc do
+                c = ch[i]
+                (cw, chh) = otui_measure(c)
+                if c[N_KIND] == 1 and chh > ih then chh = ih else chh
+                if c[N_GROW] != 0 then grows = grows + c[N_GROW]
+                else used = used + chh
+                i = i + 1
+            end
+            free = ih - used
+            if free < 0 then free = 0 else free
+            cy = iy
+            i = 0
+            while i < nc do
+                c = ch[i]
+                (cw, chh) = otui_measure(c)
+                if c[N_KIND] == 1 and chh > ih then chh = ih else chh
+                if c[N_GROW] != 0 and grows != 0 then
+                    chh = free * c[N_GROW] / grows
+                otui_layout(c, ix, cy, iw, chh)
+                cy = cy + chh
+                i = i + 1
+            end
+        end
+        0
+    end
+end
+
+// ---------- render (node tree -> back buffer) ----------
+
+otui_render(n) do
+    if n[N_KIND] == 1 then otui_render_text(n)
+    else if n[N_KIND] == 2 then otui_render_input(n)
+    else if n[N_KIND] == 3 then otui_render_sgr(n)
+    else do
+        ch = n[N_CHILDREN]
+        nc = n[N_NCHILD]
+        i = 0
+        while i < nc do
+            otui_render(ch[i])
+            i = i + 1
+        end
+    end
+    0
+end
+
+otui_render_text(n) do
+    if n[N_WRAP] != 0 then otui_render_text_wrap(n)
+    else do
+        s = n[N_TEXT]
+        len = str_len(s)
+        w = n[N_W]
+        h = n[N_H]
+        if len > w then len = w else len
+        x = n[N_X]
+        y = n[N_Y]
+        // justify horizontal (dalam lebar node)
+        if len < w then do
+            j = n[N_JUSTIFY]
+            if j == 1 then x = x + (w - len) / 2
+            else if j == 2 then x = x + (w - len)
+        end
+        // align vertikal (dalam tinggi node)
+        if h > 1 then do
+            a = n[N_ALIGN]
+            if a == 1 then y = y + (h - 1) / 2
+            else if a == 2 then y = y + (h - 1)
+        end
+        if len > 0 then do
+            p = 0
+            cx = x
+            while p < len do
+                (cp, adv) = utf8_at(s, p)
+                otui_put(cx, y, cp, n[N_FG], n[N_BG], n[N_ST])
+                cx = cx + 1
+                p = p + adv
+            end
+        end
+        0
+    end
+end
+
+// Wrap teks per-lebar (WORD-aware, UTF-8 aman); \n pindah baris eksplisit.
+// Putus di spasi terakhir yang muat; kata lebih panjang dari lebar -> hard cut.
+otui_render_text_wrap(n) do
+    s = n[N_TEXT]
+    len = str_len(s)
+    w = n[N_W]
+    h = n[N_H]
+    x = n[N_X]
+    y = n[N_Y]
+    if w < 1 then w = 1 else w
+    cy = 0
+    p = 0
+    while p < len and cy < h do
+        // scan baris ini: tentukan `end` (byte eksklusif) & `resume`
+        q = p
+        cx = x
+        last_space_q = 0 - 1
+        endb = len
+        resume = len
+        brk = 0
+        while brk == 0 do
+            if q >= len do
+                endb = len
+                resume = len
+                brk = 1
+            else do
+                (cp, adv) = utf8_at(s, q)
+                if cp == 10 do
+                    endb = q
+                    resume = q + 1
+                    brk = 1
+                else do
+                    if cx - x >= w do
+                        if cp == 32 do
+                            // spasi tepat di batas: akhiri baris, buang spasi
+                            endb = q
+                            resume = q + 1
+                        else do
+                            if last_space_q >= 0 do
+                                endb = last_space_q
+                                resume = last_space_q + 1
+                            else do
+                                endb = q
+                                resume = q
+                            end
+                        end
+                        brk = 1
+                    else do
+                        if cp == 32 do
+                            last_space_q = q
+                        else do
+                            0
+                        end
+                        cx = cx + 1
+                        q = q + adv
+                    end
+                end
+            end
+        end
+        // place [p, endb)
+        pcx = x
+        pp = p
+        while pp < endb do
+            (cp2, adv2) = utf8_at(s, pp)
+            otui_put(pcx, y + cy, cp2, n[N_FG], n[N_BG], n[N_ST])
+            pcx = pcx + 1
+            pp = pp + adv2
+        end
+        // pastikan p maju (hindari stall)
+        if resume <= p do
+            resume = p + 1
+        else do
+            0
+        end
+        p = resume
+        cy = cy + 1
+    end
+    0
+end
+
+// Render teks berisi escape SGR (ESC[ ... m) ke grid, dengan wrap.
+// Parse 0=reset 1=bold 2=dim 3=italic 4=underline 7=reverse
+// 38;2;R;G;B=fg 48;2;R;G;B=bg. Char lain ditulis sbg sel; \n pindah baris.
+// N_ALIGN==2 -> bottom-align (baris TERAKHIR yang muat, utk scroll percakapan).
+otui_sgr_count(s, w) do
+    len = str_len(s)
+    if w < 1 then w = 1 else w
+    rows = 1
+    cx = 0
+    i = 0
+    while i < len do
+        b = get_byte(s, i)
+        if b == 27 then do
+            if i + 1 < len and get_byte(s, i + 1) == 91 then do
+                j = i + 2
+                while j < len and get_byte(s, j) != 109 do j = j + 1 end
+                i = j + 1
+            end else do
+                i = i + 1
+            end
+        end else if b == 10 then do
+            rows = rows + 1
+            cx = 0
+            i = i + 1
+        end else do
+            if cx >= w then do
+                rows = rows + 1
+                cx = 0
+            end
+            cx = cx + 1
+            i = i + 1
+        end
+    end
+    rows
+end
+
+otui_render_sgr(n) do
+    s = n[N_TEXT]
+    len = str_len(s)
+    x0 = n[N_X]
+    y0 = n[N_Y]
+    w = n[N_W]
+    h = n[N_H]
+    if w < 1 then w = 1 else w
+    skip = 0
+    if n[N_ALIGN] == 2 then do
+        total = otui_sgr_count(s, w)
+        if total > h then skip = total - h else skip = 0
+    end
+    fg = -1
+    bg = -1
+    st = 0
+    cx = x0
+    cy = 0
+    i = 0
+    while i < len do
+        b = get_byte(s, i)
+        if b == 27 then do
+            if i + 1 < len and get_byte(s, i + 1) == 91 then do
+                j = i + 2
+                pbuf = alloc(48)
+                pn = 0
+                while j < len and get_byte(s, j) != 109 do
+                    if pn < 46 then do
+                        set_byte(pbuf, pn, get_byte(s, j))
+                        pn = pn + 1
+                    end
+                    j = j + 1
+                end
+                set_byte(pbuf, pn, 0)
+                tok = make_array(16, 0)
+                ntok = 0
+                pos = 0
+                while pos < pn and ntok < 16 do
+                    num = 0
+                    while pos < pn and get_byte(pbuf, pos) != 59 do
+                        d = get_byte(pbuf, pos)
+                        if d >= 48 and d <= 57 then num = num * 10 + (d - 48)
+                        pos = pos + 1
+                    end
+                    tok[ntok] = num
+                    ntok = ntok + 1
+                    if pos < pn then pos = pos + 1
+                end
+                m = 0
+                while m < ntok do
+                    t = tok[m]
+                    if t == 0 then do
+                        fg = -1
+                        bg = -1
+                        st = 0
+                    end else if t == 1 then do
+                        st = st | ST_BOLD
+                    end else if t == 2 then do
+                        st = st | ST_DIM
+                    end else if t == 3 then do
+                        st = st | ST_ITALIC
+                    end else if t == 4 then do
+                        st = st | ST_UNDERLINE
+                    end else if t == 7 then do
+                        st = st | ST_REVERSE
+                    end else if t == 38 then do
+                        if m + 4 < ntok and tok[m + 1] == 2 then do
+                            fg = tok[m + 2] * 65536 + tok[m + 3] * 256 + tok[m + 4]
+                            m = m + 4
+                        end
+                    end else if t == 48 then do
+                        if m + 4 < ntok and tok[m + 1] == 2 then do
+                            bg = tok[m + 2] * 65536 + tok[m + 3] * 256 + tok[m + 4]
+                            m = m + 4
+                        end
+                    end
+                    m = m + 1
+                end
+                i = j + 1
+            end else do
+                i = i + 1
+            end
+        end else if b == 10 then do
+            cy = cy + 1
+            cx = x0
+            i = i + 1
+        end else do
+            if cx - x0 >= w then do
+                cy = cy + 1
+                cx = x0
+            end
+            (cp, adv) = utf8_at(s, i)
+            if cy >= skip then do
+                dy = cy - skip
+                if dy < h then otui_put(cx, y0 + dy, cp, fg, bg, st)
+            end
+            cx = cx + 1
+            i = i + adv
+        end
+    end
+    0
+end
+
+// ---------- komponen Input (kind=2) ----------
+
+otui_input(cap) do
+    n = make_array(N_SIZE, 0)
+    n[N_KIND] = 2
+    n[N_FG] = -1
+    n[N_BG] = -1
+    n[N_TEXT] = alloc(cap)
+    n[N_CHILDREN] = make_array(1, 0)
+    set_byte(n[N_TEXT], 0, 0)
+    n
+end
+
+otui_input_len(n) do
+    str_len(n[N_TEXT])
+end
+
+otui_input_val(n) do
+    n[N_TEXT]
+end
+
+// Edit buffer input utk satu keypress. Return 1 = Enter (commit), 0 = lainnya.
+otui_input_handle(n, k) do
+    buf = n[N_TEXT]
+    len = str_len(buf)
+    i = n[N_CARET]
+    rc = 0
+    if k == 13 then rc = 1
+    else if k == 8 then do
+        if i > 0 then do
+            j = i - 1
+            while j < len - 1 do
+                set_byte(buf, j, get_byte(buf, j + 1))
+                j = j + 1
+            end
+            len = len - 1
+            i = i - 1
+            set_byte(buf, len, 0)
+        end
+    end else if k == KEY_LEFT then do
+        if i > 0 then i = i - 1
+    end else if k == KEY_RIGHT then do
+        if i < len then i = i + 1
+    end else if k == KEY_HOME then do
+        i = 0
+    end else if k == KEY_END then do
+        i = len
+    end else if k >= 32 and k < 127 then do
+        if len < 255 then do
+            j = len
+            while j > i do
+                set_byte(buf, j, get_byte(buf, j - 1))
+                j = j - 1
+            end
+            set_byte(buf, i, k)
+            len = len + 1
+            i = i + 1
+            set_byte(buf, len, 0)
+        end
+    end
+    n[N_CARET] = i
+    rc
+end
+
+// Render input di (x,y) dengan lebar w; caret = reverse video pada sel caret.
+otui_render_input(n) do
+    buf = n[N_TEXT]
+    len = str_len(buf)
+    w = n[N_W]
+    if len > w then len = w else len
+    x = n[N_X]
+    y = n[N_Y]
+    p = 0
+    cx = x
+    while p < len do
+        (cp, adv) = utf8_at(buf, p)
+        if cx == x + n[N_CARET] then
+            otui_put(cx, y, cp, n[N_FG], n[N_BG], n[N_ST] | ST_REVERSE)
+        else
+            otui_put(cx, y, cp, n[N_FG], n[N_BG], n[N_ST])
+        cx = cx + 1
+        p = p + adv
+    end
+    // caret kosong di ujung (bila len == 0 atau caret di akhir)
+    cc = x + n[N_CARET]
+    if cc < x + w then do
+        if cc >= x + len then otui_put(cc, y, 32, n[N_FG], n[N_BG], n[N_ST] | ST_REVERSE)
+    end
+    0
+end
+
+// ---------- event loop ----------
+
+// handler(k) -> 1 untuk keluar. Render awal + re-render tiap keypress.
+otui_run(root, handler) do
+    otui_layout(root, 1, 1, g_cols, g_rows)
+    otui_clear()
+    otui_render(root)
+    otui_present()
+    done = false
+    while not done do
+        k = con_read_key()
+        if k < 0 then done = true
+        else do
+            if handler(k) != 0 then done = true
+            otui_clear()
+            otui_render(root)
+            otui_present()
+        end
+    end
+    0
+end

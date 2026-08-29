@@ -100,7 +100,7 @@ NdArray.max(self) do
     i = 1
     n = self.rows * self.cols
     while i < n do
-        if self.data[i] > mx then mx = self.data[i] else 0
+        if self.data[i] > mx then mx = self.data[i]
         i = i + 1
     end
     mx
@@ -111,7 +111,7 @@ NdArray.min(self) do
     i = 1
     n = self.rows * self.cols
     while i < n do
-        if self.data[i] < mn then mn = self.data[i] else 0
+        if self.data[i] < mn then mn = self.data[i]
         i = i + 1
     end
     mn
@@ -235,7 +235,7 @@ NdArray.show(self) do
         j = 0
         while j < self.cols do
             show_num(self.data[i * self.cols + j])
-            if j < self.cols - 1 then show(" ") else 0
+            if j < self.cols - 1 then show(" ")
             j = j + 1
         end
         show("\n")

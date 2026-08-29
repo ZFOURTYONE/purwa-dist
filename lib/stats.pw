@@ -84,13 +84,13 @@ stats_mode(a) do
         c = 0
         j = 0
         while j < n do
-            if a.data[j] == a.data[i] then c = c + 1 else 0
+            if a.data[j] == a.data[i] then c = c + 1
             j = j + 1
         end
         if c > bestc then do
             best = a.data[i]
             bestc = c
-        end else 0
+        end
         i = i + 1
     end
     best
@@ -160,7 +160,7 @@ end
 
 // stats_rand(): random in [0, 2^31-1]
 stats_rand() do
-    if S_STATE == 0 then S_STATE = time_ms() + 12345 else 0
+    if S_STATE == 0 then S_STATE = time_ms() + 12345
     S_STATE = (S_STATE * 1103515245 + 12345) & 2147483647
     S_STATE
 end

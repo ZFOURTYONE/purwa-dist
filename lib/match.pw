@@ -1,0 +1,168 @@
+// lib/match.pw — Pustaka Wildcard & Glob Pattern Matching (Milestone L1)
+// Murni Purwa tanpa dependensi libc eksternal.
+
+struct MatchClassRes {
+    matched,
+    next_p
+}
+
+// Helper huruf kecil ASCII
+_match_to_lower(c) do
+    if c >= 65 and c <= 90 then c + 32 else c
+end
+
+// Mencocokkan character class [...]
+// Mengembalikan MatchClassRes(matched (0/1), end_p_idx)
+_match_char_class(pat, p_start, p_len, ch, icase) do
+    p = p_start
+    neg = 0
+    c_cur = get_byte(pat, p)
+    if c_cur == 33 or c_cur == 94 then do // '!' atau '^'
+        neg = 1
+        p = p + 1
+    end
+    
+    target_c = if icase == 1 then _match_to_lower(ch) else ch
+    matched = 0
+    
+    loop = 1
+    while loop == 1 and p < p_len do
+        c = get_byte(pat, p)
+        if c == 93 then do // ']'
+            loop = 0
+        end else do
+            c1 = if icase == 1 then _match_to_lower(c) else c
+            if p + 2 < p_len and get_byte(pat, p + 1) == 45 and get_byte(pat, p + 2) != 93 then do // range '-'
+                c2_raw = get_byte(pat, p + 2)
+                c2 = if icase == 1 then _match_to_lower(c2_raw) else c2_raw
+                if target_c >= c1 and target_c <= c2 then matched = 1
+                p = p + 3
+            end else do
+                if target_c == c1 then matched = 1
+                p = p + 1
+            end
+        end
+    end
+    
+    final_match = if neg == 1 then (if matched == 1 then 0 else 1) else matched
+    MatchClassRes(final_match, p)
+end
+
+// Core Glob Matching Engine
+_glob_exec(pat, text, icase, is_path) do
+    p_len = str_len(pat)
+    t_len = str_len(text)
+    
+    p = 0
+    t = 0
+    star_p = -1
+    star_t = -1
+    star_double = 0
+    
+    has_failed = 0
+    while t < t_len and has_failed == 0 do
+        p_ch = if p < p_len then get_byte(pat, p) else -1
+        t_ch = get_byte(text, t)
+        
+        t_cmp = if icase == 1 then _match_to_lower(t_ch) else t_ch
+        p_cmp = if icase == 1 and p_ch >= 0 then _match_to_lower(p_ch) else p_ch
+        
+        // Cek recursive glob '**'
+        if is_path == 1 and p_ch == 42 and p + 1 < p_len and get_byte(pat, p + 1) == 42 then do
+            star_double = 1
+            star_p = p + 2
+            star_t = t
+            p = p + 2
+        // Cek single glob '*'
+        end else if p_ch == 42 then do // '*'
+            star_double = 0
+            star_p = p + 1
+            star_t = t
+            p = p + 1
+        // Cek single char '?'
+        end else if p_ch == 63 and (is_path == 0 or t_ch != 47) then do // '?' dan bukan '/'
+            p = p + 1
+            t = t + 1
+        // Cek character class '[...]'
+        end else if p_ch == 91 then do // '['
+            res = _match_char_class(pat, p + 1, p_len, t_ch, icase)
+            m_ok = res.matched
+            next_p = res.next_p
+            drop(res)
+            if m_ok == 1 then do
+                p = next_p + 1 // lewati ']'
+                t = t + 1
+            end else if star_p != -1 then do
+                if is_path == 1 and star_double == 0 and get_byte(text, star_t) == 47 then do
+                    has_failed = 1
+                end else do
+                    star_t = star_t + 1
+                    t = star_t
+                    p = star_p
+                end
+            end else do
+                has_failed = 1
+            end
+        // Karakter eksak cocok
+        end else if p_ch >= 0 and p_cmp == t_cmp then do
+            p = p + 1
+            t = t + 1
+        // Backtrack ke '*' sebelumnya jika ada
+        end else if star_p != -1 then do
+            if is_path == 1 and star_double == 0 and get_byte(text, star_t) == 47 then do
+                has_failed = 1
+            end else do
+                star_t = star_t + 1
+                t = star_t
+                p = star_p
+            end
+        end else do
+            has_failed = 1
+        end
+    end
+    
+    if has_failed == 1 then false
+    else do
+        // Lewati sisa '*' di akhir pattern
+        while p < p_len and get_byte(pat, p) == 42 do
+            p = p + 1
+        end
+        if p == p_len and t == t_len then true else false
+    end
+end
+
+// Pencocokan pola glob standar (case-sensitive)
+// Mendukung: '*', '?', '[abc]', '[a-z]', '[!abc]'
+glob_match(pattern, text) do
+    _glob_exec(pattern, text, 0, 0)
+end
+
+// Pencocokan pola glob case-insensitive
+glob_match_icase(pattern, text) do
+    _glob_exec(pattern, text, 1, 0)
+end
+
+// Helper normalisasi separator path ('\' menjadi '/')
+_normalize_glob_path(path_str) do
+    len = str_len(path_str)
+    buf = alloc(len + 1)
+    i = 0
+    while i < len do
+        c = get_byte(path_str, i)
+        if c == 92 then set_byte(buf, i, 47) // '\' -> '/'
+        else set_byte(buf, i, c)
+        i = i + 1
+    end
+    set_byte(buf, len, 0)
+    buf
+end
+
+// Pencocokan path file hierarkis (mendukung '**' untuk recursive subdirektori)
+glob_match_path(pattern, path_str) do
+    p_norm = _normalize_glob_path(pattern)
+    t_norm = _normalize_glob_path(path_str)
+    res = _glob_exec(p_norm, t_norm, 0, 1)
+    drop(p_norm)
+    drop(t_norm)
+    res
+end

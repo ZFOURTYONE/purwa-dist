@@ -45,7 +45,7 @@ vec_push(v, x) do
         v[2] = nd
         v[0] = ncap
         cap = ncap
-    end else 0
+    end
     d = v[2]
     d[n] = x
     v[1] = n + 1
@@ -126,7 +126,7 @@ queue_dequeue(q) do
         if q[3] == q[1] then do
             q[3] = 0
             q[1] = 0
-        end else 0
+        end
         x
     end
 end

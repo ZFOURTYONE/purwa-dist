@@ -38,7 +38,7 @@ file_read(path): FileBuf do
                         get_byte(br, 2) * 65536 + get_byte(br, 3) * 16777216
                 call_dll(get_fn(k32, "CloseHandle"), h)
                 drop(br)
-                if ok != 0 and nread > 0 then do
+                if ok and nread > 0 then do
                     FileBuf(buf, nread)
                 end else do
                     drop(buf)

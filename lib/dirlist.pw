@@ -1,0 +1,164 @@
+// lib/dirlist.pw — listing direktori (Windows & Linux)
+//   dir_list(path, buf, max) -> jumlah file (0 = tidak ada / -1 = gagal)
+//     buf: pointer ke buffer yang diisi nama file, dipisah newline, NUL-terminated
+// Windows: kernel32 FFI dinamis (FindFirstFileA/FindNextFileA/FindClose).
+// Linux  : syscall murni openat(257) + getdents64(217) + close(3).
+//   struct linux_dirent64 { u64 ino; u64 off; u16 reclen; u8 type; char name[] }
+//   offset: reclen=16 (u16 LE), type=18, name=19.
+
+global g_dir_k32 = 0
+global g_dir_ff = 0
+global g_dir_fn = 0
+global g_dir_fc = 0
+global g_dir_find_data = 0  // 320-byte WIN32_FIND_DATAA
+global g_dir_scratch = 0    // Linux: buffer getdents64 persisten (hindari drop bug H3#b)
+
+dir_init() do
+    if is_linux() then do
+        if g_dir_scratch == 0 then g_dir_scratch = alloc(8192)
+    end else if g_dir_k32 == 0 then do
+        g_dir_k32 = load_dll("kernel32.dll")
+        if g_dir_k32 != 0 then do
+            g_dir_ff = get_fn(g_dir_k32, "FindFirstFileA")
+            g_dir_fn = get_fn(g_dir_k32, "FindNextFileA")
+            g_dir_fc = get_fn(g_dir_k32, "FindClose")
+            g_dir_find_data = alloc(320)
+        end
+    end
+    0
+end
+
+// Ambil nama file dari WIN32_FIND_DATAA (offset 44 = cFileName)
+dir_name_raw() do
+    L = 0
+    while L < 260 and get_byte(g_dir_find_data, 44 + L) != 0 do L = L + 1 end
+    if L > 0 then slice(g_dir_find_data, 44, 44 + L) else ""
+end
+
+// Hitung posisi offset di buf untuk file ke-k (0-indexed)
+dir_buf_pos(buf, k) do
+    pos = 0
+    i = 0
+    while i < k do
+        while get_byte(buf, pos) != 10 do pos = pos + 1 end
+        pos = pos + 1
+        i = i + 1
+    end
+    pos
+end
+
+// Salin nama file ke buf pada posisi tertentu, tambah newline
+// return 1 if success, 0 if no room
+dir_buf_write(buf, max, pos, nm) do
+    w = 0
+    while w < str_len(nm) and pos + w < max - 2 do
+        set_byte(buf, pos + w, get_byte(nm, w))
+        w = w + 1
+    end
+    if pos + w < max - 1 then do
+        set_byte(buf, pos + w, 10)
+        1
+    end
+end
+
+// dir_list(path, buf, max): listing file ke buf, return count.
+dir_list(path, buf, max) do
+    if is_linux() then dir_linux_list(path, buf, max)
+    else dir_win_list(path, buf, max)
+end
+
+// --- cabang Linux ---
+// Ambil nama entri dari offset string dalam scratch.
+dir_linux_name(off) do
+    L = 0
+    while L < 256 and get_byte(g_dir_scratch, off + L) != 0 do L = L + 1 end
+    if L > 0 then slice(g_dir_scratch, off, off + L) else ""
+end
+
+dir_linux_list(path, buf, max) do
+    dir_init()
+    // openat(AT_FDCWD=-100, path, O_RDONLY|O_DIRECTORY=65536)
+    fd = syscall(257, 0 - 100, path, 65536)
+    if fd < 0 then 0 - 1
+    else do
+        count = 0
+        more = true
+        while more do
+            n = syscall(217, fd, g_dir_scratch, 8192)   // getdents64
+            if n <= 0 then more = false
+            else do
+                i = 0
+                while i < n do
+                    reclen = get_byte(g_dir_scratch, i + 16)
+                        + 256 * get_byte(g_dir_scratch, i + 17)
+                    c0 = get_byte(g_dir_scratch, i + 19)
+                    c1 = get_byte(g_dir_scratch, i + 20)
+                    is_dot = c0 == 46 and (c1 == 0
+                        or (c1 == 46 and get_byte(g_dir_scratch, i + 21) == 0))
+                    if not is_dot then do
+                        nm = dir_linux_name(i + 19)
+                        pos = dir_buf_pos(buf, count)
+                        if dir_buf_write(buf, max, pos, nm) then count = count + 1
+                        drop(nm)
+                    end
+                    i = i + reclen
+                end
+            end
+        end
+        syscall(3, fd)   // close
+        pos = dir_buf_pos(buf, count)
+        if pos < max then set_byte(buf, pos, 0)
+        count
+    end
+end
+
+// --- cabang Windows (FFI FindFirstFileA) ---
+dir_win_list(path, buf, max) do
+    dir_init()
+    if g_dir_ff == 0 then 0 - 1
+    else do
+        L = str_len(path)
+        search = path
+        search_wild = 0
+        if L > 0 and get_byte(path, L - 1) != 42 then do
+            search_wild = alloc(L + 3)
+            mem_copy(search_wild, path, L)
+            set_byte(search_wild, L, 92)
+            set_byte(search_wild, L + 1, 42)
+            set_byte(search_wild, L + 2, 0)
+            search = search_wild
+        end
+        h = call_dll(g_dir_ff, search, g_dir_find_data)
+        if search_wild != 0 then drop(search_wild)
+        if h == 0 - 1 then 0
+        else do
+            count = 0
+            nm = dir_name_raw()
+            if str_len(nm) > 0 then do
+                if not str_eq(nm, ".") and not str_eq(nm, "..") then do
+                    dir_buf_write(buf, max, 0, nm)
+                    count = 1
+                end
+                drop(nm)
+            end
+            go = true
+            while go do
+                if call_dll(g_dir_fn, h, g_dir_find_data) == 0 then go = false
+                else do
+                    nm = dir_name_raw()
+                    if str_len(nm) > 0 then do
+                        if not str_eq(nm, ".") and not str_eq(nm, "..") then do
+                            pos = dir_buf_pos(buf, count)
+                            if dir_buf_write(buf, max, pos, nm) then count = count + 1
+                        end
+                        drop(nm)
+                    end
+                end
+            end
+            call_dll(g_dir_fc, h)
+            pos = dir_buf_pos(buf, count)
+            if pos < max then set_byte(buf, pos, 0)
+            count
+        end
+    end
+end

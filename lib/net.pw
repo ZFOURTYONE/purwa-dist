@@ -1,4 +1,8 @@
-// lib/net.pw — Bare-Metal TCP Networking Primitives for Purwa (ws2_32.dll)
+// lib/net.pw — SATU pustaka jaringan Purwa: TCP mentah (Windows: ws2_32 FFI;
+// Linux: syscall murni), HTTP+HTTPS client (winhttp — TLS diurus OS; Linux:
+// belum — lihat catatan https_init), wrapper stream TCP, dan builder respons
+// HTTP server. Cukup `import "net"`.
+// (v37.11: api tcp.pw & http.pw digabung ke sini; keduanya jadi shim.)
 import "bytes"
 
 global WS2_DLL = 0
@@ -18,8 +22,182 @@ global FN_INET_ADDR = 0     // inet_addr — "1.2.3.4" -> u32 network order
 global FN_GETADDRINFO = 0   // getaddrinfo — hostname resolution
 global FN_FREEADDRINFO = 0  // freeaddrinfo
 
+// ---------------------------------------------------------------------------
+// Cabang Linux (Round 91, H3#2 Fase 1) — syscall murni, tanpa libc.
+// socket=41 connect=42 accept=43 sendto=44 recvfrom=45 bind=49 listen=50
+// setsockopt=54 close=3. AF_INET=2; SOCK_STREAM=1 SOCK_DGRAM=2; TCP=6 UDP=17.
+// SOL_SOCKET=1; SO_REUSEADDR=2 SO_RCVTIMEO=20 SO_SNDTIMEO=21.
+// sockaddr_in (16B): family u16@0 | port BE u16@2 | oktet IP@4..7.
+// ---------------------------------------------------------------------------
+
+net_htons(p) do
+    (p & 255) * 256 + ((p >> 8) & 255)
+end
+
+// Parse "a.b.c.d" in-place dari offset off src -> 4 oktet ke sa[4..7].
+net_linux_parse_ip(src, off, sa) do
+    oct = 0
+    i = off
+    ok = true
+    while ok and oct < 4 do
+        val = 0
+        ndig = 0
+        c = get_byte(src, i)
+        while c >= 48 and c <= 57 do
+            val = val * 10 + (c - 48)
+            ndig = ndig + 1
+            i = i + 1
+            c = get_byte(src, i)
+        end
+        if ndig == 0 or val > 255 then ok = false
+        else do
+            set_byte(sa, 4 + oct, val)
+            oct = oct + 1
+            if oct < 4 then do
+                if c == 46 then i = i + 1 else ok = false
+            end
+        end
+    end
+    ok
+end
+
+// Lengkapi sockaddr_in: family + port BE + IP literal. true jika IP sah.
+net_linux_pack(sa, ip, port) do
+    if not net_linux_parse_ip(ip, 0, sa) then false
+    else do
+        set_byte(sa, 0, 2)
+        pb = net_htons(port)
+        set_byte(sa, 2, pb & 255)
+        set_byte(sa, 3, (pb >> 8) & 255)
+        true
+    end
+end
+
+// /etc/resolv.conf -> "nameserver a.b.c.d" pertama -> sa (port 53 BE).
+net_linux_nameserver(sa) do
+    fd = syscall(257, 0 - 100, "/etc/resolv.conf", 0)
+    if fd < 0 then false
+    else do
+        buf = alloc(1024)
+        cleanup drop(buf)
+        n = syscall(0, fd, buf, 1023)
+        syscall(3, fd)
+        ok = false
+        line = 0
+        while line < n and not ok do
+            if net_linux_ns_at(buf, line, n) then do
+                if net_linux_parse_ip(buf, line + 11, sa) then do
+                    set_byte(sa, 0, 2)
+                    set_byte(sa, 2, 0)
+                    set_byte(sa, 3, 53)
+                    ok = true
+                end
+            end
+            while line < n and get_byte(buf, line) != 10 do line = line + 1 end
+            line = line + 1
+        end
+        ok
+    end
+end
+
+net_linux_ns_at(buf, line, n) do
+    pat = "nameserver "
+    i = 0
+    hit = true
+    while hit and i < 11 do
+        if line + i >= n then hit = false
+        else if get_byte(buf, line + i) != get_byte(pat, i) then hit = false
+        i = i + 1
+    end
+    hit
+end
+
+// Lewati nama DNS (label berpanjang atau pointer 0xC0xx); return offset akhir.
+net_linux_skip_name(buf, pos) do
+    b = get_byte(buf, pos)
+    if (b & 192) == 192 then pos + 2
+    else do
+        while b != 0 do
+            pos = pos + b + 1
+            b = get_byte(buf, pos)
+        end
+        pos + 1
+    end
+end
+
+// Resolve hostname -> 4 oktet IPv4 ke out4. Query A via UDP ke DNS pertama
+// dari resolv.conf; timeout 3 s. Return true/false.
+net_linux_resolve(host, out4) do
+    ns = alloc(16)
+    cleanup drop(ns)
+    mem_set(ns, 0, 16)
+    if not net_linux_nameserver(ns) then false
+    else do
+        q = alloc(256)
+        cleanup drop(q)
+        set_byte(q, 0, 80)                       // id 0x5057
+        set_byte(q, 1, 87)
+        set_byte(q, 2, 1)                        // flags 0x0100: RD
+        set_byte(q, 5, 1)                        // qdcount = 1
+        pos = 12
+        i = 0
+        hl = str_len(host)
+        while i < hl do
+            len = 0
+            c = get_byte(host, i)
+            while c != 0 and c != 46 do
+                set_byte(q, pos + 1 + len, c)
+                len = len + 1
+                i = i + 1
+                c = get_byte(host, i)
+            end
+            set_byte(q, pos, len)
+            pos = pos + 1 + len
+            i = i + 1                            // lewati '.'
+        end
+        set_byte(q, pos, 0)                      // root label
+        pos = pos + 1
+        set_byte(q, pos + 1, 1)                  // qtype = A
+        set_byte(q, pos + 3, 1)                  // qclass = IN
+        qlen = pos + 4
+        fd = syscall(41, 2, 2, 17)               // SOCK_DGRAM / UDP
+        if fd < 0 then false
+        else do
+            net_set_timeout(fd, 3000)
+            ans = alloc(512)
+            cleanup drop(ans)
+            sent = syscall(44, fd, q, qlen, 0, ns, 16)
+            n = if sent == qlen then syscall(45, fd, ans, 512, 0, 0, 0) else 0 - 1
+            found = false
+            if n > 12 then do
+                p = net_linux_skip_name(ans, 12) + 4     // lewati question
+                ancount = get_byte(ans, 6) * 256 + get_byte(ans, 7)
+                i = 0
+                while i < ancount and not found do
+                    p = net_linux_skip_name(ans, p)
+                    typ = get_byte(ans, p) * 256 + get_byte(ans, p + 1)
+                    rdlen = get_byte(ans, p + 8) * 256 + get_byte(ans, p + 9)
+                    if typ == 1 and rdlen == 4 then do
+                        j = 0
+                        while j < 4 do
+                            set_byte(out4, j, get_byte(ans, p + 10 + j))
+                            j = j + 1
+                        end
+                        found = true
+                    end
+                    p = p + 10 + rdlen
+                    i = i + 1
+                end
+            end
+            syscall(3, fd)
+            found
+        end
+    end
+end
+
 net_init() do
-    if WS2_DLL == 0 then do
+    if is_linux() then true
+    else if WS2_DLL == 0 then do
         WS2_DLL = load_dll("ws2_32.dll")
         if WS2_DLL != 0 then do
             FN_WSA_STARTUP = get_fn(WS2_DLL, "WSAStartup")
@@ -42,22 +220,24 @@ net_init() do
             wsa_data = alloc(512)
             res = call_dll(FN_WSA_STARTUP, 514, wsa_data)
             drop(wsa_data)
-            if res == 0 then 1 else 0
-        end else 0
+            if res == 0 then true else false
+        end
     end else 1
 end
 
 net_cleanup() do
-    if WS2_DLL != 0 and FN_WSA_CLEANUP != 0 then do
+    if is_linux() then 0
+    else if WS2_DLL != 0 and FN_WSA_CLEANUP != 0 then do
         call_dll(FN_WSA_CLEANUP)
         close_dll(WS2_DLL)
         WS2_DLL = 0
         0
-    end else 0
+    end
 end
 
 net_socket() do
-    if net_init() == 0 then 0 - 1
+    if not net_init() then 0 - 1
+    else if is_linux() then syscall(41, 2, 1, 6)   // AF_INET, SOCK_STREAM, TCP
     else do
         // socket(AF_INET=2, SOCK_STREAM=1, IPPROTO_TCP=6)
         call_dll(FN_SOCKET, 2, 1, 6)
@@ -65,6 +245,27 @@ net_socket() do
 end
 
 net_listen(port) do
+    if is_linux() then do
+        sock = net_socket()
+        if sock < 0 then 0 - 1
+        else do
+            opt = alloc(4)
+            cleanup drop(opt)
+            set_byte(opt, 0, 1)
+            syscall(54, sock, 1, 2, opt, 4)          // SO_REUSEADDR
+            sa = alloc(16)
+            cleanup drop(sa)
+            mem_set(sa, 0, 16)
+            net_linux_pack(sa, "0.0.0.0", port)      // INADDR_ANY
+            if syscall(49, sock, sa, 16) != 0 then do
+                net_close(sock)
+                0 - 1
+            end else if syscall(50, sock, 128) != 0 then do
+                net_close(sock)
+                0 - 1
+            end else sock
+        end
+    end else do
     sock = net_socket()
     if sock < 0 or sock == 18446744073709551615 then 0 - 1
     else do
@@ -99,10 +300,12 @@ net_listen(port) do
             end else sock
         end
     end
+    end
 end
 
 net_accept(server_fd) do
     if server_fd < 0 then 0 - 1
+    else if is_linux() then syscall(43, server_fd, 0, 0)
     else do
         call_dll(FN_ACCEPT, server_fd, 0, 0)
     end
@@ -110,6 +313,7 @@ end
 
 net_send(client_fd, msg_buf, msg_len) do
     if client_fd < 0 then 0 - 1
+    else if is_linux() then syscall(44, client_fd, msg_buf, msg_len, 0, 0)  // sendto flags=0
     else do
         call_dll(FN_SEND, client_fd, msg_buf, msg_len, 0)
     end
@@ -117,15 +321,18 @@ end
 
 net_recv(client_fd, out_buf, max_len) do
     if client_fd < 0 then 0 - 1
+    else if is_linux() then syscall(45, client_fd, out_buf, max_len, 0, 0, 0)  // recvfrom
     else do
         call_dll(FN_RECV, client_fd, out_buf, max_len, 0)
     end
 end
 
 net_close(sock_fd) do
-    if sock_fd >= 0 and WS2_DLL != 0 and FN_CLOSESOCKET != 0 then do
+    if is_linux() then do
+        if sock_fd >= 3 then syscall(3, sock_fd)
+    end else if sock_fd >= 0 and WS2_DLL != 0 and FN_CLOSESOCKET != 0 then do
         call_dll(FN_CLOSESOCKET, sock_fd)
-    end else 0
+    end
 end
 
 // ---------------------------------------------------------------------------
@@ -136,7 +343,17 @@ end
 // tidak menggantung selamanya. return 0 ok, -1 gagal.
 net_set_timeout(fd, ms) do
     if fd < 0 then 0 - 1
-    else do
+    else if is_linux() then do
+        // struct timeval { u64 sec; u64 usec } — 16 byte, BUKAN DWORD ms
+        tv = alloc(16)
+        cleanup drop(tv)
+        mem_set(tv, 0, 16)
+        write_u64(tv, 0, ms / 1000)
+        write_u64(tv, 8, (ms - (ms / 1000) * 1000) * 1000000)
+        syscall(54, fd, 1, 20, tv, 16)            // SO_RCVTIMEO
+        syscall(54, fd, 1, 21, tv, 16)            // SO_SNDTIMEO
+        0
+    end else do
         opt = alloc(8)
         mem_set(opt, 0, 8)
         set_byte(opt, 0, ms & 255)
@@ -154,8 +371,23 @@ end
 // net_connect_ip("1.2.3.4", port) — sambung TCP ke IP literal.
 // return socket fd (>= 0) atau -1 gagal.
 net_connect_ip(ip_str, port) do
-    if net_init() == 0 then 0 - 1
-    else do
+    if not net_init() then 0 - 1
+    else if is_linux() then do
+        sock = syscall(41, 2, 1, 6)
+        if sock < 0 then 0 - 1
+        else do
+            sa = alloc(16)
+            cleanup drop(sa)
+            mem_set(sa, 0, 16)
+            if not net_linux_pack(sa, ip_str, port) then do
+                net_close(sock)
+                0 - 1
+            end else if syscall(42, sock, sa, 16) != 0 then do
+                net_close(sock)
+                0 - 1
+            end else sock
+        end
+    end else do
         sock = call_dll(FN_SOCKET, 2, 1, 6)
         if sock < 0 then 0 - 1
         else do
@@ -187,10 +419,38 @@ net_connect_ip(ip_str, port) do
     end
 end
 
-// net_connect_host("example.com", port) — sambung TCP via getaddrinfo.
+// net_connect_host("example.com", port) — Windows: getaddrinfo;
+// Linux: resolver DNS A murni-Purwa via /etc/resolv.conf.
 net_connect_host(host, port) do
-    if net_init() == 0 then 0 - 1
-    else do
+    if not net_init() then 0 - 1
+    else if is_linux() then do
+        ip = alloc(8)
+        cleanup drop(ip)
+        mem_set(ip, 0, 8)
+        if not net_linux_resolve(host, ip) then 0 - 1
+        else do
+            sock = syscall(41, 2, 1, 6)
+            if sock < 0 then 0 - 1
+            else do
+                sa = alloc(16)
+                cleanup drop(sa)
+                mem_set(sa, 0, 16)
+                set_byte(sa, 0, 2)
+                pb = net_htons(port)
+                set_byte(sa, 2, pb & 255)
+                set_byte(sa, 3, (pb >> 8) & 255)
+                j = 0
+                while j < 4 do
+                    set_byte(sa, 4 + j, get_byte(ip, j))
+                    j = j + 1
+                end
+                if syscall(42, sock, sa, 16) != 0 then do
+                    net_close(sock)
+                    0 - 1
+                end else sock
+            end
+        end
+    end else do
         port_str = to_text(port)
         res_ptr = alloc(8)
         mem_set(res_ptr, 0, 8)
@@ -220,10 +480,10 @@ net_connect_host(host, port) do
                             if r != 0 then do
                                 net_close(fd)
                                 fd = 0 - 1
-                            end else 0
-                        end else 0
-                    end else 0
-                end else 0
+                            end
+                        end
+                    end
+                end
                 ai = read_u64(ai, 40)         // ai_next
             end
             call_dll(FN_FREEADDRINFO, first)
@@ -236,12 +496,421 @@ end
 // net_connect("1.2.3.4" | "hostname", port) — otomatis pilih jalur.
 net_connect(host, port) do
     L = str_len(host)
-    is_ip = 1
+    is_ip = true
     i = 0
-    while i < L and is_ip == 1 do
+    while i < L and is_ip do
         c = get_byte(host, i)
         if c != 46 and (c < 48 or c > 57) then is_ip = 0 else i = i + 1
     end
-    if is_ip == 1 then net_connect_ip(host, port)
+    if is_ip then net_connect_ip(host, port)
     else net_connect_host(host, port)
+end
+
+// ===========================================================================
+// HTTP + HTTPS client — FFI winhttp.dll. TLS 1.2/1.3, validasi sertifikat,
+// trust store, proxy sistem: semuanya diurus OS. Satu jalur kode untuk
+// http:// dan https:// (yang beda hanya flag WINHTTP_FLAG_SECURE).
+// Return: >=100 = status HTTP; <0 = error (-1 init, -2 connect, -3 openreq,
+// -4 send, -5 receive, -6 query-status).
+// ===========================================================================
+global WH_DLL = 0
+global FN_WH_OPEN = 0
+global FN_WH_CONNECT = 0
+global FN_WH_OPENREQ = 0
+global FN_WH_ADDHDR = 0
+global FN_WH_SEND = 0
+global FN_WH_RECV = 0
+global FN_WH_QHDR = 0
+global FN_WH_QAVAIL = 0
+global FN_WH_READ = 0
+global FN_WH_CLOSEH = 0
+global FN_WH_TIMEOUT = 0
+global WH_SESSION = 0
+global WH_HOSTW = 0
+global WH_PATHW = 0
+global WH_VERBW = 0
+global WH_HDRW = 0
+global WH_UAW = 0          // User-Agent wide (GitHub cs. wajib UA)
+global WH_SCR = 0          // scratch 32B: out-DWORD (status/avail/read)
+
+// ASCII -> UTF-16LE (WinHTTP pakai wide string; URL/header selalu ASCII).
+wh_wide(s, w) do
+    n = str_len(s)
+    i = 0
+    while i < n do
+        set_byte(w, i * 2, get_byte(s, i))
+        set_byte(w, i * 2 + 1, 0)
+        i = i + 1
+    end
+    set_byte(w, i * 2, 0)
+    set_byte(w, i * 2 + 1, 0)
+    n
+end
+
+// Inisialisasi malas (idempotent). 1 = siap, <0 = gagal.
+// Linux: HTTP(S) client butuh TLS — di luar cakupan Fase 1 (lihat ROADMAP
+// H3#2); return -1 agar pemanggil jatuh ke jalur error alih-alih sukses
+// palsu (load_dll di Linux mengembalikan -ENOSYS yang bukan 0).
+https_init() do
+    if is_linux() then 0 - 1
+    else if WH_SESSION != 0 then 1
+    else do
+        if WH_DLL == 0 then do
+            WH_DLL = load_dll("winhttp.dll")
+            if WH_DLL != 0 then do
+                FN_WH_OPEN = get_fn(WH_DLL, "WinHttpOpen")
+                FN_WH_CONNECT = get_fn(WH_DLL, "WinHttpConnect")
+                FN_WH_OPENREQ = get_fn(WH_DLL, "WinHttpOpenRequest")
+                FN_WH_ADDHDR = get_fn(WH_DLL, "WinHttpAddRequestHeaders")
+                FN_WH_SEND = get_fn(WH_DLL, "WinHttpSendRequest")
+                FN_WH_RECV = get_fn(WH_DLL, "WinHttpReceiveResponse")
+                FN_WH_QHDR = get_fn(WH_DLL, "WinHttpQueryHeaders")
+                FN_WH_QAVAIL = get_fn(WH_DLL, "WinHttpQueryDataAvailable")
+                FN_WH_READ = get_fn(WH_DLL, "WinHttpReadData")
+                FN_WH_CLOSEH = get_fn(WH_DLL, "WinHttpCloseHandle")
+                FN_WH_TIMEOUT = get_fn(WH_DLL, "WinHttpSetTimeouts")
+            end
+        end
+        if WH_HOSTW == 0 then do
+            WH_HOSTW = alloc(1024)
+            WH_PATHW = alloc(8192)
+            WH_VERBW = alloc(32)
+            WH_HDRW = alloc(16384)
+            WH_SCR = alloc(32)
+            WH_UAW = alloc(64)
+            wh_wide("purwa-net/1.0", WH_UAW)
+        end
+        if WH_SESSION == 0 and FN_WH_OPEN != 0 then do
+            WH_SESSION = call_dll(FN_WH_OPEN, WH_UAW, 0, 0, 0, 0)
+            if WH_SESSION != 0 then do
+                call_dll(FN_WH_TIMEOUT, WH_SESSION, 10000, 15000, 30000, 60000)
+                1
+            end else 0 - 1
+        end else if WH_SESSION != 0 then 1 else 0 - 1
+    end
+end
+
+// Tutup sesi (opsional — proses exit tetap bersih tanpa ini).
+https_close() do
+    if WH_SESSION != 0 and FN_WH_CLOSEH != 0 then
+        call_dll(FN_WH_CLOSEH, WH_SESSION)
+    WH_SESSION = 0
+    0
+end
+
+// net_request(verb, url, headers, body, resp, max) -> status.
+// headers: satu string, antar-header dipisah "\r\n" (boleh "").
+// resp: buffer caller; terisi body + NUL, maksimal max-1 byte.
+// Jangan kirim Accept-Encoding: gzip — WinHTTP tidak dekompresi otomatis.
+net_request(verb, url, headers, body, resp, max) do
+    if not https_init() then 0 - 1
+    else do
+        // --- bedah URL: scheme://host[:port]/path ---
+        i = 0
+        secure = 8388608                      // 0x800000 WINHTTP_FLAG_SECURE
+        if starts_with(url, "https://") then i = 8
+        if starts_with(url, "http://") then do
+            secure = 0
+            i = 7
+        end
+        un = str_len(url)
+        slash = 0
+        j = i
+        while j < un and slash == 0 do
+            if get_byte(url, j) == 47 then slash = j else j = j + 1
+        end
+        hostend = if slash != 0 then slash else un
+        colon = 0
+        k = i
+        while k < hostend and colon == 0 do
+            if get_byte(url, k) == 58 then colon = k else k = k + 1
+        end
+        port = if secure != 0 then 443 else 80
+        if colon != 0 then do
+            pnum = 0
+            m = colon + 1
+            while m < hostend do
+                pnum = pnum * 10 + (get_byte(url, m) - 48)
+                m = m + 1
+            end
+            if pnum > 0 then port = pnum
+        end
+        hend = if colon != 0 then colon else hostend
+        hn = 0
+        while hn < hend - i do
+            set_byte(WH_HOSTW, hn * 2, get_byte(url, i + hn))
+            set_byte(WH_HOSTW, hn * 2 + 1, 0)
+            hn = hn + 1
+        end
+        set_byte(WH_HOSTW, hn * 2, 0)
+        set_byte(WH_HOSTW, hn * 2 + 1, 0)
+        if slash != 0 then do
+            wh_wide(slice(url, slash, un), WH_PATHW)
+        end else do
+            set_byte(WH_PATHW, 0, 47)
+            set_byte(WH_PATHW, 1, 0)
+            set_byte(WH_PATHW, 2, 0)
+            set_byte(WH_PATHW, 3, 0)
+        end
+        wh_wide(verb, WH_VERBW)
+        if str_len(headers) > 0 then wh_wide(headers, WH_HDRW)
+        // --- kirim ---
+        status = 0 - 2
+        conn = call_dll(FN_WH_CONNECT, WH_SESSION, WH_HOSTW, port, 0)
+        if conn != 0 then do
+            status = 0 - 3
+            req = call_dll(FN_WH_OPENREQ, conn, WH_VERBW, WH_PATHW, 0, 0, 0, secure)
+            if req != 0 then do
+                status = 0 - 4
+                if str_len(headers) > 0 then
+                    call_dll(FN_WH_ADDHDR, req, WH_HDRW, 0 - 1, 805306368)
+                blen = str_len(body)
+                if call_dll(FN_WH_SEND, req, 0, 0, body, blen, blen, 0) != 0 then do
+                    status = 0 - 5
+                    if call_dll(FN_WH_RECV, req, 0) != 0 then do
+                        status = 0 - 6
+                        mem_set(WH_SCR, 0, 8)
+                        // lpdwBufferSize = POINTER ke DWORD, bukan nilainya!
+                        write_u64(WH_SCR + 8, 0, 4)
+                        q = call_dll(FN_WH_QHDR, req, 536870931, 0, WH_SCR, WH_SCR + 8, 0)
+                        if q != 0 then status = read_u32(WH_SCR, 0)
+                        if status >= 100 then do
+                            off = 0
+                            more = 1
+                            while more != 0 do
+                                mem_set(WH_SCR, 0, 8)
+                                call_dll(FN_WH_QAVAIL, req, WH_SCR)
+                                nav = read_u32(WH_SCR, 0)
+                                if nav == 0 then more = 0
+                                if nav > 0 and off < max - 1 then do
+                                    chunk = nav
+                                    if chunk > 4096 then chunk = 4096
+                                    room = max - 1 - off
+                                    if chunk > room then chunk = room
+                                    mem_set(WH_SCR + 8, 0, 8)
+                                    call_dll(FN_WH_READ, req, resp + off, chunk, WH_SCR + 8)
+                                    nrd = read_u32(WH_SCR + 8, 0)
+                                    if nrd == 0 then more = 0
+                                    off = off + nrd
+                                end
+                            end
+                            set_byte(resp, off, 0)
+                        end
+                    end
+                end
+                call_dll(FN_WH_CLOSEH, req)
+            end
+            call_dll(FN_WH_CLOSEH, conn)
+        end
+        status
+    end
+end
+
+// ---------------------------------------------------------------------------
+// Streaming HTTP client (SSE). Pisahkan "buka koneksi + kirim + terima
+// header" dari "baca tubuh" supaya caller bisa memproses delta incremental
+// sebelum seluruh respons selesai. Satu stream aktif per waktu (state global).
+//   net_stream_open(verb,url,headers,body) -> req handle (>=0) atau neg error
+//       (-1 init, -2 connect, -3 openreq, -4 send, -5 receive)
+//   net_stream_read(req, buf, max)          -> byte dibaca (0=selesai, -1 err)
+//   net_stream_close(req)                    -> bersihkan req + conn
+// `resp` di net_request diisi penuh; stream memakai read berulang.
+// ---------------------------------------------------------------------------
+global sst_conn = 0          // WinHttpConnect handle
+global sst_req = 0           // WinHttpOpenRequest handle
+global sst_status = 0        // HTTP status respons (dari net_stream_open)
+
+net_stream_open(verb, url, headers, body) do
+    sst_status = 0
+    if not https_init() then 0 - 1
+    else do
+        // perpanjang receive timeout untuk stream panjang (6 menit antar-chunk)
+        call_dll(FN_WH_TIMEOUT, WH_SESSION, 10000, 15000, 30000, 360000)
+        i = 0
+        secure = 8388608                    // WINHTTP_FLAG_SECURE
+        if starts_with(url, "https://") then i = 8
+        if starts_with(url, "http://") then do
+            secure = 0
+            i = 7
+        end
+        un = str_len(url)
+        slash = 0
+        j = i
+        while j < un and slash == 0 do
+            if get_byte(url, j) == 47 then slash = j else j = j + 1
+        end
+        hostend = if slash != 0 then slash else un
+        colon = 0
+        k = i
+        while k < hostend and colon == 0 do
+            if get_byte(url, k) == 58 then colon = k else k = k + 1
+        end
+        port = if secure != 0 then 443 else 80
+        if colon != 0 then do
+            pnum = 0
+            m = colon + 1
+            while m < hostend do
+                pnum = pnum * 10 + (get_byte(url, m) - 48)
+                m = m + 1
+            end
+            if pnum > 0 then port = pnum
+        end
+        hend = if colon != 0 then colon else hostend
+        hn = 0
+        while hn < hend - i do
+            set_byte(WH_HOSTW, hn * 2, get_byte(url, i + hn))
+            set_byte(WH_HOSTW, hn * 2 + 1, 0)
+            hn = hn + 1
+        end
+        set_byte(WH_HOSTW, hn * 2, 0)
+        set_byte(WH_HOSTW, hn * 2 + 1, 0)
+        if slash != 0 then wh_wide(slice(url, slash, un), WH_PATHW)
+        else do
+            set_byte(WH_PATHW, 0, 47)
+            set_byte(WH_PATHW, 1, 0)
+            set_byte(WH_PATHW, 2, 0)
+            set_byte(WH_PATHW, 3, 0)
+        end
+        wh_wide(verb, WH_VERBW)
+        if str_len(headers) > 0 then wh_wide(headers, WH_HDRW)
+        st = 0 - 2
+        conn = call_dll(FN_WH_CONNECT, WH_SESSION, WH_HOSTW, port, 0)
+        if conn != 0 then do
+            st = 0 - 3
+            req = call_dll(FN_WH_OPENREQ, conn, WH_VERBW, WH_PATHW, 0, 0, 0, secure)
+            if req != 0 then do
+                st = 0 - 4
+                if str_len(headers) > 0 then
+                    call_dll(FN_WH_ADDHDR, req, WH_HDRW, 0 - 1, 805306368)
+                blen = str_len(body)
+                if call_dll(FN_WH_SEND, req, 0, 0, body, blen, blen, 0) != 0 then do
+                    st = 0 - 5
+                    if call_dll(FN_WH_RECV, req, 0) != 0 then do
+                        // query status HTTP (WinHttpQueryHeaders)
+                        mem_set(WH_SCR, 0, 8)
+                        write_u64(WH_SCR + 8, 0, 4)
+                        q = call_dll(FN_WH_QHDR, req, 536870931, 0, WH_SCR, WH_SCR + 8, 0)
+                        if q != 0 then sst_status = read_u32(WH_SCR, 0) else sst_status = 0
+                        sst_conn = conn
+                        sst_req = req
+                        st = req
+                    end
+                end
+                if st < 0 then call_dll(FN_WH_CLOSEH, req)
+            end
+            if st < 0 then call_dll(FN_WH_CLOSEH, conn)
+        end
+        st
+    end
+end
+
+net_stream_read(req, buf, max) do
+    if req == 0 then 0 - 2
+    else do
+        mem_set(WH_SCR, 0, 8)
+        call_dll(FN_WH_QAVAIL, req, WH_SCR)
+        nav = read_u32(WH_SCR, 0)
+        if nav == 0 then 0
+        else do
+            chunk = nav
+            if chunk > max - 1 then chunk = max - 1
+            mem_set(WH_SCR + 8, 0, 8)
+            call_dll(FN_WH_READ, req, buf, chunk, WH_SCR + 8)
+            nrd = read_u32(WH_SCR + 8, 0)
+            if nrd > 0 then set_byte(buf, nrd, 0)
+            nrd
+        end
+    end
+end
+
+net_stream_close(req) do
+    if req != 0 then call_dll(FN_WH_CLOSEH, req)
+    if sst_conn != 0 then call_dll(FN_WH_CLOSEH, sst_conn)
+    sst_req = 0
+    sst_conn = 0
+    0
+end
+
+net_get(url, resp, max) do
+    net_request("GET", url, "", "", resp, max)
+end
+
+net_post(url, headers, body, resp, max) do
+    net_request("POST", url, headers, body, resp, max)
+end
+
+// Alias eksplisit — satu mesin yang sama, hanya penamaan.
+https_get(url, resp, max) do
+    net_request("GET", url, "", "", resp, max)
+end
+
+https_post(url, headers, body, resp, max) do
+    net_request("POST", url, headers, body, resp, max)
+end
+
+// ===========================================================================
+// Wrapper stream TCP tingkat tinggi (dulu lib/tcp.pw) — struct + typed API.
+// ===========================================================================
+struct TcpServer {
+    port: i64,
+    socket_fd: i64
+}
+
+tcp_bind_listener(port: i64): TcpServer do
+    sfd = net_listen(port)
+    TcpServer(port, sfd)
+end
+
+tcp_accept_client(srv: TcpServer): i64 do
+    net_accept(srv.socket_fd)
+end
+
+tcp_send_text(client_fd: i64, text: string): i64 do
+    L = str_len(text)
+    net_send(client_fd, text, L)
+end
+
+tcp_send_bytes(client_fd: i64, buf: ptr, len: i64): i64 do
+    net_send(client_fd, buf, len)
+end
+
+tcp_recv_text(client_fd: i64, buf: ptr, max_len: i64): i64 do
+    n = net_recv(client_fd, buf, max_len)
+    if n > 0 then set_byte(buf, n, 0)
+    n
+end
+
+tcp_close_client(client_fd: i64): i64 do
+    net_close(client_fd)
+end
+
+tcp_close_server(srv: TcpServer): i64 do
+    net_close(srv.socket_fd)
+end
+
+// ===========================================================================
+// Builder respons HTTP sisi server (dulu lib/http.pw).
+// ===========================================================================
+http_ok(body: string): string do
+    L = str_len(body)
+    $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {L}\r\nConnection: close\r\n\r\n{body}"
+end
+
+http_not_found(msg: string): string do
+    L = str_len(msg)
+    $"HTTP/1.1 404 Not Found\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {L}\r\nConnection: close\r\n\r\n{msg}"
+end
+
+http_json(json_str: string): string do
+    L = str_len(json_str)
+    $"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {L}\r\nConnection: close\r\n\r\n{json_str}"
+end
+
+http_wasm(body: string): string do
+    L = str_len(body)
+    $"HTTP/1.1 200 OK\r\nContent-Type: application/wasm\r\nContent-Length: {L}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n{body}"
+end
+
+http_response_header(content_type: string, content_len: i64): string do
+    $"HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {content_len}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
 end

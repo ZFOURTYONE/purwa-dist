@@ -38,7 +38,7 @@ hrt_init() do
                 g_hrt_base = hrt_raw()
                 1
             end
-        end else 0
+        end
     end else 1
 end
 

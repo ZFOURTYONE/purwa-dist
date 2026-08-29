@@ -1,0 +1,167 @@
+// lib/time.pw — Pustaka Kalender & Waktu Wall-Clock (Milestone L1)
+// Murni Purwa tanpa dependensi CRT eksternal.
+
+struct DateTime {
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    ms,
+    day_of_week
+}
+
+// Menentukan apakah tahun adalah tahun kabisat (Gregorian)
+time_is_leap_year(year) do
+    if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) then true else false
+end
+
+// Menghitung jumlah hari dalam bulan tertentu
+time_days_in_month(year, month) do
+    if month == 1 or month == 3 or month == 5 or month == 7 or month == 8 or month == 10 or month == 12 then 31
+    else if month == 4 or month == 6 or month == 9 or month == 11 then 30
+    else if month == 2 then do
+        if time_is_leap_year(year) then 29 else 28
+    end else 0
+end
+
+// Mengambil waktu saat ini dalam milidetik
+time_now_ms() do
+    clock_ms()
+end
+
+// Mengubah detik Unix epoch menjadi objek DateTime
+time_epoch_to_datetime(epoch_sec) do
+    total_sec = epoch_sec
+    sec = total_sec % 60
+    total_min = total_sec / 60
+    min = total_min % 60
+    total_hour = total_min / 60
+    hour = total_hour % 24
+    total_days = total_hour / 24
+    
+    // 1970-01-01 adalah hari Kamis (4), 0=Minggu, 1=Senin, ..., 6=Sabtu
+    dow = (total_days + 4) % 7
+    
+    y = 1970
+    loop_y = 1
+    while loop_y == 1 do
+        diy = if time_is_leap_year(y) then 366 else 365
+        if total_days >= diy then do
+            total_days = total_days - diy
+            y = y + 1
+        end else do
+            loop_y = 0
+        end
+    end
+    
+    m = 1
+    loop_m = 1
+    while loop_m == 1 do
+        dim = time_days_in_month(y, m)
+        if total_days >= dim then do
+            total_days = total_days - dim
+            m = m + 1
+        end else do
+            loop_m = 0
+        end
+    end
+    
+    day = total_days + 1
+    DateTime(y, m, day, hour, min, sec, 0, dow)
+end
+
+// Mengubah objek DateTime menjadi detik Unix epoch
+time_datetime_to_epoch(dt) do
+    days = 0
+    y = 1970
+    while y < dt.year do
+        days = days + (if time_is_leap_year(y) then 366 else 365)
+        y = y + 1
+    end
+    
+    m = 1
+    while m < dt.month do
+        days = days + time_days_in_month(dt.year, m)
+        m = m + 1
+    end
+    
+    days = days + (dt.day - 1)
+    days * 86400 + dt.hour * 3600 + dt.minute * 60 + dt.second
+end
+
+// Format 2-digit zero padded string
+time_pad2(n) do
+    if n < 10 then $"0{n}" else $"{n}"
+end
+
+// Format 4-digit zero padded string
+time_pad4(n) do
+    if n < 10 then $"000{n}"
+    else if n < 100 then $"00{n}"
+    else if n < 1000 then $"0{n}"
+    else $"{n}"
+end
+
+// Format tanggal "YYYY-MM-DD"
+time_format_date(dt) do
+    $"{time_pad4(dt.year)}-{time_pad2(dt.month)}-{time_pad2(dt.day)}"
+end
+
+// Format waktu "HH:MM:SS"
+time_format_time(dt) do
+    $"{time_pad2(dt.hour)}:{time_pad2(dt.minute)}:{time_pad2(dt.second)}"
+end
+
+// Format ISO 8601 "YYYY-MM-DD HH:MM:SS"
+time_format_iso(dt) do
+    $"{time_format_date(dt)} {time_format_time(dt)}"
+end
+
+// Helper parsing angka dari slice string
+time_parse_num(s, start_idx, end_idx) do
+    sub = slice(s, start_idx, end_idx)
+    parse_int(sub)
+end
+
+// Parsing ISO 8601 string "YYYY-MM-DD HH:MM:SS" atau "YYYY-MM-DD"
+time_parse_iso(s) do
+    len = str_len(s)
+    if len < 10 then DateTime(1970, 1, 1, 0, 0, 0, 0, 4)
+    else do
+        yr = time_parse_num(s, 0, 4)
+        mo = time_parse_num(s, 5, 7)
+        dy = time_parse_num(s, 8, 10)
+        
+        hr = 0
+        mn = 0
+        sc = 0
+        if len >= 19 then do
+            hr = time_parse_num(s, 11, 13)
+            mn = time_parse_num(s, 14, 16)
+            sc = time_parse_num(s, 17, 19)
+        end
+        
+        dt_temp = DateTime(yr, mo, dy, hr, mn, sc, 0, 0)
+        epoch = time_datetime_to_epoch(dt_temp)
+        dow = (epoch / 86400 + 4) % 7
+        DateTime(yr, mo, dy, hr, mn, sc, 0, dow)
+    end
+end
+
+// Menghitung selisih durasi dalam detik (dt2 - dt1)
+time_diff_sec(dt1, dt2) do
+    time_datetime_to_epoch(dt2) - time_datetime_to_epoch(dt1)
+end
+
+// Menambah durasi detik ke DateTime
+time_add_sec(dt, sec) do
+    ep = time_datetime_to_epoch(dt) + sec
+    time_epoch_to_datetime(ep)
+end
+
+// Menambah durasi hari ke DateTime
+time_add_days(dt, days) do
+    time_add_sec(dt, days * 86400)
+end
