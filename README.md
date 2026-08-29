@@ -24,7 +24,12 @@
 
 ---
 
-This official distribution package contains everything you need: **standalone compiler binaries, code formatter, language server (LSP), and full standard libraries** for both **Windows and Linux x86-64**. No installation or external dependencies required — download, chmod/run, and enjoy.
+## 📦 Download Prebuilt Releases (v37.13)
+
+| Target Platform | Package | Size | Contents |
+|---|---|---|---|
+| 🪟 **Windows x86-64** | [**`purwa-v37.13-windows-x64.zip`**](releases/purwa-v37.13-windows-x64.zip) | ~195 KB | `purwac.exe`, `purwa-fmt.exe`, `purwa-lsp.exe`, `speednet.exe`, 38 stdlibs, VSIX |
+| 🐧 **Linux x86-64** | [**`purwa-v37.13-linux-x64.zip`**](releases/purwa-v37.13-linux-x64.zip) | ~190 KB | `purwac-linux`, `purwa-fmt-linux`, `purwa-lsp-linux`, `speednet-linux`, 38 stdlibs, VSIX |
 
 ---
 
