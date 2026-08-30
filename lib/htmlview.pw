@@ -327,10 +327,31 @@ webui_open(html_str: string, css_str: string, title: string, width: i64, height:
     0
 end
 
+// ---- OS Sleep & Scheduler Yield ----
+
+global K32_DLL = 0
+global FN_SLEEP = 0
+
+html_init_system() do
+    if K32_DLL == 0 do
+        K32_DLL = load_dll("kernel32.dll")
+        if K32_DLL != 0 do
+            FN_SLEEP = get_fn(K32_DLL, "Sleep")
+        end
+    end
+end
+
+html_sleep_ms(ms: i64) do
+    html_init_system()
+    if FN_SLEEP != 0 do
+        call_dll(FN_SLEEP, ms)
+    end
+end
+
 // ---- Interactive Desktop Window Event Loop ----
 
 html_run_window(title: string, width: i64, height: i64, html_src: string, css_src: string): i64 do
-    hrt_init()
+    html_init_system()
     win = gui_open_window(title, width, height)
     if win == 0 do
         show("[HTMLView] Requires desktop GUI display.\n")
@@ -344,7 +365,7 @@ html_run_window(title: string, width: i64, height: i64, html_src: string, css_sr
         show($"[HTMLView] Native GUI Window Launched: {title} ({width}x{height})\n")
         show("[HTMLView] Press ESC or close window [X] to exit.\n")
 
-        // Interactive GUI Loop (60 FPS)
+        // Interactive GUI Loop (60 FPS, 0% CPU Overhead)
         while gui_is_open(win) and gui_key_esc(win) == 0 do
             gui_poll_events(win)
 
@@ -358,8 +379,8 @@ html_run_window(title: string, width: i64, height: i64, html_src: string, css_sr
             // Hardware flip to screen (Double Buffer BitBlt)
             gui_flip_buffer(win)
 
-            // Sleep 16ms (~60 FPS)
-            hrt_sleep_us(16000)
+            // OS Scheduler Sleep (16 ms -> 60 FPS, 0% CPU usage)
+            html_sleep_ms(16)
         end
 
         canvas_destroy(c)
