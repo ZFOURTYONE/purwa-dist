@@ -284,6 +284,12 @@ html_apply_css(root: DomNode, css_str: string) do
             child.bg_b = 22
             child.padding = 8
             child.is_centered = true
+            j = 0
+            while j < child.child_count do
+                sub = html_get_child(child, j)
+                sub.is_centered = true
+                j = j + 1
+            end
         end
 
         // Typography tag adjustments
@@ -295,10 +301,10 @@ html_apply_css(root: DomNode, css_str: string) do
             child.margin = 2
             child.is_centered = true
         else if child.tag == "h2" or child.tag == "h3" do
-            child.font_size = 3
-            child.fg_r = 241
-            child.fg_g = 245
-            child.fg_b = 249
+            child.font_size = if contains(cls, "cyan") then 2 else 3
+            child.fg_r = if contains(cls, "cyan") then 56 else 241
+            child.fg_g = if contains(cls, "cyan") then 189 else 245
+            child.fg_b = if contains(cls, "cyan") then 248 else 249
             child.margin = 2
         else if child.tag == "p" do
             child.font_size = 1
@@ -328,9 +334,6 @@ html_apply_css(root: DomNode, css_str: string) do
             child.fg_r = 56
             child.fg_g = 189
             child.fg_b = 248
-            if child.is_centered do
-                child.is_centered = true
-            end
         end
 
         if child.child_count > 0 do
@@ -464,11 +467,17 @@ end
 // ---- Canvas Rasterizer ----
 
 html_render_node(node: DomNode, c: Canvas) do
-    is_box = if contains(node.class_name, "card") or contains(node.class_name, "stat-card") or contains(node.class_name, "badge") or contains(node.class_name, "btn") or node.tag == "button" then true else false
+    is_btn = if node.tag == "button" or contains(node.class_name, "btn-primary") or contains(node.class_name, "btn-secondary") or node.class_name == "btn" then true else false
+    is_card = if contains(node.class_name, "card") or contains(node.class_name, "stat-card") or contains(node.class_name, "badge") or contains(node.class_name, "code-box") then true else false
+    is_box = if is_btn or is_card then true else false
 
     if is_box do
         canvas_fill_rect(c, node.x, node.y, node.w, node.h, node.bg_r, node.bg_g, node.bg_b, 255)
         canvas_draw_rect(c, node.x, node.y, node.w, node.h, node.border_r, node.border_g, node.border_b, 255, false)
+    end
+
+    if node.tag == "header" or contains(node.class_name, "nav") do
+        canvas_draw_line(c, 25, node.y + node.h + 2, c.width - 25, node.y + node.h + 2, 35, 48, 70, 255)
     end
 
     // Recursively render children
@@ -531,7 +540,9 @@ html_render_text(node: DomNode, win: GuiWindow) do
 end
 
 html_render(root: DomNode, c: Canvas) do
-    canvas_clear(c, root.bg_r, root.bg_g, root.bg_b, 255)
+    canvas_clear(c, 9, 13, 22, 255)
+    // Soft glowing radial-like accent in the center
+    canvas_fill_rect(c, (c.width - 520) / 2, 35, 520, 190, 13, 22, 38, 255)
     html_render_node(root, c)
 end
 
