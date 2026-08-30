@@ -1,9 +1,10 @@
 # ⚡ Purwa
 
+**Script-speed development. Native-code delivery.**  
 **A self-hosting systems programming language that compiles straight to native
 x86-64 machine code — no LLVM, no GCC, no external linker, no CRT.**
 
-![Version](https://img.shields.io/badge/version-v37.12-6d28d9)
+![Version](https://img.shields.io/badge/version-v37.14-6d28d9)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20PE32%2B-informational)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen)
 ![Compiler](https://img.shields.io/badge/Compiler-%7E228%20KB-blue)
