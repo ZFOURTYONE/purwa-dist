@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Purwa Systems Language — Multi-Language Benchmark Suite</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes barGrow {
+      from { width: 0%; opacity: 0.2; }
+      to { opacity: 1; }
+    }
+    .animate-bar {
+      animation: barGrow 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .glow-purwa {
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.45);
+    }
+    .glow-card {
+      background: radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.08) 0%, rgba(15, 23, 42, 0.6) 100%);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 md:p-8 font-sans antialiased selection:bg-cyan-500 selection:text-black">
+  <div class="max-w-6xl mx-auto space-y-8">
+
+    <!-- Top Header -->
+    <header class="border border-slate-800/80 bg-slate-900/60 backdrop-blur-md rounded-2xl p-6 md:p-8 glow-card relative overflow-hidden shadow-2xl">
+      <div class="absolute -right-16 -top-16 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -left-16 -bottom-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-semibold uppercase tracking-wider mb-3">
+            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span> Official Benchmark Report
+          </div>
+          <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white flex items-center gap-3">
+            <span class="bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400 bg-clip-text text-transparent">Purwa</span>
+            <span class="text-slate-500 text-2xl font-light">vs</span>
+            <span class="text-slate-300 text-2xl">C · Zig · Rust · Go · Node · Python</span>
+          </h1>
+          <p class="text-slate-400 text-sm mt-2 max-w-2xl leading-relaxed">
+            Head-to-head performance benchmarks measured on native Windows x86-64 hardware (<span class="text-slate-200 font-medium">Intel i5-11400</span>). Median of 11 timed runs with high-resolution Stopwatch timing.
+          </p>
+        </div>
+
+        <!-- Quick Highlight Badges -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div class="bg-slate-950/70 border border-cyan-500/30 rounded-xl p-3 text-center">
+            <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Binary Size</div>
+            <div class="text-xl font-bold text-cyan-400 mt-0.5">5.5 KB</div>
+            <div class="text-[11px] text-cyan-500/80">148x &lt; Zig</div>
+          </div>
+          <div class="bg-slate-950/70 border border-emerald-500/30 rounded-xl p-3 text-center">
+            <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Build Speed</div>
+            <div class="text-xl font-bold text-emerald-400 mt-0.5">20.4 ms</div>
+            <div class="text-[11px] text-emerald-500/80">17x &lt; GCC</div>
+          </div>
+          <div class="bg-slate-950/70 border border-indigo-500/30 rounded-xl p-3 text-center col-span-2 sm:col-span-1">
+            <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Dependencies</div>
+            <div class="text-xl font-bold text-indigo-400 mt-0.5">Zero</div>
+            <div class="text-[11px] text-indigo-400/80">0-LLVM / 0-CRT</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div class="flex flex-wrap items-center gap-2" id="categoryTabs">
+        <button onclick="switchTab('runtime')" id="tab-runtime" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20">
+          🚀 Execution Runtime (ms)
+        </button>
+        <button onclick="switchTab('binary')" id="tab-binary" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800">
+          💎 Binary Size (KB)
+        </button>
+        <button onclick="switchTab('compile')" id="tab-compile" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800">
+          ⚡ Compiler Build Speed (ms)
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs text-slate-400" id="sortNotice">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Lower values are faster / better
+      </div>
+    </div>
+
+    <!-- TAB 1: RUNTIME BENCHMARKS -->
+    <section id="panel-runtime" class="space-y-6">
+      
+      <!-- Workload Selector Pills -->
+      <div class="flex flex-wrap items-center gap-2 bg-slate-900/50 p-2 rounded-xl border border-slate-800/80" id="workloadPills">
+        <!-- Injected via JS -->
+      </div>
+
+      <!-- Main Workload Card -->
+      <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+          <div>
+            <h2 id="workloadTitle" class="text-xl font-bold text-white flex items-center gap-2.5">
+              <span>Recursive Fibonacci 32</span>
+            </h2>
+            <p id="workloadDesc" class="text-xs text-slate-400 mt-1">
+              Deep recursive call-tree evaluation (2,178,309 calls). Tests stack frame allocation and call dispatch speed.
+            </p>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <span class="px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 font-mono">11 timed runs</span>
+            <span class="px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 font-mono">Target: i5-11400</span>
+          </div>
+        </div>
+
+        <!-- Animated Bars Container -->
+        <div class="space-y-4" id="barsList">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- Matrix Grid: All 6 Workloads at a glance -->
+      <div class="space-y-3">
+        <h3 class="text-base font-semibold text-slate-300 flex items-center gap-2">
+          <span>Complete Workload Performance Summary</span>
+          <span class="text-xs text-slate-500 font-normal">(All times in milliseconds)</span>
+        </h3>
+        <div class="overflow-x-auto rounded-xl border border-slate-800/80 bg-slate-900/30">
+          <table class="w-full text-left text-xs sm:text-sm">
+            <thead class="bg-slate-900/80 text-slate-400 uppercase tracking-wider text-[11px] border-b border-slate-800 font-semibold">
+              <tr>
+                <th class="p-3.5">Workload</th>
+                <th class="p-3.5 text-center text-amber-400">C (GCC)</th>
+                <th class="p-3.5 text-center text-orange-400">Zig (0.17)</th>
+                <th class="p-3.5 text-center text-red-400">Rust (-O)</th>
+                <th class="p-3.5 text-center text-cyan-400 bg-cyan-950/20">PURWA</th>
+                <th class="p-3.5 text-center text-sky-400">Go (1.26)</th>
+                <th class="p-3.5 text-center text-emerald-400">Node.js</th>
+                <th class="p-3.5 text-center text-yellow-400">Python 3</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/60 font-mono text-xs">
+              <tr class="hover:bg-slate-800/30 transition-colors">
+                <td class="p-3.5 font-sans font-medium text-slate-200">1. Recursive Fibonacci 32</td>
+                <td class="p-3.5 text-center text-slate-300">13.44 ms</td>
+                <td class="p-3.5 text-center text-slate-300">17.61 ms</td>
+                <td class="p-3.5 text-center text-slate-300">20.09 ms</td>
+                <td class="p-3.5 text-center font-bold text-cyan-400 bg-cyan-950/30">28.39 ms</td>
+                <td class="p-3.5 text-center text-slate-400">35.03 ms</td>
+                <td class="p-3.5 text-center text-slate-400">124.63 ms</td>
+                <td class="p-3.5 text-center text-slate-500">717.12 ms</td>
+              </tr>
+              <tr class="hover:bg-slate-800/30 transition-colors">
+                <td class="p-3.5 font-sans font-medium text-slate-200">2. Loop Summation (5M)</td>
+                <td class="p-3.5 text-center text-slate-300">8.55 ms</td>
+                <td class="p-3.5 text-center font-bold text-orange-400">7.43 ms</td>
+                <td class="p-3.5 text-center text-slate-300">9.99 ms</td>
+                <td class="p-3.5 text-center font-bold text-cyan-400 bg-cyan-950/30">10.39 ms</td>
+                <td class="p-3.5 text-center text-slate-400">19.36 ms</td>
+                <td class="p-3.5 text-center text-slate-400">124.34 ms</td>
+                <td class="p-3.5 text-center text-slate-500">650.39 ms</td>
+              </tr>
+              <tr class="hover:bg-slate-800/30 transition-colors">
+                <td class="p-3.5 font-sans font-medium text-slate-200">3. In-Place TCO (20M)</td>
+                <td class="p-3.5 text-center text-slate-300">8.21 ms</td>
+                <td class="p-3.5 text-center font-bold text-orange-400">7.63 ms</td>
+                <td class="p-3.5 text-center text-slate-300">9.91 ms</td>
+                <td class="p-3.5 text-center font-bold text-cyan-400 bg-cyan-950/30">16.65 ms</td>
+                <td class="p-3.5 text-center text-slate-400">28.92 ms</td>
+                <td class="p-3.5 text-center text-slate-400">107.56 ms</td>
+                <td class="p-3.5 text-center text-slate-500">2082.79 ms</td>
+              </tr>
+              <tr class="hover:bg-slate-800/30 transition-colors">
+                <td class="p-3.5 font-sans font-medium text-slate-200">4. Takeuchi tak(24,16,8)</td>
+                <td class="p-3.5 text-center text-slate-300">13.04 ms</td>
+                <td class="p-3.5 text-center font-bold text-orange-400">12.62 ms</td>
+                <td class="p-3.5 text-center text-slate-300">15.14 ms</td>
+                <td class="p-3.5 text-center font-bold text-cyan-400 bg-cyan-950/30">15.68 ms</td>
+                <td class="p-3.5 text-center text-slate-400">22.55 ms</td>
+                <td class="p-3.5 text-center text-slate-400">99.38 ms</td>
+                <td class="p-3.5 text-center text-slate-500">314.51 ms</td>
+              </tr>
+              <tr class="hover:bg-slate-800/30 transition-colors">
+                <td class="p-3.5 font-sans font-medium text-slate-200">5. Sieve of Eratosthenes</td>
+                <td class="p-3.5 text-center text-slate-300">8.39 ms</td>
+                <td class="p-3.5 text-center font-bold text-orange-400">7.83 ms</td>
+                <td class="p-3.5 text-center text-slate-300">10.45 ms</td>
+                <td class="p-3.5 text-center font-bold text-cyan-400 bg-cyan-950/30">8.41 ms</td>
+                <td class="p-3.5 text-center text-slate-400">15.89 ms</td>
+                <td class="p-3.5 text-center text-slate-400">91.01 ms</td>
+                <td class="p-3.5 text-center text-slate-500">109.83 ms</td>
+              </tr>
+              <tr class="hover:bg-slate-800/30 transition-colors">
+                <td class="p-3.5 font-sans font-medium text-slate-200">6. Mandelbrot Set (200x200)</td>
+                <td class="p-3.5 text-center text-slate-300">11.36 ms</td>
+                <td class="p-3.5 text-center font-bold text-orange-400">10.72 ms</td>
+                <td class="p-3.5 text-center text-slate-300">13.97 ms</td>
+                <td class="p-3.5 text-center font-bold text-cyan-400 bg-cyan-950/30">17.00 ms</td>
+                <td class="p-3.5 text-center text-slate-400">19.88 ms</td>
+                <td class="p-3.5 text-center text-slate-400">112.48 ms</td>
+                <td class="p-3.5 text-center text-slate-500">443.94 ms</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: BINARY SIZE COMPARISON -->
+    <section id="panel-binary" class="hidden space-y-6">
+      <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
+        <div class="border-b border-slate-800/80 pb-4">
+          <h2 class="text-xl font-bold text-white">Native Standalone Binary Size (KB)</h2>
+          <p class="text-xs text-slate-400 mt-1">
+            Exact byte size of the compiled standalone PE32+ executable without any external shared libraries or runtime.
+          </p>
+        </div>
+
+        <div class="space-y-4" id="binaryBars">
+          <!-- Injected via JS -->
+        </div>
+
+        <div class="p-4 rounded-xl bg-cyan-950/30 border border-cyan-500/30 flex items-start gap-3 text-xs text-cyan-300">
+          <span class="text-base">💡</span>
+          <div>
+            <strong class="text-cyan-200 font-semibold">Why is Purwa so tiny?</strong> Purwa emits direct machine code byte-by-byte without bundling large runtime libraries, C runtimes (0-CRT), or heavy garbage collectors. A full standalone program is just <strong>5.5 KB</strong>!
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: COMPILER BUILD SPEED -->
+    <section id="panel-compile" class="hidden space-y-6">
+      <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-6 shadow-xl space-y-6">
+        <div class="border-b border-slate-800/80 pb-4">
+          <h2 class="text-xl font-bold text-white">Compiler Build Speed (Milliseconds)</h2>
+          <p class="text-xs text-slate-400 mt-1">
+            Time required to parse, analyze, compile, and link the benchmark program into a native executable binary (Median of 5 runs).
+          </p>
+        </div>
+
+        <div class="space-y-4" id="compileBars">
+          <!-- Injected via JS -->
+        </div>
+
+        <div class="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex items-start gap-3 text-xs text-emerald-300">
+          <span class="text-base">⚡</span>
+          <div>
+            <strong class="text-emerald-200 font-semibold">Instant Developer Feedback Loop:</strong> Purwa compiles in <strong>20.4 ms</strong> — over 17x faster than GCC and 710x faster than Zig ReleaseFast. No LLVM bottleneck!
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 pt-6 pb-12 text-center text-xs text-slate-500 space-y-2">
+      <p>Official Purwa Language Benchmark Suite · Verified with automated regression and hardening gates.</p>
+      <p class="font-mono text-[11px] text-slate-600">Run locally: <span class="text-slate-400">powershell -File benchmarks/run_benchmarks.ps1</span></p>
+    </footer>
+
+  </div>
+
+  <script>
+    const workloads = [
+      {
+        id: 'fib',
+        title: '1. Recursive Fibonacci 32',
+        desc: 'Deep recursive call tree (2,178,309 calls). Tests register calling convention, stack frame management, and fast call dispatch.',
+        data: [
+          { lang: 'C (GCC -O2)', time: 13.44, color: 'from-amber-500 to-amber-600', textCol: 'text-amber-400', isPurwa: false },
+          { lang: 'Zig (0.17 Fast)', time: 17.61, color: 'from-orange-500 to-orange-600', textCol: 'text-orange-400', isPurwa: false },
+          { lang: 'Rust (-O)', time: 20.09, color: 'from-red-500 to-red-600', textCol: 'text-red-400', isPurwa: false },
+          { lang: 'PURWA (v37.11)', time: 28.39, color: 'from-cyan-400 via-sky-400 to-indigo-500', textCol: 'text-cyan-300', isPurwa: true },
+          { lang: 'Go (1.26)', time: 35.03, color: 'from-sky-500 to-sky-600', textCol: 'text-sky-400', isPurwa: false },
+          { lang: 'Node.js (v25)', time: 124.63, color: 'from-emerald-500 to-emerald-600', textCol: 'text-emerald-400', isPurwa: false },
+          { lang: 'Python (3.11)', time: 717.12, color: 'from-yellow-500 to-yellow-600', textCol: 'text-yellow-400', isPurwa: false },
+        ]
+      },
+      {
+        id: 'sum',
+        title: '2. Loop Summation (5,000,000 Iterations)',
+        desc: 'Tight arithmetic loop accumulating 5 million integers. Tests integer ALU efficiency, branch prediction, and register counter loops.',
+        data: [
+          { lang: 'Zig (0.17 Fast)', time: 7.43, color: 'from-orange-500 to-orange-600', textCol: 'text-orange-400', isPurwa: false },
+          { lang: 'C (GCC -O2)', time: 8.55, color: 'from-amber-500 to-amber-600', textCol: 'text-amber-400', isPurwa: false },
+          { lang: 'Rust (-O)', time: 9.99, color: 'from-red-500 to-red-600', textCol: 'text-red-400', isPurwa: false },
+          { lang: 'PURWA (v37.11)', time: 10.39, color: 'from-cyan-400 via-sky-400 to-indigo-500', textCol: 'text-cyan-300', isPurwa: true },
+          { lang: 'Go (1.26)', time: 19.36, color: 'from-sky-500 to-sky-600', textCol: 'text-sky-400', isPurwa: false },
+          { lang: 'Node.js (v25)', time: 124.34, color: 'from-emerald-500 to-emerald-600', textCol: 'text-emerald-400', isPurwa: false },
+          { lang: 'Python (3.11)', time: 650.39, color: 'from-yellow-500 to-yellow-600', textCol: 'text-yellow-400', isPurwa: false },
+        ]
+      },
+      {
+        id: 'tco',
+        title: '3. In-Place Tail Call Optimization (20M Iterations)',
+        desc: 'Self-recursive tail calls converted into pure closed-register loops (add rax, 1; sub rcx, 1; jne). Zero stack traffic.',
+        data: [
+          { lang: 'Zig (0.17 Fast)', time: 7.63, color: 'from-orange-500 to-orange-600', textCol: 'text-orange-400', isPurwa: false },
+          { lang: 'C (GCC -O2)', time: 8.21, color: 'from-amber-500 to-amber-600', textCol: 'text-amber-400', isPurwa: false },
+          { lang: 'Rust (-O)', time: 9.91, color: 'from-red-500 to-red-600', textCol: 'text-red-400', isPurwa: false },
+          { lang: 'PURWA (v37.11)', time: 16.65, color: 'from-cyan-400 via-sky-400 to-indigo-500', textCol: 'text-cyan-300', isPurwa: true },
+          { lang: 'Go (1.26)', time: 28.92, color: 'from-sky-500 to-sky-600', textCol: 'text-sky-400', isPurwa: false },
+          { lang: 'Node.js (v25)', time: 107.56, color: 'from-emerald-500 to-emerald-600', textCol: 'text-emerald-400', isPurwa: false },
+          { lang: 'Python (3.11)', time: 2082.79, color: 'from-yellow-500 to-yellow-600', textCol: 'text-yellow-400', isPurwa: false },
+        ]
+      },
+      {
+        id: 'tak',
+        title: '4. Takeuchi Function tak(24, 16, 8)',
+        desc: 'Combinatorial ternary recursion benchmark testing deep branch predictor strain and register preservation.',
+        data: [
+          { lang: 'Zig (0.17 Fast)', time: 12.62, color: 'from-orange-500 to-orange-600', textCol: 'text-orange-400', isPurwa: false },
+          { lang: 'C (GCC -O2)', time: 13.04, color: 'from-amber-500 to-amber-600', textCol: 'text-amber-400', isPurwa: false },
+          { lang: 'Rust (-O)', time: 15.14, color: 'from-red-500 to-red-600', textCol: 'text-red-400', isPurwa: false },
+          { lang: 'PURWA (v37.11)', time: 15.68, color: 'from-cyan-400 via-sky-400 to-indigo-500', textCol: 'text-cyan-300', isPurwa: true },
+          { lang: 'Go (1.26)', time: 22.55, color: 'from-sky-500 to-sky-600', textCol: 'text-sky-400', isPurwa: false },
+          { lang: 'Node.js (v25)', time: 99.38, color: 'from-emerald-500 to-emerald-600', textCol: 'text-emerald-400', isPurwa: false },
+          { lang: 'Python (3.11)', time: 314.51, color: 'from-yellow-500 to-yellow-600', textCol: 'text-yellow-400', isPurwa: false },
+        ]
+      },
+      {
+        id: 'sieve',
+        title: '5. Sieve of Eratosthenes (100,000 Primes)',
+        desc: 'Prime sieve algorithm testing linear byte memory allocation (100 KB array), inner loop index strides, and memory addressing.',
+        data: [
+          { lang: 'Zig (0.17 Fast)', time: 7.83, color: 'from-orange-500 to-orange-600', textCol: 'text-orange-400', isPurwa: false },
+          { lang: 'C (GCC -O2)', time: 8.39, color: 'from-amber-500 to-amber-600', textCol: 'text-amber-400', isPurwa: false },
+          { lang: 'PURWA (v37.11)', time: 8.41, color: 'from-cyan-400 via-sky-400 to-indigo-500', textCol: 'text-cyan-300', isPurwa: true },
+          { lang: 'Rust (-O)', time: 10.45, color: 'from-red-500 to-red-600', textCol: 'text-red-400', isPurwa: false },
+          { lang: 'Go (1.26)', time: 15.89, color: 'from-sky-500 to-sky-600', textCol: 'text-sky-400', isPurwa: false },
+          { lang: 'Node.js (v25)', time: 91.01, color: 'from-emerald-500 to-emerald-600', textCol: 'text-emerald-400', isPurwa: false },
+          { lang: 'Python (3.11)', time: 109.83, color: 'from-yellow-500 to-yellow-600', textCol: 'text-yellow-400', isPurwa: false },
+        ]
+      },
+      {
+        id: 'mandel',
+        title: '6. Mandelbrot Set (200 x 200 Matrix)',
+        desc: 'Fixed-point complex arithmetic matrix computation with nested loops and inner breakout conditions.',
+        data: [
+          { lang: 'Zig (0.17 Fast)', time: 10.72, color: 'from-orange-500 to-orange-600', textCol: 'text-orange-400', isPurwa: false },
+          { lang: 'C (GCC -O2)', time: 11.36, color: 'from-amber-500 to-amber-600', textCol: 'text-amber-400', isPurwa: false },
+          { lang: 'Rust (-O)', time: 13.97, color: 'from-red-500 to-red-600', textCol: 'text-red-400', isPurwa: false },
+          { lang: 'PURWA (v37.11)', time: 17.00, color: 'from-cyan-400 via-sky-400 to-indigo-500', textCol: 'text-cyan-300', isPurwa: true },
+          { lang: 'Go (1.26)', time: 19.88, color: 'from-sky-500 to-sky-600', textCol: 'text-sky-400', isPurwa: false },
+          { lang: 'Node.js (v25)', time: 112.48, color: 'from-emerald-500 to-emerald-600', textCol: 'text-emerald-400', isPurwa: false },
+          { lang: 'Python (3.11)', time: 443.94, color: 'from-yellow-500 to-yellow-600', textCol: 'text-yellow-400', isPurwa: false },
+        ]
+      }
+    ];
+
+    const binaryData = [
+      { lang: 'PURWA (v37.11)', size: 5.5, bytes: '5,632 B', color: 'from-cyan-400 to-indigo-500', textCol: 'text-cyan-300', note: '1.0x (Lightest Native)', isPurwa: true },
+      { lang: 'C (GCC 16.1 -O2)', size: 264.0, bytes: '270,385 B', color: 'from-amber-500 to-amber-600', textCol: 'text-amber-400', note: '48x larger', isPurwa: false },
+      { lang: 'Zig (0.17 Fast)', size: 814.5, bytes: '834,048 B', color: 'from-orange-500 to-orange-600', textCol: 'text-orange-400', note: '148x larger', isPurwa: false },
+      { lang: 'Go (1.26.5)', size: 2425.0, bytes: '2,483,200 B', color: 'from-sky-500 to-sky-600', textCol: 'text-sky-400', note: '441x larger', isPurwa: false },
+      { lang: 'Rust (1.97 -O)', size: 4805.3, bytes: '4,920,605 B', color: 'from-red-500 to-red-600', textCol: 'text-red-400', note: '873x larger', isPurwa: false },
+    ];
+
+    const compileData = [
+      { lang: 'PURWA (purwac)', time: 20.4, color: 'from-cyan-400 to-indigo-500', textCol: 'text-cyan-300', note: '1.0x (Instant Build)', isPurwa: true },
+      { lang: 'C (GCC 16.1 -O2)', time: 350.0, color: 'from-amber-500 to-amber-600', textCol: 'text-amber-400', note: '17x slower', isPurwa: false },
+      { lang: 'Go (1.26.5)', time: 394.8, color: 'from-sky-500 to-sky-600', textCol: 'text-sky-400', note: '19x slower', isPurwa: false },
+      { lang: 'Rust (rustc 1.97 -O)', time: 1437.4, color: 'from-red-500 to-red-600', textCol: 'text-red-400', note: '70x slower', isPurwa: false },
+      { lang: 'Zig (0.17 ReleaseFast)', time: 14482.5, color: 'from-orange-500 to-orange-600', textCol: 'text-orange-400', note: '710x slower', isPurwa: false },
+    ];
+
+    let currentWorkloadIdx = 0;
+
+    function renderWorkloadPills() {
+      const container = document.getElementById('workloadPills');
+      container.innerHTML = workloads.map((w, idx) => `
+        <button onclick="selectWorkload(${idx})" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          idx === currentWorkloadIdx 
+            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm' 
+            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+        }">
+          ${w.title.split('.')[1] || w.title}
+        </button>
+      `).join('');
+    }
+
+    function selectWorkload(idx) {
+      currentWorkloadIdx = idx;
+      renderWorkloadPills();
+      renderCurrentWorkload();
+    }
+
+    function renderCurrentWorkload() {
+      const wl = workloads[currentWorkloadIdx];
+      document.getElementById('workloadTitle').innerHTML = `<span>${wl.title}</span>`;
+      document.getElementById('workloadDesc').innerText = wl.desc;
+
+      const maxTime = Math.max(...wl.data.map(d => d.time));
+      const minTime = Math.min(...wl.data.map(d => d.time));
+
+      const container = document.getElementById('barsList');
+      container.innerHTML = wl.data.map(d => {
+        const percent = Math.max(6, Math.min(100, (d.time / maxTime) * 100));
+        const isFastest = d.time === minTime;
+        const ratio = (d.time / minTime).toFixed(2);
+
+        return `
+          <div class="space-y-1.5 group">
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="font-bold ${d.textCol} ${d.isPurwa ? 'text-sm' : ''}">${d.lang}</span>
+                ${d.isPurwa ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-cyan-400/20 text-cyan-300 border border-cyan-400/40 font-mono">PURWA</span>' : ''}
+                ${isFastest ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">FASTEST</span>' : ''}
+              </div>
+              <div class="font-mono text-slate-300">
+                <span class="font-bold ${d.isPurwa ? 'text-cyan-400 text-sm' : 'text-slate-200'}">${d.time.toFixed(2)} ms</span>
+                <span class="text-slate-500 text-[11px] ml-1.5">(${ratio}x)</span>
+              </div>
+            </div>
+            
+            <div class="h-4 bg-slate-950/80 rounded-full overflow-hidden p-0.5 border border-slate-800 relative">
+              <div class="h-full rounded-full bg-gradient-to-r ${d.color} animate-bar ${d.isPurwa ? 'glow-purwa ring-1 ring-cyan-300' : ''}" style="width: ${percent}%;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderBinaryBars() {
+      const container = document.getElementById('binaryBars');
+      const maxSize = Math.max(...binaryData.map(d => d.size));
+
+      container.innerHTML = binaryData.map(d => {
+        const percent = Math.max(3, (d.size / maxSize) * 100);
+        return `
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="font-bold ${d.textCol}">${d.lang}</span>
+                <span class="text-slate-500 text-[11px]">(${d.bytes})</span>
+              </div>
+              <div class="font-mono">
+                <span class="font-bold ${d.isPurwa ? 'text-cyan-400 text-sm' : 'text-slate-200'}">${d.size} KB</span>
+                <span class="text-slate-400 text-[11px] ml-1.5 font-sans">${d.note}</span>
+              </div>
+            </div>
+            <div class="h-4 bg-slate-950/80 rounded-full overflow-hidden p-0.5 border border-slate-800">
+              <div class="h-full rounded-full bg-gradient-to-r ${d.color} animate-bar ${d.isPurwa ? 'glow-purwa' : ''}" style="width: ${percent}%;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderCompileBars() {
+      const container = document.getElementById('compileBars');
+      const maxTime = Math.max(...compileData.map(d => d.time));
+
+      container.innerHTML = compileData.map(d => {
+        const percent = Math.max(2, (d.time / maxTime) * 100);
+        return `
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2">
+                <span class="font-bold ${d.textCol}">${d.lang}</span>
+              </div>
+              <div class="font-mono">
+                <span class="font-bold ${d.isPurwa ? 'text-cyan-400 text-sm' : 'text-slate-200'}">${d.time.toFixed(1)} ms</span>
+                <span class="text-slate-400 text-[11px] ml-1.5 font-sans">(${d.note})</span>
+              </div>
+            </div>
+            <div class="h-4 bg-slate-950/80 rounded-full overflow-hidden p-0.5 border border-slate-800">
+              <div class="h-full rounded-full bg-gradient-to-r ${d.color} animate-bar ${d.isPurwa ? 'glow-purwa' : ''}" style="width: ${percent}%;"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function switchTab(tabId) {
+      ['runtime', 'binary', 'compile'].forEach(id => {
+        const panel = document.getElementById('panel-' + id);
+        const btn = document.getElementById('tab-' + id);
+        if (id === tabId) {
+          panel.classList.remove('hidden');
+          btn.className = 'px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20';
+        } else {
+          panel.classList.add('hidden');
+          btn.className = 'px-4 py-2 rounded-xl text-sm font-semibold transition-all bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800';
+        }
+      });
+    }
+
+    // Init
+    renderWorkloadPills();
+    renderCurrentWorkload();
+    renderBinaryBars();
+    renderCompileBars();
+  </script>
+</body>
+</html>
