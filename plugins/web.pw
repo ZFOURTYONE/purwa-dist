@@ -1,0 +1,2 @@
+// plugins/web.pw — Modern Web & REST API Framework for Purwa (Plugin Alias)
+import "web"

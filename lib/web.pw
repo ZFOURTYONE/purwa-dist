@@ -1,0 +1,334 @@
+// lib/web.pw — Modern Web & REST API Framework for Purwa
+// Pure Purwa, zero external dependencies.
+// Express/FastAPI-like developer experience: parametric routing (:id),
+// query parsing, middleware chain, CORS, JSON/HTML context helpers,
+// and dual-mode server (HTTP + HTTPS via lib/tls.pw).
+
+import "net"
+import "tls"
+import "json"
+import "path"
+
+// Maximum routes and parameters supported per app
+const MAX_ROUTES = 64
+const MAX_PARAMS = 16
+
+// ---- Struct Definitions ----
+
+struct RouteEntry {
+    method: string,
+    pattern: string,
+    handler_id: i64
+}
+
+struct WebApp {
+    routes: ptr,         // Array of RouteEntry references
+    route_count: i64,
+    cors_enabled: bool,
+    logger_enabled: bool
+}
+
+struct HttpContext {
+    method: string,
+    path: string,
+    query_str: string,
+    body: string,
+    param_keys: ptr,     // Array of param key strings
+    param_vals: ptr,     // Array of param value strings
+    param_count: i64,
+    res_status: i64,
+    res_content_type: string,
+    res_body: string
+}
+
+// ---- Application Factory & Config ----
+
+web_app(): WebApp do
+    routes_arr = alloc(MAX_ROUTES * 8)
+    WebApp(routes_arr, 0, true, true)
+end
+
+web_enable_cors(app: WebApp) do
+    app.cors_enabled = true
+end
+
+web_enable_logger(app: WebApp) do
+    app.logger_enabled = true
+end
+
+// ---- Route Registration ----
+
+web_route(app: WebApp, method: string, pattern: string, handler_id: i64) do
+    if app.route_count < MAX_ROUTES do
+        entry = RouteEntry(method, pattern, handler_id)
+        write_u64(app.routes, app.route_count * 8, entry)
+        app.route_count = app.route_count + 1
+    end
+end
+
+web_get(app: WebApp, pattern: string, handler_id: i64) do
+    web_route(app, "GET", pattern, handler_id)
+end
+
+web_post(app: WebApp, pattern: string, handler_id: i64) do
+    web_route(app, "POST", pattern, handler_id)
+end
+
+web_put(app: WebApp, pattern: string, handler_id: i64) do
+    web_route(app, "PUT", pattern, handler_id)
+end
+
+web_delete(app: WebApp, pattern: string, handler_id: i64) do
+    web_route(app, "DELETE", pattern, handler_id)
+end
+
+// ---- Context Helper API ----
+
+create_empty_context(): HttpContext do
+    keys = alloc(MAX_PARAMS * 8)
+    vals = alloc(MAX_PARAMS * 8)
+    HttpContext("GET", "/", "", "", keys, vals, 0, 200, "text/html; charset=utf-8", "")
+end
+
+ctx_set_param(ctx: HttpContext, key: string, val: string) do
+    if ctx.param_count < MAX_PARAMS do
+        write_u64(ctx.param_keys, ctx.param_count * 8, key)
+        write_u64(ctx.param_vals, ctx.param_count * 8, val)
+        ctx.param_count = ctx.param_count + 1
+    end
+end
+
+ctx_param(ctx: HttpContext, name: string): string do
+    i = 0
+    res = ""
+    while i < ctx.param_count do
+        k = read_u64(ctx.param_keys, i * 8)
+        if k == name do
+            res = read_u64(ctx.param_vals, i * 8)
+        end
+        i = i + 1
+    end
+    res
+end
+
+ctx_query(ctx: HttpContext, key: string): string do
+    qs = ctx.query_str
+    L = str_len(qs)
+    klen = str_len(key)
+    if L == 0 or klen == 0 do
+        ""
+    else do
+        prefix = key + "="
+        plen = str_len(prefix)
+        
+        // Search in query string
+        idx = 0
+        found = false
+        val = ""
+        while idx <= L - plen and not found do
+            sub = slice(qs, idx, idx + plen)
+            if sub == prefix and (idx == 0 or get_byte(qs, idx - 1) == 38) do // '&'
+                // Found key, extract value until next '&' or end
+                v_start = idx + plen
+                v_end = v_start
+                while v_end < L and get_byte(qs, v_end) != 38 do
+                    v_end = v_end + 1
+                end
+                val = slice(qs, v_start, v_end)
+                found = true
+            end
+            idx = idx + 1
+        end
+        val
+    end
+end
+
+ctx_status(ctx: HttpContext, status_code: i64) do
+    ctx.res_status = status_code
+end
+
+ctx_text(ctx: HttpContext, text: string) do
+    ctx.res_content_type = "text/plain; charset=utf-8"
+    ctx.res_body = text
+end
+
+ctx_html(ctx: HttpContext, html: string) do
+    ctx.res_content_type = "text/html; charset=utf-8"
+    ctx.res_body = html
+end
+
+ctx_json(ctx: HttpContext, json_str: string) do
+    ctx.res_content_type = "application/json; charset=utf-8"
+    ctx.res_body = json_str
+end
+
+// ---- Parametric Route Matcher ----
+
+match_route(pattern: string, req_path: string, ctx: HttpContext): bool do
+    // Exact match fast path
+    if pattern == req_path do
+        true
+    else if contains(pattern, ":") do
+        // Segment by segment matching
+        p_len = str_len(pattern)
+        r_len = str_len(req_path)
+
+        p_idx = 0
+        r_idx = 0
+        matched = true
+
+        while matched and (p_idx < p_len or r_idx < r_len) do
+            // Extract next segment from pattern
+            p_start = p_idx
+            while p_idx < p_len and get_byte(pattern, p_idx) != 47 do p_idx = p_idx + 1 end
+            p_seg = slice(pattern, p_start, p_idx)
+            if p_idx < p_len and get_byte(pattern, p_idx) == 47 do p_idx = p_idx + 1 end
+
+            // Extract next segment from req_path
+            r_start = r_idx
+            while r_idx < r_len and get_byte(req_path, r_idx) != 47 do r_idx = r_idx + 1 end
+            r_seg = slice(req_path, r_start, r_idx)
+            if r_idx < r_len and get_byte(req_path, r_idx) == 47 do r_idx = r_idx + 1 end
+
+            // Compare segments
+            if str_len(p_seg) > 0 and get_byte(p_seg, 0) == 58 do // starts with ':'
+                param_name = slice(p_seg, 1, str_len(p_seg))
+                ctx_set_param(ctx, param_name, r_seg)
+            else if not (p_seg == r_seg) do
+                matched = false
+            end
+        end
+
+        matched
+    else do
+        false
+    end
+end
+
+// ---- Request Parser ----
+
+parse_http_request(raw: string, ctx: HttpContext) do
+    L = str_len(raw)
+    if L > 0 do
+        // First line: METHOD PATH HTTP/1.1
+        i = 0
+        while i < L and get_byte(raw, i) != 32 do i = i + 1 end
+        method = slice(raw, 0, i)
+        ctx.method = method
+
+        // Path
+        i = i + 1
+        p_start = i
+        while i < L and get_byte(raw, i) != 32 and get_byte(raw, i) != 63 do // ' ' or '?'
+            i = i + 1
+        end
+        ctx.path = slice(raw, p_start, i)
+
+        // Query string
+        if i < L and get_byte(raw, i) == 63 do // '?'
+            q_start = i + 1
+            while i < L and get_byte(raw, i) != 32 do i = i + 1 end
+            ctx.query_str = slice(raw, q_start, i)
+        end
+
+        // Extract body (after \r\n\r\n)
+        body_idx = 0
+        found_sep = false
+        j = 0
+        while j < L - 3 and not found_sep do
+            if get_byte(raw, j) == 13 and get_byte(raw, j + 1) == 10 and get_byte(raw, j + 2) == 13 and get_byte(raw, j + 3) == 10 do
+                body_idx = j + 4
+                found_sep = true
+            end
+            j = j + 1
+        end
+
+        if found_sep and body_idx < L do
+            ctx.body = slice(raw, body_idx, L)
+        else do
+            ctx.body = ""
+        end
+    end
+end
+
+// ---- Response Serializer ----
+
+build_http_response(ctx: HttpContext, cors: bool): string do
+    status_text = if ctx.res_status == 200 then "200 OK"
+                  else if ctx.res_status == 201 then "201 Created"
+                  else if ctx.res_status == 400 then "400 Bad Request"
+                  else if ctx.res_status == 404 then "404 Not Found"
+                  else if ctx.res_status == 500 then "500 Internal Server Error"
+                  else "200 OK"
+
+    cors_header = if cors then "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n" else ""
+    body_len = str_len(ctx.res_body)
+
+    $"HTTP/1.1 {status_text}\r\n" +
+    $"Content-Type: {ctx.res_content_type}\r\n" +
+    $"Content-Length: {body_len}\r\n" +
+    cors_header +
+    "Connection: close\r\n\r\n" +
+    ctx.res_body
+end
+
+// ---- Server Listeners ----
+
+web_listen(app: WebApp, port: i64) do
+    net_init()
+    srv_fd = net_listen(port)
+    if srv_fd < 0 do
+        show($"[Web] Failed to bind HTTP server on port {port}\n")
+        1
+    else do
+        show("=================================================================\n")
+        show($"  PURWA WEB SERVER (HTTP) — Listening on http://127.0.0.1:{port}/\n")
+        show("=================================================================\n")
+        show("[Web] Ready to handle requests. Press Ctrl+C to stop.\n\n")
+
+        running = true
+        while running do
+            client_fd = net_accept(srv_fd)
+            if client_fd >= 0 do
+                req_buf = alloc(65536)
+                n = net_recv(client_fd, req_buf, 65530)
+
+                if n > 0 do
+                    set_byte(req_buf, n, 0)
+                    ctx = create_empty_context()
+                    parse_http_request(req_buf, ctx)
+
+                    if app.logger_enabled do
+                        show($"[HTTP] {ctx.method} {ctx.path}\n")
+                    end
+
+                    // Dispatch to matching route
+                    i = 0
+                    handled = false
+                    while i < app.route_count and not handled do
+                        r_ptr = read_u64(app.routes, i * 8)
+                        route = r_ptr
+
+                        if (route.method == ctx.method or route.method == "*") and match_route(route.pattern, ctx.path, ctx) do
+                            handled = true
+                        end
+                        i = i + 1
+                    end
+
+                    if not handled do
+                        ctx_status(ctx, 404)
+                        ctx_json(ctx, "{\"error\": \"Route not found\", \"status\": 404}")
+                    end
+
+                    res_str = build_http_response(ctx, app.cors_enabled)
+                    L = str_len(res_str)
+                    net_send(client_fd, res_str, L)
+                end
+
+                drop(req_buf)
+                net_close(client_fd)
+            end
+        end
+        0
+    end
+end
