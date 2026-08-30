@@ -1,0 +1,2 @@
+// plugins/webui.pw — Purwa Sovereign Native HTML/CSS Browser & UI Engine (Plugin Alias)
+import "htmlview"
