@@ -591,9 +591,9 @@ fl_layout(w: Widget, origin_x: i64, origin_y: i64) do
 end
 
 // ------------------------------------------------------------
-// 7. Flutter Render & Event Engine (Native ClearType Typography)
+// 7. Pass 1: Render All Canvas Backgrounds, Boxes, and Icons
 // ------------------------------------------------------------
-fl_render_node(app: FlutterApp, w: Widget): i64 do
+fl_render_canvas_pass(app: FlutterApp, w: Widget): i64 do
     triggered_action = 0
     x = w.layout_x
     y = w.layout_y
@@ -611,12 +611,9 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
             canvas_draw_rect(app.canvas, x, y, mw, mh, w.border_r, w.border_g, w.border_b, 255, 0)
         end
         if w.child != 0 do
-            act = fl_render_node(app, w.child)
+            act = fl_render_canvas_pass(app, w.child)
             if act != 0 do triggered_action = act end
         end
-    else if w.kind == W_TEXT do
-        gui_blit_canvas(app.win, app.canvas)
-        gui_draw_text(app.win, w.text, x, y + (mh - 16) / 2, w.text_size, w.text_r, w.text_g, w.text_b)
     else if w.kind == W_ICON do
         fl_draw_icon(app.canvas, w.icon_id, x + 2, y + 2, w.text_r, w.text_g, w.text_b)
     else if w.kind == W_ELEV_BTN or w.kind == W_CUPERTINO_BTN do
@@ -627,11 +624,6 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
         if is_hover do
             canvas_draw_rect(app.canvas, x, y, mw, mh, 255, 255, 255, 255, 0)
         end
-        gui_blit_canvas(app.win, app.canvas)
-        tw = gui_text_width(w.text, w.text_size)
-        tx = x + (mw - tw) / 2
-        ty = y + (mh - 16) / 2
-        gui_draw_text(app.win, w.text, tx, ty, w.text_size, w.text_r, w.text_g, w.text_b)
         if is_clicked do triggered_action = w.action_id end
     else if w.kind == W_OUTL_BTN do
         bg_r = if is_hover then FL_CARD_BORDER_R else FL_CARD_R
@@ -639,21 +631,8 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
         bg_b = if is_hover then FL_CARD_BORDER_B else FL_CARD_B
         canvas_draw_rect(app.canvas, x, y, mw, mh, bg_r, bg_g, bg_b, 255, 1)
         canvas_draw_rect(app.canvas, x, y, mw, mh, if is_hover then FL_PRIMARY_R else FL_CARD_BORDER_R, if is_hover then FL_PRIMARY_G else FL_CARD_BORDER_G, if is_hover then FL_PRIMARY_B else FL_CARD_BORDER_B, 255, 0)
-        gui_blit_canvas(app.win, app.canvas)
-        tw = gui_text_width(w.text, w.text_size)
-        tx = x + (mw - tw) / 2
-        ty = y + (mh - 16) / 2
-        gui_draw_text(app.win, w.text, tx, ty, w.text_size, w.text_r, w.text_g, w.text_b)
         if is_clicked do triggered_action = w.action_id end
     else if w.kind == W_TEXT_BTN do
-        gui_blit_canvas(app.win, app.canvas)
-        tw = gui_text_width(w.text, w.text_size)
-        tx = x + (mw - tw) / 2
-        ty = y + (mh - 16) / 2
-        txt_r = if is_hover then 255 else w.text_r
-        txt_g = if is_hover then 255 else w.text_g
-        txt_b = if is_hover then 255 else w.text_b
-        gui_draw_text(app.win, w.text, tx, ty, w.text_size, txt_r, txt_g, txt_b)
         if is_clicked do triggered_action = w.action_id end
     else if w.kind == W_FAB do
         canvas_draw_rect(app.canvas, x, y, mw, mh, if is_hover then w.border_r else w.bg_r, if is_hover then w.border_g else w.bg_g, if is_hover then w.border_b else w.bg_b, 255, 1)
@@ -661,14 +640,13 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
         if w.child != 0 do
             w.child.layout_x = x + (mw - 12) / 2
             w.child.layout_y = y + (mh - 12) / 2
-            fl_render_node(app, w.child)
+            act = fl_render_canvas_pass(app, w.child)
+            if act != 0 do triggered_action = act end
         end
         if is_clicked do triggered_action = w.action_id end
     else if w.kind == W_APP_BAR do
         canvas_draw_rect(app.canvas, x, y, mw, mh, w.bg_r, w.bg_g, w.bg_b, 255, 1)
         canvas_draw_line(app.canvas, x, y + mh - 1, x + mw, y + mh - 1, w.border_r, w.border_g, w.border_b, 255)
-        gui_blit_canvas(app.win, app.canvas)
-        gui_draw_text(app.win, w.text, x + 16, y + 10, w.text_size, w.text_r, w.text_g, w.text_b)
         if w.children != 0 do
             ax = x + mw - 32
             cnt = size(w.children)
@@ -677,7 +655,7 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
                 act_w = w.children[i]
                 act_w.layout_x = ax
                 act_w.layout_y = y + 14
-                act = fl_render_node(app, act_w)
+                act = fl_render_canvas_pass(app, act_w)
                 if act != 0 do triggered_action = act end
                 ax -= 28
                 i += 1
@@ -685,17 +663,14 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
         end
     else if w.kind == W_LIST_TILE do
         canvas_draw_rect(app.canvas, x, y, mw, mh, if is_hover then FL_CARD_BORDER_R else w.bg_r, if is_hover then FL_CARD_BORDER_G else w.bg_g, if is_hover then FL_CARD_BORDER_B else w.bg_b, 255, 1)
-        tx = x + 8
         if w.child != 0 do
-            fl_render_node(app, w.child)
-            tx += 22
+            act = fl_render_canvas_pass(app, w.child)
+            if act != 0 do triggered_action = act end
         end
-        gui_blit_canvas(app.win, app.canvas)
-        gui_draw_text(app.win, w.text, tx, y + (mh - 16) / 2, 1, w.text_r, w.text_g, w.text_b)
         if w.children != 0 and size(w.children) > 0 do
             tr = w.children[0]
             if tr != 0 do
-                act = fl_render_node(app, tr)
+                act = fl_render_canvas_pass(app, tr)
                 if act != 0 do triggered_action = act end
             end
         end
@@ -718,10 +693,6 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
         canvas_draw_rect(app.canvas, x, cy, cb_sz, cb_sz, if is_hover then FL_PRIMARY_R else FL_CARD_BORDER_R, if is_hover then FL_PRIMARY_G else FL_CARD_BORDER_G, if is_hover then FL_PRIMARY_B else FL_CARD_BORDER_B, 255, 0)
         if w.val_i64 == 1 do
             canvas_draw_rect(app.canvas, x + 3, cy + 3, cb_sz - 6, cb_sz - 6, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, 255, 1)
-        end
-        if _str_len(w.text) > 0 do
-            gui_blit_canvas(app.win, app.canvas)
-            gui_draw_text(app.win, w.text, x + cb_sz + 8, y + (mh - 16) / 2, 1, w.text_r, w.text_g, w.text_b)
         end
         if is_clicked do triggered_action = w.action_id end
     else if w.kind == W_SLIDER do
@@ -762,40 +733,33 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
             i = 0
             while i < cnt do
                 ch = w.children[i]
-                act = fl_render_node(app, ch)
+                act = fl_render_canvas_pass(app, ch)
                 if act != 0 do triggered_action = act end
                 i += 1
             end
         end
     else if w.kind == W_EXPANDED do
         if w.child != 0 do
-            act = fl_render_node(app, w.child)
+            act = fl_render_canvas_pass(app, w.child)
             if act != 0 do triggered_action = act end
         end
     else if w.kind == W_SCAFFOLD do
-        // Render Scaffold background
         canvas_clear(app.canvas, w.bg_r, w.bg_g, w.bg_b, 255)
-        
-        // Render AppBar & FAB
         if w.children != 0 do
             app_bar = w.children[0]
             if app_bar != 0 do
-                act = fl_render_node(app, app_bar)
+                act = fl_render_canvas_pass(app, app_bar)
                 if act != 0 do triggered_action = act end
             end
         end
-        
-        // Render Body
         if w.child != 0 do
-            act = fl_render_node(app, w.child)
+            act = fl_render_canvas_pass(app, w.child)
             if act != 0 do triggered_action = act end
         end
-        
-        // Render FAB
         if w.children != 0 do
             fab = w.children[1]
             if fab != 0 do
-                act = fl_render_node(app, fab)
+                act = fl_render_canvas_pass(app, fab)
                 if act != 0 do triggered_action = act end
             end
         end
@@ -805,7 +769,89 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
 end
 
 // ------------------------------------------------------------
-// 8. Flutter Application Lifecycle & Runner
+// 8. Pass 2: Render All Native ClearType Text Directly on Memory DC
+// ------------------------------------------------------------
+fl_render_text_pass(app: FlutterApp, w: Widget) do
+    x = w.layout_x
+    y = w.layout_y
+    mw = w.measured_w
+    mh = w.measured_h
+    
+    mx = app.mouse_x
+    my = app.mouse_y
+    is_hover = if mx >= x and mx < x + mw and my >= y and my < y + mh then true else false
+
+    if w.kind == W_TEXT do
+        gui_draw_text(app.win, w.text, x, y + (mh - 16) / 2, w.text_size, w.text_r, w.text_g, w.text_b)
+    else if w.kind == W_ELEV_BTN or w.kind == W_OUTL_BTN or w.kind == W_CUPERTINO_BTN do
+        tw = gui_text_width(w.text, w.text_size)
+        tx = x + (mw - tw) / 2
+        ty = y + (mh - 16) / 2
+        gui_draw_text(app.win, w.text, tx, ty, w.text_size, w.text_r, w.text_g, w.text_b)
+    else if w.kind == W_TEXT_BTN do
+        tw = gui_text_width(w.text, w.text_size)
+        tx = x + (mw - tw) / 2
+        ty = y + (mh - 16) / 2
+        txt_r = if is_hover then 255 else w.text_r
+        txt_g = if is_hover then 255 else w.text_g
+        txt_b = if is_hover then 255 else w.text_b
+        gui_draw_text(app.win, w.text, tx, ty, w.text_size, txt_r, txt_g, txt_b)
+    else if w.kind == W_APP_BAR do
+        gui_draw_text(app.win, w.text, x + 16, y + 10, w.text_size, w.text_r, w.text_g, w.text_b)
+        if w.children != 0 do
+            cnt = size(w.children)
+            i = 0
+            while i < cnt do
+                fl_render_text_pass(app, w.children[i])
+                i += 1
+            end
+        end
+    else if w.kind == W_LIST_TILE do
+        tx = x + 8
+        if w.child != 0 do
+            tx += 22
+        end
+        gui_draw_text(app.win, w.text, tx, y + (mh - 16) / 2, 1, w.text_r, w.text_g, w.text_b)
+        if w.children != 0 and size(w.children) > 0 do
+            tr = w.children[0]
+            if tr != 0 do
+                fl_render_text_pass(app, tr)
+            end
+        end
+    else if w.kind == W_CHECKBOX do
+        cb_sz = 16
+        if _str_len(w.text) > 0 do
+            gui_draw_text(app.win, w.text, x + cb_sz + 8, y + (mh - 16) / 2, 1, w.text_r, w.text_g, w.text_b)
+        end
+    else if w.kind == W_CONTAINER or w.kind == W_CARD or w.kind == W_SAFE_AREA or w.kind == W_EXPANDED do
+        if w.child != 0 do
+            fl_render_text_pass(app, w.child)
+        end
+    else if w.kind == W_COLUMN or w.kind == W_ROW or w.kind == W_STACK do
+        if w.children != 0 do
+            cnt = size(w.children)
+            i = 0
+            while i < cnt do
+                fl_render_text_pass(app, w.children[i])
+                i += 1
+            end
+        end
+    else if w.kind == W_SCAFFOLD do
+        if w.children != 0 do
+            app_bar = w.children[0]
+            if app_bar != 0 do
+                fl_render_text_pass(app, app_bar)
+            end
+        end
+        if w.child != 0 do
+            fl_render_text_pass(app, w.child)
+        end
+    end
+    0
+end
+
+// ------------------------------------------------------------
+// 9. Flutter Application Lifecycle & Runner
 // ------------------------------------------------------------
 flutter_app(title: string, width: i64, height: i64): FlutterApp do
     w = gui_open_window(title, width, height)
@@ -849,22 +895,33 @@ flutter_render(app: FlutterApp, root: Widget): i64 do
     // Pass 2: Layout Coordinates
     fl_layout(root, 0, 0)
 
-    // Pass 3: Render & Hit Test
-    act = fl_render_node(app, root)
+    // Pass 3: Render All Canvas Backgrounds, Boxes, and Icons
+    act = fl_render_canvas_pass(app, root)
 
-    // Render SnackBar Overlay if active
+    // Render SnackBar Box if active
     if app.snackbar_frames > 0 do
         sb_h = 36
         sb_y = app.height - sb_h - 16
         sb_w = app.width - 32
         canvas_draw_rect(app.canvas, 16, sb_y, sb_w, sb_h, 30, 41, 59, 240, 1)
         canvas_draw_rect(app.canvas, 16, sb_y, sb_w, sb_h, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, 255, 0)
-        gui_blit_canvas(app.win, app.canvas)
+    end
+
+    // Pass 4: Blit Complete Canvas to Memory DC (ONCE)
+    gui_blit_canvas(app.win, app.canvas)
+
+    // Pass 5: Render All Native ClearType Text Directly on Memory DC
+    fl_render_text_pass(app, root)
+
+    // Render SnackBar text on top of Memory DC if active
+    if app.snackbar_frames > 0 do
+        sb_h = 36
+        sb_y = app.height - sb_h - 16
         gui_draw_text(app.win, app.snackbar_text, 28, sb_y + 10, 1, 255, 255, 255)
         app.snackbar_frames -= 1
     end
 
-    // Flip Double Buffer to hardware display
+    // Pass 6: Hardware Flip to Screen (Single BitBlt)
     gui_flip_buffer(app.win)
     
     act

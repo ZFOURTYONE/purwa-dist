@@ -67,7 +67,15 @@ struct GuiApp {
     widget_x,
     widget_y,
     widget_w,
-    widget_h
+    widget_h,
+    txt_str,
+    txt_x,
+    txt_y,
+    txt_sc,
+    txt_r,
+    txt_g,
+    txt_b,
+    txt_cnt
 }
 
 // ------------------------------------------------------------
@@ -137,6 +145,21 @@ gui_draw_text(win: GuiWindow, s: string, px: i64, py: i64, sc: i64, r: i64, g: i
         call_dll(win.fn_set_bkmode, win.mem_dc, 1) // TRANSPARENT
         call_dll(win.fn_set_txtcol, win.mem_dc, r + g * 256 + b * 65536)
         call_dll(win.fn_text_out, win.mem_dc, px, py, s, _str_len(s))
+    end
+    0
+end
+
+gui_draw_app_text(app: GuiApp, s: string, px: i64, py: i64, sc: i64, r: i64, g: i64, b: i64) do
+    if app.txt_cnt < 128 do
+        idx = app.txt_cnt
+        ts = app.txt_str; ts[idx] = s
+        tx = app.txt_x;   tx[idx] = px
+        ty = app.txt_y;   ty[idx] = py
+        tc = app.txt_sc;  tc[idx] = sc
+        tr = app.txt_r;   tr[idx] = r
+        tg = app.txt_g;   tg[idx] = g
+        tb = app.txt_b;   tb[idx] = b
+        app.txt_cnt += 1
     end
     0
 end
@@ -400,7 +423,15 @@ gui_app(title: string, width: i64, height: i64): GuiApp do
            16, 16, 16, 16, width - 32, 10,
            0, 1, 0, 16, 0,
            0, 0, 0, 0, 0, 0,
-           0, 0, 0, 0)
+           0, 0, 0, 0,
+           make_array(128, 0),
+           make_array(128, 0),
+           make_array(128, 0),
+           make_array(128, 0),
+           make_array(128, 0),
+           make_array(128, 0),
+           make_array(128, 0),
+           0)
 end
 
 gui_running(app: GuiApp): bool do
@@ -434,11 +465,29 @@ gui_frame_begin(app: GuiApp) do
     app.avail_w = app.width - app.pad_x * 2
     app.row_active = 0
     app.row_idx = 0
+    app.txt_cnt = 0
     0
 end
 
 gui_frame_end(app: GuiApp) do
+    // 1. Blit entire canvas to memory DC
     gui_blit_canvas(app.win, app.canvas)
+    
+    // 2. Render all queued ClearType texts directly on memory DC
+    ts = app.txt_str
+    tx = app.txt_x
+    ty = app.txt_y
+    tc = app.txt_sc
+    tr = app.txt_r
+    tg = app.txt_g
+    tb = app.txt_b
+    i = 0
+    while i < app.txt_cnt do
+        gui_draw_text(app.win, ts[i], tx[i], ty[i], tc[i], tr[i], tg[i], tb[i])
+        i += 1
+    end
+
+    // 3. Flip double buffer to hardware screen
     gui_flip_buffer(app.win)
 end
 
@@ -475,29 +524,25 @@ end
 // ------------------------------------------------------------
 gui_title(app: GuiApp, text: string) do
     gui_alloc_widget(app, 26)
-    gui_blit_canvas(app.win, app.canvas)
-    gui_draw_text(app.win, text, app.widget_x, app.widget_y + 1, 2, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+    gui_draw_app_text(app, text, app.widget_x, app.widget_y + 1, 2, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
     0
 end
 
 gui_subtitle(app: GuiApp, text: string) do
     gui_alloc_widget(app, 18)
-    gui_blit_canvas(app.win, app.canvas)
-    gui_draw_text(app.win, text, app.widget_x, app.widget_y + 1, 3, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
+    gui_draw_app_text(app, text, app.widget_x, app.widget_y + 1, 3, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
     0
 end
 
 gui_label(app: GuiApp, text: string) do
     gui_alloc_widget(app, 18)
-    gui_blit_canvas(app.win, app.canvas)
-    gui_draw_text(app.win, text, app.widget_x, app.widget_y + 1, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+    gui_draw_app_text(app, text, app.widget_x, app.widget_y + 1, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
     0
 end
 
 gui_label_colored(app: GuiApp, text: string, r: i64, g: i64, b: i64) do
     gui_alloc_widget(app, 18)
-    gui_blit_canvas(app.win, app.canvas)
-    gui_draw_text(app.win, text, app.widget_x, app.widget_y + 1, 1, r, g, b)
+    gui_draw_app_text(app, text, app.widget_x, app.widget_y + 1, 1, r, g, b)
     0
 end
 
@@ -525,11 +570,10 @@ gui_button_custom(app: GuiApp, label: string, bg_r: i64, bg_g: i64, bg_b: i64, h
         canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
     end
     
-    gui_blit_canvas(app.win, app.canvas)
     tw = gui_text_width(label, 1)
     tx = x + (w - tw) / 2
     ty = y + (h - 16) / 2
-    gui_draw_text(app.win, label, tx, ty, 1, txt_r, txt_g, txt_b)
+    gui_draw_app_text(app, label, tx, ty, 1, txt_r, txt_g, txt_b)
     
     is_clicked
 end
@@ -577,8 +621,7 @@ gui_checkbox(app: GuiApp, label: string, is_checked: bool): bool do
         canvas_draw_rect(app.canvas, x + 3, by + 3, box_sz - 6, box_sz - 6, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B, 255, 1)
     end
     
-    gui_blit_canvas(app.win, app.canvas)
-    gui_draw_text(app.win, label, x + box_sz + 8, y + (h - 16) / 2, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+    gui_draw_app_text(app, label, x + box_sz + 8, y + (h - 16) / 2, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
     
     new_state
 end
@@ -619,9 +662,8 @@ gui_slider(app: GuiApp, label: string, val: i64, min_v: i64, max_v: i64): i64 do
     if kx + 8 > x + w do kx = x + w - 8 end
     canvas_draw_rect(app.canvas, kx, ty - 2, 8, th + 4, 255, 255, 255, 255, 1)
     
-    gui_blit_canvas(app.win, app.canvas)
-    gui_draw_text(app.win, label, x, y, 1, GUI_MUTED_R, GUI_MUTED_G, GUI_MUTED_B)
-    gui_draw_text(app.win, val_str, x + w - gui_text_width(val_str, 1), y, 1, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
+    gui_draw_app_text(app, label, x, y, 1, GUI_MUTED_R, GUI_MUTED_G, GUI_MUTED_B)
+    gui_draw_app_text(app, val_str, x + w - gui_text_width(val_str, 1), y, 1, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
     
     cur_val
 end
@@ -667,8 +709,7 @@ gui_badge(app: GuiApp, text: string, r: i64, g: i64, b: i64) do
     y = app.widget_y
     canvas_draw_rect(app.canvas, x, y, bw, bh, r / 3, g / 3, b / 3, 255, 1)
     canvas_draw_rect(app.canvas, x, y, bw, bh, r, g, b, 255, 0)
-    gui_blit_canvas(app.win, app.canvas)
-    gui_draw_text(app.win, text, x + 10, y + 4, 0, r, g, b)
+    gui_draw_app_text(app, text, x + 10, y + 4, 0, r, g, b)
     0
 end
 
@@ -698,8 +739,7 @@ gui_card_begin(app: GuiApp, title: string, card_h: i64) do
     canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
     
     if _str_len(title) > 0 do
-        gui_blit_canvas(app.win, app.canvas)
-        gui_draw_text(app.win, title, x + 12, y + 8, 3, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
+        gui_draw_app_text(app, title, x + 12, y + 8, 3, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
         canvas_draw_line(app.canvas, x, y + 30, x + w, y + 30, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255)
     end
     0
