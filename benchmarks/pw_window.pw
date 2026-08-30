@@ -1,0 +1,21 @@
+// H4#2 showcase: window reads arr[i+c] (SIB disp fusion) + constant scaling (i*16)
+window(n) do
+    arr = make_array(n, 0)
+    i = 0
+    while i < n do
+        arr[i] = i * 16
+        i = i + 1
+    end
+    s = 0
+    k = 1
+    while k < n - 2 do
+        s = s + arr[k - 1] + arr[k + 1] + arr[k + 2]
+        k = k + 1
+    end
+    drop(arr)
+    s
+end
+
+main() do
+    window(2000000)
+end

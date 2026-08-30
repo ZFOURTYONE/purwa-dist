@@ -1,0 +1,10 @@
+// In-Place Register TCO (100,000,000 recursive tail-calls)
+fib_tco(n, a, b) do
+    if n == 0 then a
+    else fib_tco(n - 1, b, (a + b) % 1000000007)
+end
+
+main() do
+    res = fib_tco(100000000, 0, 1)
+    if res != 0 then 0 else 1
+end

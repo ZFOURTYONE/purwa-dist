@@ -1,0 +1,26 @@
+sieve(n) do
+    primes = make_array(n + 1, 1)
+    p = 2
+    count = 0
+    while p * p <= n do
+        if primes[p] == 1 then do
+            i = p * p
+            while i <= n do
+                primes[i] = 0
+                i = i + p
+            end
+        end
+        p = p + 1
+    end
+    j = 2
+    while j <= n do
+        if primes[j] == 1 then count = count + 1
+        j = j + 1
+    end
+    drop(primes)
+    count
+end
+
+main() do
+    sieve(100000)
+end

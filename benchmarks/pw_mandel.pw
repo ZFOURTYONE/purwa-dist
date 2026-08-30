@@ -1,0 +1,41 @@
+// Benchmark: Mandelbrot Fractal Matrix 200x200 (fixed-point /1000, 50 iterations)
+// v36 canonical grammar rewrite of the pre-purification workload.
+// Output is deterministic: exit code = number of interior points.
+
+mandel(n) do
+    count = 0
+    y = 0
+    while y < n do
+        x = 0
+        while x < n do
+            cr = -2000 + (x * 3000) / n
+            ci = -1500 + (y * 3000) / n
+            zr = 0
+            zi = 0
+            iter = 0
+            inside = 1
+            while iter < 50 and inside == 1 do
+                zr2 = (zr * zr) / 1000
+                zi2 = (zi * zi) / 1000
+                if zr2 + zi2 > 4000 do
+                    inside = 0
+                else do
+                    new_zi = (2 * zr * zi) / 1000 + ci
+                    zr = zr2 - zi2 + cr
+                    zi = new_zi
+                    iter = iter + 1
+                end
+            end
+            if inside == 1 do
+                count = count + 1
+            end
+            x = x + 1
+        end
+        y = y + 1
+    end
+    count
+end
+
+main() do
+    mandel(200)
+end

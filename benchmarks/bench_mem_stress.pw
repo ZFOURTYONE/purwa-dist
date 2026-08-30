@@ -1,0 +1,20 @@
+// Memory Allocation & Explicit Deallocation Stress (50,000 allocations of 64KB blocks)
+main() do
+    ok = true
+    ptr = 0
+    v1 = 0
+    v2 = 0
+    res = 0
+    for i in 0..50000 do
+        ptr = alloc(65536)
+        set_byte(ptr, 0, 77)
+        set_byte(ptr, 65535, 88)
+        v1 = get_byte(ptr, 0)
+        v2 = get_byte(ptr, 65535)
+        res = drop(ptr)
+        if v1 != 77 or v2 != 88 or res == 0 do
+            ok = false
+        end
+    end
+    if ok then 0 else 1
+end

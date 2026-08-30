@@ -1,0 +1,8 @@
+tco(n, acc) do
+    if n == 0 then acc
+    else tco(n - 1, acc + 1)
+end
+
+main() do
+    tco(20000000, 0)
+end

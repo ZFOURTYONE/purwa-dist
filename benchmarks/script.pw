@@ -1,0 +1,55 @@
+// script.pw — Purwa script benchmark
+// Run: purwac run script.pw
+// Measures: startup + JIT compile + execute (no disk artifact)
+
+fib(n) do
+    if n < 2 then n
+    else fib(n - 1) + fib(n - 2)
+end
+
+loop_sum(n) do
+    total = 0
+    i = 0
+    while i < n do
+        total += i
+        i += 1
+    end
+    total
+end
+
+sieve(n) do
+    primes = make_array(n + 1, 1)
+    p = 2
+    count = 0
+    while p * p <= n do
+        if primes[p] == 1 then do
+            i = p * p
+            while i <= n do
+                primes[i] = 0
+                i += p
+            end
+        end
+        p += 1
+    end
+    j = 2
+    while j <= n do
+        if primes[j] == 1 then count += 1
+        j += 1
+    end
+    drop(primes)
+    count
+end
+
+main() do
+    r1 = fib(30)
+    r2 = loop_sum(1000000)
+    r3 = sieve(50000)
+    show("fib=")
+    show_num(r1)
+    show(" sum=")
+    show_num(r2)
+    show(" sieve=")
+    show_num(r3)
+    show("\n")
+    r1 + r2 + r3
+end

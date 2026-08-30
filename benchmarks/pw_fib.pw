@@ -1,0 +1,8 @@
+fib(n) do
+    if n < 2 then n
+    else fib(n - 1) + fib(n - 2)
+end
+
+main() do
+    fib(32)
+end

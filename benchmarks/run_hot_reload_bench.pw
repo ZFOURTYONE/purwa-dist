@@ -1,0 +1,103 @@
+// ===========================================================================
+// benchmarks/run_hot_reload_bench.pw ? 100% Native Purwa Hot Reload Benchmark
+// Measures recompile latency, cold process spawn, and throughput in pure Purwa.
+// Zero Python dependencies.
+// ===========================================================================
+
+main() = do
+    show("===========================================================================\n");
+    show("? PURWA LIVE HOT RELOAD & RECOMPILATION BENCHMARK (100% NATIVE PURWA)\n");
+    show("===========================================================================\n");
+    show("Target Compiler   : purwac.exe (Pure x86-64 Bare-Metal Machine Code)\n");
+    show("Test Iterations   : 50 consecutive live code modifications\n");
+    show("Measured Metrics  : Recompile Time (ms), Exec Time (ms), Total Turnaround (ms)\n");
+    show("---------------------------------------------------------------------------\n");
+    
+    total_cycles = 50;
+    tmp_pw = "suite/.out_purwac/live_test.pw";
+    tmp_exe = "suite/.out_purwac/live_test.exe";
+    
+    sum_recompile = 0;
+    sum_exec = 0;
+    sum_total = 0;
+    
+    min_recompile = 999999;
+    max_recompile = 0;
+    
+    min_total = 999999;
+    max_total = 0;
+    
+    success_count = 0;
+    i = 1;
+    
+    bench_start = time_ms();
+    
+    while i <= total_cycles do
+        src = "main() = do x = 40; y = 2; x + y end;\n";
+        write_file(tmp_pw, src, size_of(src));
+        
+        // 1. Measure Recompile Time
+        t0 = time_ms();
+        compile_cmd = "purwac.exe " + tmp_pw + " -o " + tmp_exe;
+        c_rc = exec2("purwac.exe", compile_cmd);
+        t1 = time_ms();
+        
+        if c_rc == 0 then do
+            // 2. Measure Cold Process Spawn & Execution Time
+            t2 = time_ms();
+            e_rc = exec2(tmp_exe, tmp_exe);
+            t3 = time_ms();
+            
+            recompile_ms = t1 - t0;
+            exec_ms = t3 - t2;
+            total_ms = t3 - t0;
+            
+            sum_recompile = sum_recompile + recompile_ms;
+            sum_exec = sum_exec + exec_ms;
+            sum_total = sum_total + total_ms;
+            
+            if recompile_ms < min_recompile then min_recompile = recompile_ms else 0;
+            if recompile_ms > max_recompile then max_recompile = recompile_ms else 0;
+            
+            if total_ms < min_total then min_total = total_ms else 0;
+            if total_ms > max_total then max_total = total_ms else 0;
+            
+            success_count = success_count + 1;
+            
+            if i == 1 or i % 10 == 0 then do
+                show("  Cycle ");
+                if i < 10 then show("0") else 0;
+                show_num(i);
+                show("/50 -> Recompile: ");
+                show_num(recompile_ms);
+                show(" ms | Exec: ");
+                show_num(exec_ms);
+                show(" ms | Turnaround: ");
+                show_num(total_ms);
+                show(" ms\n")
+            end
+        end else show("[FAIL] Compilation error\n");
+        
+        i = i + 1
+    end;
+    
+    bench_end = time_ms();
+    total_bench_duration = bench_end - bench_start;
+    
+    avg_recompile = sum_recompile / total_cycles;
+    avg_exec = sum_exec / total_cycles;
+    avg_total = sum_total / total_cycles;
+    throughput = if avg_total > 0 then 1000 / avg_total else 0;
+    
+    show("---------------------------------------------------------------------------\n");
+    show("?? STATISTICAL BENCHMARK RESULTS (Across 50 Live Hot Reloads):\n");
+    show("---------------------------------------------------------------------------\n");
+    show("  ? Full Recompile Time (AOT Machine Code) : Avg: "); show_num(avg_recompile); show(" ms | Min: "); show_num(min_recompile); show(" ms | Max: "); show_num(max_recompile); show(" ms\n");
+    show("  ? Process Execution Time (Cold Spawn)    : Avg: "); show_num(avg_exec); show(" ms\n");
+    show("  ? Total End-to-End Turnaround Latency    : Avg: "); show_num(avg_total); show(" ms | Min: "); show_num(min_total); show(" ms | Max: "); show_num(max_total); show(" ms\n");
+    show("  ? Hot Reload Throughput Capacity         : ~"); show_num(throughput); show(" full reloads / second\n");
+    show("  ? Total Benchmark Runtime                : "); show_num(total_bench_duration); show(" ms (100% Native Purwa)\n");
+    show("===========================================================================\n");
+    
+    0
+end;

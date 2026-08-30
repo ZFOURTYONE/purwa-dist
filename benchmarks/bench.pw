@@ -1,0 +1,32 @@
+// bench.pw — Standard benchmark suite
+fib(n) do
+    if n < 2 then n
+    else fib(n - 1) + fib(n - 2)
+end
+
+loop_sum(n) do
+    total = 0
+    for i in 0..n do
+        total += i
+    end
+    total
+end
+
+tco(n, acc) do
+    if n == 0 then acc
+    else tco(n - 1, acc + 1)
+end
+
+main() do
+    show("fib30=")
+    show_num(fib(30))
+    show("\n")
+    
+    show("sum=")
+    show_num(loop_sum(1000000))
+    show("\n")
+    
+    show("tco=")
+    show_num(tco(10000000, 0))
+    show("\n")
+end

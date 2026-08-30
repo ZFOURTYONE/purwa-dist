@@ -1,0 +1,35 @@
+import "hrtimer"
+loop_sum(n) do
+    i = 0
+    t = 0
+    while i < n do
+        t = t + i
+        i = i + 1
+    end
+    t
+end
+main() do
+    hrt_init()
+    n = 500000000
+    best = 999999999999
+    reps = 7
+    v = 0
+    r = 0
+    while r < reps do
+        t0 = hrt_us()
+        v = loop_sum(n)
+        t1 = hrt_us()
+        dt = t1 - t0
+        if dt < best then best = dt
+        r = r + 1
+    end
+    show("v=")
+    show_num(v)
+    show(" best=")
+    show_num(best / 1000)
+    show(".")
+    frac = (best % 1000) / 10
+    show_num(frac)
+    show(" ms\n")
+    0
+end

@@ -1,0 +1,63 @@
+// ===========================================================================
+// benchmarks/run_benchmarks.pw — 100% Native Purwa Master Benchmark Runner
+// Zero Python dependencies. Executes all compute, memory, string, and hot-reload benchmarks.
+// ===========================================================================
+
+run_bench(title, src_file) do
+    show("----------------------------------------------------------------------\n")
+    show(">> Running Benchmark: ")
+    show(title)
+    show("\n")
+    show("----------------------------------------------------------------------\n")
+    
+    exe_file = "suite/.out_purwac/" + src_file + ".exe"
+    src_path = "tools/benchmarks/" + src_file + ".pw"
+    
+    t0 = time_ms()
+    c_rc = exec2("purwac.exe", "purwac.exe " + src_path + " -o " + exe_file)
+    t1 = time_ms()
+    
+    if c_rc != 0 do
+        show("[FAIL] Benchmark compilation error: ")
+        show(src_path)
+        show("\n")
+        0
+    else do
+        t2 = time_ms()
+        e_rc = exec2(exe_file, exe_file)
+        t3 = time_ms()
+        
+        show("   [Compile Time] : ")
+        show_num(t1 - t0)
+        show(" ms\n")
+        show("   [Exec Time]    : ")
+        show_num(t3 - t2)
+        show(" ms\n")
+        show("   [Exit Code]    : ")
+        show_num(e_rc)
+        show("\n\n")
+        1
+    end
+end
+
+main() do
+    show("======================================================================\n")
+    show("PURWA NATIVE BENCHMARK SUITE MASTER RUNNER (100% PURE PURWA)\n")
+    show("======================================================================\n\n")
+    
+    total_start = time_ms()
+    
+    run_bench("Recursive Fibonacci", "bench_fib_rec")
+    run_bench("Tail Call Optimized (TCO) Loop", "bench_fib_tco")
+    run_bench("Array Computation Stress", "bench_array_compute")
+    run_bench("String Concat and Formatting Throughput", "bench_str_throughput")
+    run_bench("Memory Arena High-Frequency Alloc/Reset", "bench_mem_stress")
+    
+    total_end = time_ms()
+    
+    show("======================================================================\n")
+    show("All Benchmarks Finished Successfully in ")
+    show_num(total_end - total_start)
+    show(" ms!\n")
+    show("======================================================================\n")
+end

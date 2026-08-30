@@ -1,0 +1,8 @@
+tak(x, y, z) do
+    if y >= x then z
+    else tak(tak(x - 1, y, z), tak(y - 1, z, x), tak(z - 1, x, y))
+end
+
+main() do
+    tak(24, 16, 8)
+end

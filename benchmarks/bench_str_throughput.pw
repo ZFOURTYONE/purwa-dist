@@ -1,0 +1,12 @@
+// String Operations & Formatting Throughput (1,000 string formatting operations)
+main() do
+    i = 0
+    total_len = 0
+    s = ""
+    while i < 1000 do
+        s = "Item #" + to_text(i) + " | Status: OK\n"
+        total_len += size_of(s)
+        i += 1
+    end
+    if total_len > 0 then 0 else 1
+end

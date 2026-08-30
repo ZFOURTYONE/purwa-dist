@@ -1,0 +1,13 @@
+// Large Array Operations (1,000,000 element array allocation, mutation, and aggregation)
+main() do
+    n = 1000000
+    arr = make_array(n, 0)
+    total = 0
+    for i in 0..n do
+        arr[i] = i % 100
+    end
+    for j in 0..n do
+        total += arr[j]
+    end
+    if total > 0 then 0 else 1
+end

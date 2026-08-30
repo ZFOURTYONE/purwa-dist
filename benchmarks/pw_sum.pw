@@ -1,0 +1,13 @@
+loop_sum(n) do
+    i = 0
+    t = 0
+    while i < n do
+        t = t + i
+        i = i + 1
+    end
+    t
+end
+
+main() do
+    loop_sum(5000000)
+end
