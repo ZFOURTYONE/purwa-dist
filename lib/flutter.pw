@@ -145,7 +145,8 @@ struct FlutterApp {
     snackbar_text,
     snackbar_frames,
     active_slider_action,
-    slider_val
+    slider_val,
+    str_buf
 }
 
 // ------------------------------------------------------------
@@ -851,14 +852,40 @@ fl_render_text_pass(app: FlutterApp, w: Widget) do
 end
 
 // ------------------------------------------------------------
-// 9. Flutter Application Lifecycle & Runner
+// 9. Instant Zero-Leak Frame Memory Reclamation
+// ------------------------------------------------------------
+fl_free_tree(w: Widget) do
+    if w != 0 do
+        if w.child != 0 do
+            fl_free_tree(w.child)
+        end
+        if w.children != 0 do
+            cnt = size(w.children)
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                if ch != 0 do
+                    fl_free_tree(ch)
+                end
+                i += 1
+            end
+            drop(w.children)
+        end
+        drop(w)
+    end
+    0
+end
+
+// ------------------------------------------------------------
+// 10. Flutter Application Lifecycle & Runner
 // ------------------------------------------------------------
 flutter_app(title: string, width: i64, height: i64): FlutterApp do
     w = gui_open_window(title, width, height)
     c = canvas_create(width, height)
+    sb = alloc(512)
     FlutterApp(w, c, width, height,
                0, 0, 0, 0, 0, 0,
-               "", 0, 0, 0)
+               "", 0, 0, 0, sb)
 end
 
 flutter_running(app: FlutterApp): bool do
@@ -870,6 +897,50 @@ end
 
 flutter_slider_val(app: FlutterApp): i64 do
     app.slider_val
+end
+
+flutter_fmt_int(app: FlutterApp, prefix: string, n: i64, suffix: string): string do
+    buf = app.str_buf
+    lp = _str_len(prefix)
+    ls = _str_len(suffix)
+    i = 0
+    while i < lp do
+        set_byte(buf, i, get_byte(prefix, i))
+        i += 1
+    end
+    
+    v = if n < 0 then 0 - n else n
+    if n < 0 do
+        set_byte(buf, i, 45)
+        i += 1
+    end
+    if v == 0 do
+        set_byte(buf, i, 48)
+        i += 1
+    else do
+        temp = v
+        d_cnt = 0
+        while temp > 0 do
+            d_cnt += 1
+            temp /= 10
+        end
+        k = i + d_cnt - 1
+        i += d_cnt
+        while v > 0 do
+            set_byte(buf, k, 48 + (v % 10))
+            v /= 10
+            k -= 1
+        end
+    end
+    
+    j = 0
+    while j < ls do
+        set_byte(buf, i, get_byte(suffix, j))
+        i += 1
+        j += 1
+    end
+    set_byte(buf, i, 0)
+    buf
 end
 
 flutter_render(app: FlutterApp, root: Widget): i64 do
@@ -924,6 +995,9 @@ flutter_render(app: FlutterApp, root: Widget): i64 do
     // Pass 6: Hardware Flip to Screen (Single BitBlt)
     gui_flip_buffer(app.win)
     
+    // Pass 7: Instant Zero-Leak Frame Memory Reclamation
+    fl_free_tree(root)
+
     act
 end
 
@@ -934,6 +1008,7 @@ flutter_show_snackbar(app: FlutterApp, text: string) do
 end
 
 flutter_close(app: FlutterApp) do
+    if app.str_buf != 0 do drop(app.str_buf) end
     canvas_destroy(app.canvas)
     gui_close_window(app.win)
     drop(app)
