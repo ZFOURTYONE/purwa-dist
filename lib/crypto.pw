@@ -1,0 +1,727 @@
+// ===========================================================================
+// lib/crypto.pw — Sovereign Pure Cryptography Library for Purwa
+// ===========================================================================
+// Provides 100% pure, zero-dependency, self-contained implementations of:
+// - SHA-256 (FIPS 180-4 standard cryptographic hash)
+// - HMAC-SHA256 (RFC 2104 / RFC 4231 message authentication)
+// - MD5 (RFC 1321 message digest)
+// - Base64 (RFC 4648 encode & decode)
+// - Hex (hexadecimal encode & decode)
+// - CRC32 (IEEE 802.3 checksum)
+// - FNV-1a (32-bit fast non-cryptographic hash)
+// - UUID v4 (RFC 4122 random unique identifier generator)
+// ===========================================================================
+
+// ---- 32-bit Integer Bitwise Math Helpers ----
+_cr_m32(x) = x & 4294967295
+
+_cr_rotr32(x, n) do
+    v = x & 4294967295
+    s = n % 32
+    if s == 0 then v
+    else (((v >> s) | (v << (32 - s))) & 4294967295)
+end
+
+_cr_rotl32(x, n) do
+    v = x & 4294967295
+    s = n % 32
+    if s == 0 then v
+    else (((v << s) | (v >> (32 - s))) & 4294967295)
+end
+
+_cr_shr32(x, n) = (x & 4294967295) >> n
+
+// ---- Hex Encoding & Decoding ----
+global _CR_HEX_CHARS = "0123456789abcdef"
+
+hex_encode_bytes(buf, len) do
+    if len <= 0 then ""
+    else do
+        out = alloc(len * 2 + 1)
+        i = 0
+        w = 0
+        while i < len do
+            b = get_byte(buf, i) & 255
+            hi = (b >> 4) & 15
+            lo = b & 15
+            set_byte(out, w, get_byte(_CR_HEX_CHARS, hi))
+            set_byte(out, w + 1, get_byte(_CR_HEX_CHARS, lo))
+            w += 2
+            i += 1
+        end
+        set_byte(out, w, 0)
+        out
+    end
+end
+
+hex_encode(s) = hex_encode_bytes(s, str_len(s))
+
+_cr_hex_val(c) =
+    if c >= 48 and c <= 57 then c - 48
+    else if c >= 97 and c <= 102 then c - 97 + 10
+    else if c >= 65 and c <= 70 then c - 65 + 10
+    else 0
+
+hex_decode(hex_str) do
+    L = str_len(hex_str)
+    if L == 0 then ""
+    else do
+        out_len = L / 2
+        out = alloc(out_len + 1)
+        i = 0
+        w = 0
+        while i < L - 1 do
+            h1 = _cr_hex_val(get_byte(hex_str, i))
+            h2 = _cr_hex_val(get_byte(hex_str, i + 1))
+            set_byte(out, w, (h1 << 4) | h2)
+            w += 1
+            i += 2
+        end
+        set_byte(out, w, 0)
+        out
+    end
+end
+
+// ---- Base64 (RFC 4648) ----
+global _CR_B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+base64_encode_bytes(buf, len) do
+    if len <= 0 then ""
+    else do
+        out_cap = ((len + 2) / 3) * 4 + 1
+        out = alloc(out_cap)
+        i = 0
+        w = 0
+        while i < len do
+            b0 = get_byte(buf, i) & 255
+            b1 = if i + 1 < len then get_byte(buf, i + 1) & 255 else 0
+            b2 = if i + 2 < len then get_byte(buf, i + 2) & 255 else 0
+            
+            trip = (b0 << 16) | (b1 << 8) | b2
+            
+            set_byte(out, w, get_byte(_CR_B64_CHARS, (trip >> 18) & 63))
+            set_byte(out, w + 1, get_byte(_CR_B64_CHARS, (trip >> 12) & 63))
+            
+            if i + 1 < len do
+                set_byte(out, w + 2, get_byte(_CR_B64_CHARS, (trip >> 6) & 63))
+            else do
+                set_byte(out, w + 2, 61) // '='
+            end
+            
+            if i + 2 < len do
+                set_byte(out, w + 3, get_byte(_CR_B64_CHARS, trip & 63))
+            else do
+                set_byte(out, w + 3, 61) // '='
+            end
+            
+            w += 4
+            i += 3
+        end
+        set_byte(out, w, 0)
+        out
+    end
+end
+
+base64_encode(s) = base64_encode_bytes(s, str_len(s))
+
+_cr_b64_val(c) =
+    if c >= 65 and c <= 90 then c - 65
+    else if c >= 97 and c <= 122 then c - 97 + 26
+    else if c >= 48 and c <= 57 then c - 48 + 52
+    else if c == 43 then 62 // '+'
+    else if c == 47 then 63 // '/'
+    else 0
+
+base64_decode(s) do
+    L = str_len(s)
+    if L == 0 then ""
+    else do
+        out_cap = (L / 4) * 3 + 4
+        out = alloc(out_cap)
+        i = 0
+        w = 0
+        while i < L do
+            c0 = get_byte(s, i)
+            c1 = if i + 1 < L then get_byte(s, i + 1) else 61
+            c2 = if i + 2 < L then get_byte(s, i + 2) else 61
+            c3 = if i + 3 < L then get_byte(s, i + 3) else 61
+            
+            v0 = _cr_b64_val(c0)
+            v1 = _cr_b64_val(c1)
+            v2 = if c2 == 61 then 0 else _cr_b64_val(c2)
+            v3 = if c3 == 61 then 0 else _cr_b64_val(c3)
+            
+            trip = (v0 << 18) | (v1 << 12) | (v2 << 6) | v3
+            
+            set_byte(out, w, (trip >> 16) & 255)
+            w += 1
+            if c2 != 61 do
+                set_byte(out, w, (trip >> 8) & 255)
+                w += 1
+            end
+            if c3 != 61 do
+                set_byte(out, w, trip & 255)
+                w += 1
+            end
+            i += 4
+        end
+        set_byte(out, w, 0)
+        out
+    end
+end
+
+// ---- SHA-256 (FIPS 180-4) ----
+_cr_init_sha256_k() do
+    k = make_array(64, 0)
+    k[0] = 1116352408
+    k[1] = 1899447441
+    k[2] = 3049323471
+    k[3] = 3921009573
+    k[4] = 961987163
+    k[5] = 1508970993
+    k[6] = 2453635748
+    k[7] = 2870763221
+    k[8] = 3624381080
+    k[9] = 310598401
+    k[10] = 607225278
+    k[11] = 1426881987
+    k[12] = 1925078388
+    k[13] = 2162078206
+    k[14] = 2614888103
+    k[15] = 3248222580
+    k[16] = 3835390401
+    k[17] = 4022224774
+    k[18] = 264347078
+    k[19] = 604807628
+    k[20] = 770255983
+    k[21] = 1249150122
+    k[22] = 1555081692
+    k[23] = 1996064986
+    k[24] = 2554220882
+    k[25] = 2821834349
+    k[26] = 2952996808
+    k[27] = 3210313671
+    k[28] = 3336571891
+    k[29] = 3584528711
+    k[30] = 113926993
+    k[31] = 338241895
+    k[32] = 666307205
+    k[33] = 773529912
+    k[34] = 1294757372
+    k[35] = 1396182291
+    k[36] = 1695183700
+    k[37] = 1986661051
+    k[38] = 2177026350
+    k[39] = 2456956037
+    k[40] = 2730485921
+    k[41] = 2820302411
+    k[42] = 3259730800
+    k[43] = 3345764771
+    k[44] = 3516065817
+    k[45] = 3600352804
+    k[46] = 4094571909
+    k[47] = 275423344
+    k[48] = 430227734
+    k[49] = 506948616
+    k[50] = 659060556
+    k[51] = 883997877
+    k[52] = 958139571
+    k[53] = 1322822218
+    k[54] = 1537002063
+    k[55] = 1747873779
+    k[56] = 1955562222
+    k[57] = 2024104815
+    k[58] = 2227730452
+    k[59] = 2361852424
+    k[60] = 2428436474
+    k[61] = 2756734187
+    k[62] = 3204031479
+    k[63] = 3329325298
+    k
+end
+
+global _CR_SHA256_K = 0
+
+sha256_bytes_raw(data, len, out32) do
+    if _CR_SHA256_K == 0 do _CR_SHA256_K = _cr_init_sha256_k() end
+    k_table = _CR_SHA256_K
+    
+    pad_len = len + 9
+    rem = pad_len % 64
+    total_len = if rem == 0 then pad_len else pad_len + (64 - rem)
+    
+    buf = alloc(total_len)
+    mem_set(buf, 0, total_len)
+    
+    i = 0
+    while i < len do
+        set_byte(buf, i, get_byte(data, i))
+        i += 1
+    end
+    
+    set_byte(buf, len, 128)
+    
+    bit_len = len * 8
+    set_byte(buf, total_len - 4, (bit_len >> 24) & 255)
+    set_byte(buf, total_len - 3, (bit_len >> 16) & 255)
+    set_byte(buf, total_len - 2, (bit_len >> 8) & 255)
+    set_byte(buf, total_len - 1, bit_len & 255)
+    
+    h0 = 1779033703
+    h1 = 3144134277
+    h2 = 1013904242
+    h3 = 2773480762
+    h4 = 1359893119
+    h5 = 2600822924
+    h6 = 528734635
+    h7 = 1541459225
+    
+    w = make_array(64, 0)
+    
+    chunk_off = 0
+    while chunk_off < total_len do
+        t = 0
+        while t < 16 do
+            b0 = get_byte(buf, chunk_off + t * 4) & 255
+            b1 = get_byte(buf, chunk_off + t * 4 + 1) & 255
+            b2 = get_byte(buf, chunk_off + t * 4 + 2) & 255
+            b3 = get_byte(buf, chunk_off + t * 4 + 3) & 255
+            w[t] = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
+            t += 1
+        end
+        
+        t = 16
+        while t < 64 do
+            w15 = w[t - 15]
+            s0 = _cr_rotr32(w15, 7) ^ _cr_rotr32(w15, 18) ^ _cr_shr32(w15, 3)
+            w2 = w[t - 2]
+            s1 = _cr_rotr32(w2, 17) ^ _cr_rotr32(w2, 19) ^ _cr_shr32(w2, 10)
+            w[t] = _cr_m32(w[t - 16] + s0 + w[t - 7] + s1)
+            t += 1
+        end
+        
+        ah0 = h0
+        ah1 = h1
+        ah2 = h2
+        ah3 = h3
+        ah4 = h4
+        ah5 = h5
+        ah6 = h6
+        ah7 = h7
+        
+        a = h0
+        b = h1
+        c = h2
+        d = h3
+        e = h4
+        f = h5
+        g = h6
+        h = h7
+        
+        i = 0
+        while i < 64 do
+            S1 = _cr_rotr32(e, 6) ^ _cr_rotr32(e, 11) ^ _cr_rotr32(e, 25)
+            ch = (e & f) ^ ((e ^ 4294967295) & g)
+            temp1 = _cr_m32(h + S1 + ch + k_table[i] + w[i])
+            S0 = _cr_rotr32(a, 2) ^ _cr_rotr32(a, 13) ^ _cr_rotr32(a, 22)
+            maj = (a & b) ^ (a & c) ^ (b & c)
+            temp2 = _cr_m32(S0 + maj)
+            
+            h = g
+            g = f
+            f = e
+            e = _cr_m32(d + temp1)
+            d = c
+            c = b
+            b = a
+            a = _cr_m32(temp1 + temp2)
+            
+            i += 1
+        end
+        
+        h0 = _cr_m32(ah0 + a)
+        h1 = _cr_m32(ah1 + b)
+        h2 = _cr_m32(ah2 + c)
+        h3 = _cr_m32(ah3 + d)
+        h4 = _cr_m32(ah4 + e)
+        h5 = _cr_m32(ah5 + f)
+        h6 = _cr_m32(ah6 + g)
+        h7 = _cr_m32(ah7 + h)
+        
+        chunk_off += 64
+    end
+    
+    drop(w)
+    drop(buf)
+    
+    words = [h0, h1, h2, h3, h4, h5, h6, h7]
+    j = 0
+    while j < 8 do
+        val = words[j]
+        set_byte(out32, j * 4, (val >> 24) & 255)
+        set_byte(out32, j * 4 + 1, (val >> 16) & 255)
+        set_byte(out32, j * 4 + 2, (val >> 8) & 255)
+        set_byte(out32, j * 4 + 3, val & 255)
+        j += 1
+    end
+    drop(words)
+    out32
+end
+
+sha256_bytes(buf, len) do
+    raw = alloc(32)
+    sha256_bytes_raw(buf, len, raw)
+    hex = hex_encode_bytes(raw, 32)
+    drop(raw)
+    hex
+end
+
+sha256(s) = sha256_bytes(s, str_len(s))
+
+// ---- HMAC-SHA256 (RFC 2104) ----
+hmac_sha256(key, msg) do
+    klen = str_len(key)
+    mlen = str_len(msg)
+    
+    k_block = alloc(64)
+    mem_set(k_block, 0, 64)
+    
+    if klen > 64 do
+        sha256_bytes_raw(key, klen, k_block)
+    else do
+        i = 0
+        while i < klen do
+            set_byte(k_block, i, get_byte(key, i))
+            i += 1
+        end
+    end
+    
+    ipad_buf = alloc(64 + mlen)
+    opad_buf = alloc(64 + 32)
+    
+    i = 0
+    while i < 64 do
+        kb = get_byte(k_block, i)
+        set_byte(ipad_buf, i, kb ^ 54)  // 0x36 = 54
+        set_byte(opad_buf, i, kb ^ 92)  // 0x5c = 92
+        i += 1
+    end
+    
+    i = 0
+    while i < mlen do
+        set_byte(ipad_buf, 64 + i, get_byte(msg, i))
+        i += 1
+    end
+    
+    inner_hash = alloc(32)
+    sha256_bytes_raw(ipad_buf, 64 + mlen, inner_hash)
+    
+    i = 0
+    while i < 32 do
+        set_byte(opad_buf, 64 + i, get_byte(inner_hash, i))
+        i += 1
+    end
+    
+    outer_hash = alloc(32)
+    sha256_bytes_raw(opad_buf, 64 + 32, outer_hash)
+    
+    res = hex_encode_bytes(outer_hash, 32)
+    
+    drop(k_block)
+    drop(ipad_buf)
+    drop(opad_buf)
+    drop(inner_hash)
+    drop(outer_hash)
+    
+    res
+end
+
+// ---- MD5 (RFC 1321) ----
+_cr_init_md5_t() do
+    t = make_array(64, 0)
+    t[0] = 3614090360
+    t[1] = 3905402710
+    t[2] = 606105819
+    t[3] = 3250441966
+    t[4] = 4118548399
+    t[5] = 1200080426
+    t[6] = 2821735955
+    t[7] = 4249261313
+    t[8] = 1770035416
+    t[9] = 2336552879
+    t[10] = 4294925233
+    t[11] = 2304563134
+    t[12] = 1804603682
+    t[13] = 4254626195
+    t[14] = 2792965006
+    t[15] = 1236535329
+    t[16] = 4129170786
+    t[17] = 3225465664
+    t[18] = 643717713
+    t[19] = 3921069994
+    t[20] = 3593408605
+    t[21] = 38016083
+    t[22] = 3634488961
+    t[23] = 3889429448
+    t[24] = 568446438
+    t[25] = 3275163606
+    t[26] = 4107603335
+    t[27] = 1163531501
+    t[28] = 2850285829
+    t[29] = 4243563512
+    t[30] = 1735328473
+    t[31] = 2368359562
+    t[32] = 4294588738
+    t[33] = 2272392833
+    t[34] = 1839030562
+    t[35] = 4259657740
+    t[36] = 2763975236
+    t[37] = 1272893353
+    t[38] = 4139469664
+    t[39] = 3200236656
+    t[40] = 681279174
+    t[41] = 3936430074
+    t[42] = 3572445317
+    t[43] = 76029189
+    t[44] = 3654602809
+    t[45] = 3873151461
+    t[46] = 530742520
+    t[47] = 3299628645
+    t[48] = 4096336452
+    t[49] = 1126891415
+    t[50] = 2878612391
+    t[51] = 4237533241
+    t[52] = 1700485571
+    t[53] = 2399980690
+    t[54] = 4293915773
+    t[55] = 2240044497
+    t[56] = 1873313359
+    t[57] = 4264355552
+    t[58] = 2734768916
+    t[59] = 1309151649
+    t[60] = 4149444226
+    t[61] = 3174756917
+    t[62] = 718787259
+    t[63] = 3951481745
+    t
+end
+
+global _CR_MD5_T = 0
+
+md5_bytes_raw(data, len, out16) do
+    if _CR_MD5_T == 0 do _CR_MD5_T = _cr_init_md5_t() end
+    t_table = _CR_MD5_T
+    
+    pad_len = len + 9
+    rem = pad_len % 64
+    total_len = if rem == 0 then pad_len else pad_len + (64 - rem)
+    
+    buf = alloc(total_len)
+    mem_set(buf, 0, total_len)
+    
+    i = 0
+    while i < len do
+        set_byte(buf, i, get_byte(data, i))
+        i += 1
+    end
+    
+    set_byte(buf, len, 128)
+    
+    bit_len = len * 8
+    set_byte(buf, total_len - 8, bit_len & 255)
+    set_byte(buf, total_len - 7, (bit_len >> 8) & 255)
+    set_byte(buf, total_len - 6, (bit_len >> 16) & 255)
+    set_byte(buf, total_len - 5, (bit_len >> 24) & 255)
+    
+    a0 = 1732584193  // 0x67452301
+    b0 = 4023233417  // 0xefcdab89
+    c0 = 2562383102  // 0x98badcfe
+    d0 = 271733878   // 0x10325476
+    
+    x = make_array(16, 0)
+    
+    chunk_off = 0
+    while chunk_off < total_len do
+        t = 0
+        while t < 16 do
+            b_0 = get_byte(buf, chunk_off + t * 4) & 255
+            b_1 = get_byte(buf, chunk_off + t * 4 + 1) & 255
+            b_2 = get_byte(buf, chunk_off + t * 4 + 2) & 255
+            b_3 = get_byte(buf, chunk_off + t * 4 + 3) & 255
+            x[t] = b_0 | (b_1 << 8) | (b_2 << 16) | (b_3 << 24)
+            t += 1
+        end
+        
+        aa = a0
+        bb = b0
+        cc = c0
+        dd = d0
+        
+        i = 0
+        while i < 64 do
+            f = 0
+            g = 0
+            s = 0
+            if i < 16 do
+                f = (bb & cc) | ((bb ^ 4294967295) & dd)
+                g = i
+                s = if (i % 4) == 0 then 7 else if (i % 4) == 1 then 12 else if (i % 4) == 2 then 17 else 22
+            else if i < 32 do
+                f = (dd & bb) | ((dd ^ 4294967295) & cc)
+                g = (5 * i + 1) % 16
+                s = if (i % 4) == 0 then 5 else if (i % 4) == 1 then 9 else if (i % 4) == 2 then 14 else 20
+            else if i < 48 do
+                f = bb ^ cc ^ dd
+                g = (3 * i + 5) % 16
+                s = if (i % 4) == 0 then 4 else if (i % 4) == 1 then 11 else if (i % 4) == 2 then 16 else 23
+            else do
+                f = cc ^ (bb | (dd ^ 4294967295))
+                g = (7 * i) % 16
+                s = if (i % 4) == 0 then 6 else if (i % 4) == 1 then 10 else if (i % 4) == 2 then 15 else 21
+            end
+            
+            temp = _cr_m32(aa + f + t_table[i] + x[g])
+            aa = dd
+            dd = cc
+            cc = bb
+            bb = _cr_m32(bb + _cr_rotl32(temp, s))
+            
+            i += 1
+        end
+        
+        a0 = _cr_m32(a0 + aa)
+        b0 = _cr_m32(b0 + bb)
+        c0 = _cr_m32(c0 + cc)
+        d0 = _cr_m32(d0 + dd)
+        
+        chunk_off += 64
+    end
+    
+    drop(x)
+    drop(buf)
+    
+    words = [a0, b0, c0, d0]
+    j = 0
+    while j < 4 do
+        val = words[j]
+        set_byte(out16, j * 4, val & 255)
+        set_byte(out16, j * 4 + 1, (val >> 8) & 255)
+        set_byte(out16, j * 4 + 2, (val >> 16) & 255)
+        set_byte(out16, j * 4 + 3, (val >> 24) & 255)
+        j += 1
+    end
+    drop(words)
+    out16
+end
+
+md5_bytes(buf, len) do
+    raw = alloc(16)
+    md5_bytes_raw(buf, len, raw)
+    hex = hex_encode_bytes(raw, 16)
+    drop(raw)
+    hex
+end
+
+md5(s) = md5_bytes(s, str_len(s))
+
+// ---- CRC32 (IEEE 802.3) ----
+_cr_init_crc32_table() do
+    tbl = make_array(256, 0)
+    i = 0
+    while i < 256 do
+        c = i
+        j = 0
+        while j < 8 do
+            if (c & 1) != 0 do
+                c = 3988292384 ^ ((c >> 1) & 2147483647)  // 0xEDB88320
+            else do
+                c = (c >> 1) & 2147483647
+            end
+            j += 1
+        end
+        tbl[i] = c & 4294967295
+        i += 1
+    end
+    tbl
+end
+
+global _CR_CRC32_TBL = 0
+
+crc32_bytes(buf, len) do
+    if _CR_CRC32_TBL == 0 do _CR_CRC32_TBL = _cr_init_crc32_table() end
+    tbl = _CR_CRC32_TBL
+    crc = 4294967295
+    i = 0
+    while i < len do
+        b = get_byte(buf, i) & 255
+        idx = (crc ^ b) & 255
+        crc = tbl[idx] ^ ((crc >> 8) & 16777215)
+        i += 1
+    end
+    (crc ^ 4294967295) & 4294967295
+end
+
+crc32(s) = crc32_bytes(s, str_len(s))
+
+// ---- FNV-1a (32-bit) ----
+fnv1a_32_bytes(buf, len) do
+    h = 2166136261  // 0x811c9dc5
+    i = 0
+    while i < len do
+        b = get_byte(buf, i) & 255
+        h = _cr_m32((h ^ b) * 16777619)
+        i += 1
+    end
+    h
+end
+
+fnv1a_32(s) = fnv1a_32_bytes(s, str_len(s))
+fnv1a(s) = fnv1a_32(s)
+
+// ---- Cryptographic Random & UUID v4 ----
+global _CR_RNG_STATE = 123456789
+
+crypto_random_int() do
+    cycles = rdtsc()
+    _CR_RNG_STATE = _cr_m32(_CR_RNG_STATE * 1664525 + 1013904223 + cycles)
+    _CR_RNG_STATE
+end
+
+crypto_random_bytes(out_buf, len) do
+    i = 0
+    while i < len do
+        r = crypto_random_int()
+        set_byte(out_buf, i, r & 255)
+        i += 1
+    end
+    out_buf
+end
+
+crypto_uuid_v4() do
+    raw = alloc(16)
+    crypto_random_bytes(raw, 16)
+    
+    // UUID v4: byte 6 = 0100xxxx (version 4), byte 8 = 10xxxxxx (RFC 4122 variant)
+    b6 = (get_byte(raw, 6) & 15) | 64
+    set_byte(raw, 6, b6)
+    b8 = (get_byte(raw, 8) & 63) | 128
+    set_byte(raw, 8, b8)
+    
+    hex = hex_encode_bytes(raw, 16)
+    drop(raw)
+    
+    p1 = slice(hex, 0, 8)
+    p2 = slice(hex, 8, 12)
+    p3 = slice(hex, 12, 16)
+    p4 = slice(hex, 16, 20)
+    p5 = slice(hex, 20, 32)
+    drop(hex)
+    
+    uuid = $"{p1}-{p2}-{p3}-{p4}-{p5}"
+    drop(p1)
+    drop(p2)
+    drop(p3)
+    drop(p4)
+    drop(p5)
+    uuid
+end

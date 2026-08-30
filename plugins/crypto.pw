@@ -1,0 +1,2 @@
+// plugins/crypto.pw — Plugin alias for sovereign pure cryptography library
+import "../lib/crypto.pw"

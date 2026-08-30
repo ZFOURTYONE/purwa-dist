@@ -124,4 +124,4 @@ this release.
 
 ---
 
-*Purwa v37.11* · Windows x86-64 (PE32+) · [SHA256SUMS.txt](SHA256SUMS.txt)
+*Purwa v37.14* · Windows x86-64 (PE32+) & Linux x86-64 (ELF64) · [SHA256SUMS.txt](SHA256SUMS.txt)

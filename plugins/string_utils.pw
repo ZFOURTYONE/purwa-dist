@@ -1,0 +1,121 @@
+// plugins/string_utils.pw — Contoh Plugin: Utilitas String
+// Plugin kedua untuk menunjukkan bahwa plugins/ bisa berisi banyak modul.
+// Import via `import "string_utils"`.
+//
+// Zero external dependencies — semua implementasi pure Purwa.
+
+// Ulangi string sebanyak n kali
+str_repeat(s: string, n: i64): string do
+    if n <= 0 then ""
+    else do
+        total_len = str_len(s) * n
+        buf = alloc(total_len + 1)
+        s_len = str_len(s)
+        i = 0
+        pos = 0
+        while i < n do
+            j = 0
+            while j < s_len do
+                set_byte(buf, pos, get_byte(s, j))
+                pos = pos + 1
+                j = j + 1
+            end
+            i = i + 1
+        end
+        set_byte(buf, pos, 0)
+        buf
+    end
+end
+
+// Padding kiri: tambah karakter sampai panjang target
+str_pad_left(s: string, target_len: i64, pad_char: string): string do
+    cur_len = str_len(s)
+    if cur_len >= target_len then s
+    else do
+        padding = str_repeat(pad_char, target_len - cur_len)
+        concat(padding, s)
+    end
+end
+
+// Padding kanan: tambah karakter sampai panjang target
+str_pad_right(s: string, target_len: i64, pad_char: string): string do
+    cur_len = str_len(s)
+    if cur_len >= target_len then s
+    else do
+        padding = str_repeat(pad_char, target_len - cur_len)
+        concat(s, padding)
+    end
+end
+
+// Cek apakah string dimulai dengan prefix
+str_starts_with(s: string, prefix: string): i64 do
+    s_len = str_len(s)
+    p_len = str_len(prefix)
+    if p_len > s_len then 0
+    else do
+        sub = slice(s, 0, p_len)
+        i = 0
+        ok = true
+        while i < p_len and ok do
+            if get_byte(sub, i) != get_byte(prefix, i) then ok = false
+            else i = i + 1
+        end
+        ok
+    end
+end
+
+// Cek apakah string diakhiri dengan suffix
+str_ends_with(s: string, suffix: string): i64 do
+    s_len = str_len(s)
+    sf_len = str_len(suffix)
+    if sf_len > s_len then 0
+    else do
+        sub = slice(s, s_len - sf_len, s_len)
+        i = 0
+        ok = true
+        while i < sf_len and ok do
+            if get_byte(sub, i) != get_byte(suffix, i) then ok = false
+            else i = i + 1
+        end
+        ok
+    end
+end
+
+// Reverse string
+str_reverse(s: string): string do
+    L = str_len(s)
+    buf = alloc(L + 1)
+    i = 0
+    while i < L do
+        set_byte(buf, i, get_byte(s, L - 1 - i))
+        i = i + 1
+    end
+    set_byte(buf, L, 0)
+    buf
+end
+
+// Hitung jumlah kemunculan substring (non-overlapping)
+str_count(s: string, sub: string): i64 do
+    s_len = str_len(s)
+    sub_len = str_len(sub)
+    if sub_len == 0 or sub_len > s_len then 0
+    else do
+        count = 0
+        i = 0
+        while i <= s_len - sub_len do
+            j = 0
+            ok = true
+            while j < sub_len and ok do
+                if get_byte(s, i + j) != get_byte(sub, j) then ok = false
+                else j = j + 1
+            end
+            if ok then do
+                count = count + 1
+                i = i + sub_len
+            end else do
+                i = i + 1
+            end
+        end
+        count
+    end
+end

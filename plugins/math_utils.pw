@@ -1,0 +1,101 @@
+// plugins/math_utils.pw — Contoh Plugin: Utilitas Matematika
+// Plugin ini menunjukkan cara membuat modul reusable di folder plugins/
+// yang dapat di-import oleh program Purwa manapun via `import "math_utils"`.
+//
+// Zero external dependencies — semua implementasi pure Purwa.
+
+// --- Konstanta (sebagai fungsi tanpa argumen) ---
+PI_INT() = 314159;  // π × 100000 (fixed-point)
+E_INT()  = 271828;  // e × 100000 (fixed-point)
+
+// --- Fungsi Dasar ---
+
+// Hitung pangkat: base^exp (integer)
+pangkat(base: i64, exp: i64): i64 do
+    result = 1
+    i = 0
+    while i < exp do
+        result = result * base
+        i = i + 1
+    end
+    result
+end
+
+// Hitung faktorial: n!
+faktorial(n: i64): i64 do
+    if n <= 1 then 1
+    else n * faktorial(n - 1)
+end
+
+// Hitung GCD (Greatest Common Divisor) dengan algoritma Euclid
+gcd(a: i64, b: i64): i64 do
+    if b == 0 then a
+    else gcd(b, a % b)
+end
+
+// Hitung LCM (Least Common Multiple)
+lcm(a: i64, b: i64): i64 do
+    if a == 0 or b == 0 then 0
+    else (a / gcd(a, b)) * b
+end
+
+// Hitung nilai absolut
+abs(x: i64): i64 do
+    if x < 0 then 0 - x else x
+end
+
+// Clamp nilai ke rentang [lo, hi]
+clamp(x: i64, lo: i64, hi: i64): i64 do
+    if x < lo then lo
+    else if x > hi then hi
+    else x
+end
+
+// Hitung max dari dua bilangan
+max2(a: i64, b: i64): i64 do
+    if a > b then a else b
+end
+
+// Hitung min dari dua bilangan
+min2(a: i64, b: i64): i64 do
+    if a < b then a else b
+end
+
+// Cek apakah bilangan prima (brute force, untuk bilangan kecil)
+is_prima(n: i64): i64 do
+    if n < 2 then 0
+    else if n < 4 then 1
+    else if n % 2 == 0 then 0
+    else do
+        d = 3
+        ok = true
+        while d * d <= n and ok do
+            if n % d == 0 then ok = false
+            d = d + 2
+        end
+        ok
+    end
+end
+
+// Hitung fibonacci ke-n (iteratif, efisien)
+fib(n: i64): i64 do
+    if n <= 0 then 0
+    else if n == 1 then 1
+    else do
+        a = 0
+        b = 1
+        i = 2
+        while i <= n do
+            tmp = a + b
+            a = b
+            b = tmp
+            i = i + 1
+        end
+        b
+    end
+end
+
+// Sum dari 1..n  (formula Gauss)
+sum_range(n: i64): i64 do
+    n * (n + 1) / 2
+end
