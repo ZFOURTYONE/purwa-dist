@@ -41,7 +41,7 @@ html_create_node(tag: string, text: string): DomNode do
         15, 23, 42,      // bg (slate-900)
         248, 250, 252,   // fg (white)
         51, 65, 85,      // border (slate-700)
-        8, 8, 8, 1,
+        6, 4, 8, 1,
         false,
         0, 0, 100, 30
     )
@@ -64,7 +64,7 @@ html_get_child(parent: DomNode, idx: i64): DomNode do
     end
 end
 
-// ---- HTML Parser (Recursive Tokenizer) ----
+// ---- HTML Parser with Parent Stack ----
 
 html_parse(html_str: string): DomNode do
     L = str_len(html_str)
@@ -72,15 +72,20 @@ html_parse(html_str: string): DomNode do
     root.w = 800
     root.h = 600
 
-    i = 0
-    current_parent = root
+    stack = alloc(128 * 8)
+    write_u64(stack, 0, root)
+    stack_depth = 1
 
+    i = 0
     while i < L do
         c = get_byte(html_str, i)
         if c == 60 do // '<'
             i = i + 1
             if i < L and get_byte(html_str, i) == 47 do // '</' closing tag
-                // Skip until '>'
+                // Pop parent from stack
+                if stack_depth > 1 do
+                    stack_depth = stack_depth - 1
+                end
                 while i < L and get_byte(html_str, i) != 62 do i = i + 1 end
                 i = i + 1
             else do
@@ -97,7 +102,7 @@ html_parse(html_str: string): DomNode do
                     if i + 6 < L and slice(html_str, i, i + 6) == "class=" do
                         i = i + 6
                         quote_char = get_byte(html_str, i)
-                        if quote_char == 34 or quote_char == 39 do // '"' or '''
+                        if quote_char == 34 or quote_char == 39 do
                             i = i + 1
                             c_start = i
                             while i < L and get_byte(html_str, i) != quote_char do i = i + 1 end
@@ -124,13 +129,22 @@ html_parse(html_str: string): DomNode do
                     new_node.text_content = trim(slice(html_str, txt_start, i))
                 end
 
-                html_add_child(current_parent, new_node)
+                parent_ptr = read_u64(stack, (stack_depth - 1) * 8)
+                parent_node = parent_ptr
+                html_add_child(parent_node, new_node)
+
+                // Push new_node as current parent for nested elements
+                if not (tag_name == "br" or tag_name == "img" or tag_name == "input" or tag_name == "hr") do
+                    write_u64(stack, stack_depth * 8, new_node)
+                    stack_depth = stack_depth + 1
+                end
             end
         else do
             i = i + 1
         end
     end
 
+    drop(stack)
     root
 end
 
@@ -151,35 +165,46 @@ html_apply_css(root: DomNode, css_str: string) do
             child.border_g = 65
             child.border_b = 85
             child.border_radius = 12
-            child.padding = 16
+            child.padding = 12
+            child.margin = 6
         end
 
         if contains(cls, "btn") or child.tag == "button" do
             child.bg_r = 56
             child.bg_g = 189
             child.bg_b = 248
+            child.border_r = 14
+            child.border_g = 165
+            child.border_b = 233
             child.fg_r = 0
             child.fg_g = 0
             child.fg_b = 0
             child.border_radius = 8
             child.padding = 10
+            child.margin = 8
         end
 
         if contains(cls, "primary") do
             child.bg_r = 2
             child.bg_g = 132
             child.bg_b = 199
+            child.border_r = 56
+            child.border_g = 189
+            child.border_b = 248
             child.fg_r = 255
             child.fg_g = 255
             child.fg_b = 255
         end
 
         if contains(cls, "hero") do
-            child.bg_r = 18
-            child.bg_g = 24
-            child.bg_b = 38
-            child.border_radius = 16
-            child.padding = 24
+            child.bg_r = 7
+            child.bg_g = 11
+            child.bg_b = 20
+            child.border_r = 30
+            child.border_g = 41
+            child.border_b = 59
+            child.border_radius = 14
+            child.padding = 16
         end
 
         // Typography tag adjustments
@@ -188,16 +213,19 @@ html_apply_css(root: DomNode, css_str: string) do
             child.fg_r = 56
             child.fg_g = 189
             child.fg_b = 248
+            child.margin = 2
         else if child.tag == "h2" do
-            child.font_size = 1
-            child.fg_r = 255
-            child.fg_g = 255
-            child.fg_b = 255
+            child.font_size = 3
+            child.fg_r = 241
+            child.fg_g = 245
+            child.fg_b = 249
+            child.margin = 2
         else if child.tag == "p" do
             child.font_size = 1
             child.fg_r = 148
             child.fg_g = 163
             child.fg_b = 184
+            child.margin = 2
         end
 
         if child.child_count > 0 do
@@ -221,22 +249,23 @@ html_compute_layout(root: DomNode, cur_x: i64, cur_y: i64, max_w: i64) do
     while i < root.child_count do
         child = html_get_child(root, i)
         child_w = content_w - (child.margin * 2)
-        child_h = if child.tag == "h1" then 36
-                  else if child.tag == "h2" then 30
-                  else if child.tag == "button" then 40
-                  else if child.tag == "p" then 24
-                  else 56
-
         child.x = cur_x + root.padding + child.margin
         child.y = offset_y + child.margin
         child.w = child_w
-        child.h = child_h
 
         if child.child_count > 0 do
             html_compute_layout(child, child.x, child.y, child_w)
+            child_h = child.h
+        else do
+            child_h = if child.tag == "h1" then 36
+                      else if child.tag == "h2" then 26
+                      else if child.tag == "button" then 38
+                      else if child.tag == "p" then 20
+                      else 28
+            child.h = child_h
         end
 
-        offset_y = offset_y + child_h + (child.margin * 2) + 8
+        offset_y = offset_y + child.h + (child.margin * 2) + 4
         i = i + 1
     end
 
@@ -246,10 +275,11 @@ end
 // ---- Canvas Rasterizer ----
 
 html_render_node(node: DomNode, c: Canvas) do
-    // Render background card
-    if node.tag != "body" do
+    // Only draw card / button background boxes for container elements
+    is_box = if contains(node.class_name, "card") or contains(node.class_name, "hero") or contains(node.class_name, "btn") or node.tag == "button" or node.tag == "card" then true else false
+
+    if is_box do
         canvas_fill_rect(c, node.x, node.y, node.w, node.h, node.bg_r, node.bg_g, node.bg_b, 255)
-        // Border
         canvas_draw_rect(c, node.x, node.y, node.w, node.h, node.border_r, node.border_g, node.border_b, 255, false)
     end
 
@@ -264,8 +294,9 @@ end
 
 html_render_text(node: DomNode, win: GuiWindow) do
     if str_len(node.text_content) > 0 do
-        tx = node.x + 16
-        ty = node.y + (node.h - 18) / 2
+        tx = if node.tag == "button" then node.x + (node.w - (_str_len(node.text_content) * 8)) / 2
+             else node.x + 8
+        ty = node.y + (node.h - 16) / 2
         gui_draw_text(win, node.text_content, tx, ty, node.font_size, node.fg_r, node.fg_g, node.fg_b)
     end
 
@@ -280,6 +311,20 @@ end
 html_render(root: DomNode, c: Canvas) do
     canvas_clear(c, root.bg_r, root.bg_g, root.bg_b, 255)
     html_render_node(root, c)
+end
+
+// ---- Standalone WebUI Application Runner ----
+
+webui_open(html_str: string, css_str: string, title: string, width: i64, height: i64) do
+    root = html_parse(html_str)
+    html_apply_css(root, css_str)
+    html_compute_layout(root, 10, 10, width - 20)
+
+    c = canvas_create(width, height)
+    html_render(root, c)
+    
+    show($"[WebUI] Standalone Window Ready: {title} ({width}x{height})\n")
+    0
 end
 
 // ---- Interactive Desktop Window Event Loop ----
