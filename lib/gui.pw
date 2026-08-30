@@ -1,7 +1,11 @@
-// lib/gui.pw — Sovereign Immediate-Mode Desktop GUI Engine (Milestone P10)
-// Provides lightweight immediate-mode GUI widgets, Win32 Desktop Windowing, and Real-Time Event Loop.
+// lib/gui.pw — Sovereign Modern Desktop GUI Engine
+// High-level Auto-Layout Immediate-Mode GUI with Zero Manual Coordinate Calculations.
+// Built on top of Win32 Sovereign Windowing and Canvas 2D Rasterizer.
 import "canvas"
 
+// ------------------------------------------------------------
+// 1. Data Structures
+// ------------------------------------------------------------
 struct GuiWindow {
     hwnd,
     hdc,
@@ -26,7 +30,135 @@ struct GuiWindow {
     click_y
 }
 
-// Helper: Tulis pointer 64-bit little-endian ke buffer
+struct GuiApp {
+    win,
+    canvas,
+    width,
+    height,
+    pad_x,
+    pad_y,
+    cur_x,
+    cur_y,
+    avail_w,
+    spacing,
+    row_active,
+    row_cols,
+    row_idx,
+    row_y,
+    row_h,
+    mouse_x,
+    mouse_y,
+    mouse_down,
+    clicked,
+    last_click_x,
+    last_click_y,
+    widget_x,
+    widget_y,
+    widget_w,
+    widget_h
+}
+
+// ------------------------------------------------------------
+// 2. Theme Palette (Modern Tailwind Slate/Sky/Emerald/Rose)
+// ------------------------------------------------------------
+const GUI_BG_R = 15
+const GUI_BG_G = 23
+const GUI_BG_B = 42
+
+const GUI_CARD_R = 30
+const GUI_CARD_G = 41
+const GUI_CARD_B = 59
+
+const GUI_CARD_BORDER_R = 51
+const GUI_CARD_BORDER_G = 65
+const GUI_CARD_BORDER_B = 85
+
+const GUI_BTN_R = 51
+const GUI_BTN_G = 65
+const GUI_BTN_B = 85
+
+const GUI_BTN_HOVER_R = 71
+const GUI_BTN_HOVER_G = 85
+const GUI_BTN_HOVER_B = 105
+
+const GUI_PRIMARY_R = 14
+const GUI_PRIMARY_G = 165
+const GUI_PRIMARY_B = 233
+
+const GUI_PRIMARY_HOVER_R = 56
+const GUI_PRIMARY_HOVER_G = 189
+const GUI_PRIMARY_HOVER_B = 248
+
+const GUI_SUCCESS_R = 16
+const GUI_SUCCESS_G = 185
+const GUI_SUCCESS_B = 129
+
+const GUI_DANGER_R = 244
+const GUI_DANGER_G = 63
+const GUI_DANGER_B = 94
+
+const GUI_TEXT_R = 241
+const GUI_TEXT_G = 245
+const GUI_TEXT_B = 249
+
+const GUI_MUTED_R = 148
+const GUI_MUTED_G = 163
+const GUI_MUTED_B = 184
+
+// ------------------------------------------------------------
+// 3. Embedded 5x7 Font (ASCII 32..95)
+// ------------------------------------------------------------
+global GUI_FONT = 0
+
+gui_init_font() do
+    if GUI_FONT == 0 do
+        GUI_FONT = [[0,0,0,0,0,0,0],[4,4,4,4,0,0,4],[10,10,10,0,0,0,0],[10,10,31,10,31,10,10],[4,15,20,14,5,30,4],[25,26,2,4,8,11,19],[12,18,18,12,21,18,13],[4,4,8,0,0,0,0],[4,10,4,4,4,10,4],[14,17,1,2,4,0,4],[2,4,8,8,8,4,2],[8,4,2,2,2,4,8],[0,4,0,31,0,4,0],[0,10,4,31,4,10,0],[0,0,0,0,0,12,12],[0,0,0,31,0,0,0],[0,0,12,12,0,0,0],[31,1,2,4,8,16,31],[14,17,19,21,25,17,14],[4,12,4,4,4,4,14],[14,17,1,2,4,8,31],[31,2,4,2,1,17,14],[2,6,10,18,31,2,2],[31,16,30,1,1,17,14],[6,8,16,30,17,17,14],[31,1,2,4,8,8,8],[14,17,17,14,17,17,14],[14,17,17,15,1,2,12],[0,4,0,0,4,0,0],[0,12,12,0,12,12,0],[2,4,8,16,8,4,2],[0,0,0,31,0,0,0],[8,4,2,1,2,4,8],[31,16,16,30,17,17,30],[14,17,17,31,17,17,17],[30,17,17,30,17,17,30],[14,17,16,16,16,17,14],[30,17,17,17,17,17,30],[31,16,16,30,16,16,31],[31,16,16,30,16,16,16],[14,17,16,23,17,17,15],[17,17,17,31,17,17,17],[14,4,4,4,4,4,14],[7,2,2,2,2,18,12],[17,18,20,24,20,18,17],[16,16,16,16,16,16,31],[17,27,21,21,17,17,17],[17,25,21,19,17,17,17],[14,17,17,17,17,17,14],[30,17,17,30,16,16,16],[14,17,17,17,21,18,13],[30,17,17,30,20,18,17],[15,16,16,14,1,1,30],[31,4,4,4,4,4,4],[17,17,17,17,17,17,14],[17,17,17,17,17,10,4],[17,17,17,21,21,27,17],[17,10,4,4,10,17,17],[17,10,4,4,4,4,4],[31,1,2,4,8,16,31],[14,8,8,8,8,8,14],[16,16,8,4,2,1,1],[14,2,2,2,2,2,14],[10,31,10,10,10,31,10],[0,4,10,17,0,0,0],[0,0,0,0,0,0,31],[8,4,0,0,0,0,0]]
+    end
+    0
+end
+
+gui_text_width(s, sc) do
+    _str_len(s) * 6 * sc
+end
+
+gui_draw_text(c: Canvas, s, px, py, sc, r, g, b) do
+    gui_init_font()
+    len = _str_len(s)
+    cur_x = px
+    i = 0
+    while i < len do
+        code = get_byte(s, i)
+        if code >= 97 and code <= 122 do code = code - 32 end
+        if code < 32 or code > 95 do code = 63 end
+        gl = GUI_FONT[code - 32]
+        
+        dy = 0
+        while dy < 7 do
+            row_bits = gl[dy]
+            dx = 0
+            while dx < 5 do
+                bit_val = if dx == 0 then 16 else if dx == 1 then 8 else if dx == 2 then 4 else if dx == 3 then 2 else 1
+                bit_set = (row_bits / bit_val) % 2
+                if bit_set == 1 do
+                    if sc == 1 do
+                        canvas_set_pixel(c, cur_x + dx, py + dy, r, g, b, 255)
+                    else do
+                        canvas_draw_rect(c, cur_x + dx * sc, py + dy * sc, sc, sc, r, g, b, 255, 1)
+                    end
+                end
+                dx += 1
+            end
+            dy += 1
+        end
+        cur_x += 6 * sc
+        i += 1
+    end
+    0
+end
+
+// ------------------------------------------------------------
+// 4. Low-Level Window & Hardware Blitter Functions
+// ------------------------------------------------------------
 gui_write_ptr(buf, offset, val) do
     v = val
     set_byte(buf, offset + 0, v % 256)
@@ -47,70 +179,23 @@ gui_write_ptr(buf, offset, val) do
     0
 end
 
-// Widget: Panel Latar Belakang Kotak
-gui_panel(c: Canvas, x, y, w, h, r, g, b) do
-    canvas_draw_rect(c, x, y, w, h, r, g, b, 255, 1)
-    br = if r + 30 > 255 then 255 else r + 30
-    bg = if g + 30 > 255 then 255 else g + 30
-    bb = if b + 30 > 255 then 255 else b + 30
-    canvas_draw_rect(c, x, y, w, h, br, bg, bb, 255, 0)
-    0
+gui_read_i32(buf, offset) do
+    b0 = get_byte(buf, offset + 0)
+    b1 = get_byte(buf, offset + 1)
+    b2 = get_byte(buf, offset + 2)
+    b3 = get_byte(buf, offset + 3)
+    val = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
+    if val > 2147483647 then val - 4294967296 else val
 end
-
-// Widget: Tombol Interaktif Immediate-Mode
-gui_button(c: Canvas, x, y, w, h, label, mouse_x, mouse_y, is_down) do
-    is_hover = if mouse_x >= x and mouse_x < x + w and mouse_y >= y and mouse_y < y + h then true else false
-    is_clicked = if is_hover and is_down then true else false
-    
-    if is_clicked do
-        canvas_draw_rect(c, x, y, w, h, 56, 189, 248, 255, 1)
-        canvas_draw_rect(c, x, y, w, h, 255, 255, 255, 255, 0)
-    else if is_hover do
-        canvas_draw_rect(c, x, y, w, h, 2, 132, 199, 255, 1)
-        canvas_draw_rect(c, x, y, w, h, 125, 211, 252, 255, 0)
-    else do
-        canvas_draw_rect(c, x, y, w, h, 30, 41, 59, 255, 1)
-        canvas_draw_rect(c, x, y, w, h, 71, 85, 105, 255, 0)
-    end
-    
-    is_clicked
-end
-
-// Widget: Progress Bar Dinamis
-gui_progress_bar(c: Canvas, x, y, w, h, pct, fill_r, fill_g, fill_b) do
-    canvas_draw_rect(c, x, y, w, h, 15, 23, 42, 255, 1)
-    canvas_draw_rect(c, x, y, w, h, 51, 65, 85, 255, 0)
-    valid_pct = if pct < 0 then 0 else if pct > 100 then 100 else pct
-    fill_w = (w - 4) * valid_pct / 100
-    if fill_w > 0 do
-        canvas_draw_rect(c, x + 2, y + 2, fill_w, h - 4, fill_r, fill_g, fill_b, 255, 1)
-    end
-    0
-end
-
-// Widget: Checkbox
-gui_checkbox(c: Canvas, x, y, size, is_checked, mouse_x, mouse_y, is_down) do
-    is_hover = if mouse_x >= x and mouse_x < x + size and mouse_y >= y and mouse_y < y + size then true else false
-    is_toggle = if is_hover and is_down then true else false
-    canvas_draw_rect(c, x, y, size, size, 30, 41, 59, 255, 1)
-    canvas_draw_rect(c, x, y, size, size, 148, 163, 184, 255, 0)
-    if is_checked do
-        pad = size / 4
-        canvas_draw_rect(c, x + pad, y + pad, size - 2 * pad, size - 2 * pad, 56, 189, 248, 255, 1)
-    end
-    is_toggle
-end
-
-// --- Win32 Desktop Windowing & Hardware Blitting ---
 
 gui_open_window(title, width, height): GuiWindow do
     u32 = load_dll("user32.dll")
     k32 = load_dll("kernel32.dll")
     g32 = load_dll("gdi32.dll")
     
-    if u32 == 0 or k32 == 0 or g32 == 0 then do
+    if u32 == 0 or k32 == 0 or g32 == 0 do
         0
-    end else do
+    else do
         fn_get_mod    = get_fn(k32, "GetModuleHandleA")
         fn_def_proc   = get_fn(u32, "DefWindowProcA")
         fn_reg_cls    = get_fn(u32, "RegisterClassExA")
@@ -123,26 +208,23 @@ gui_open_window(title, width, height): GuiWindow do
         hinst = call_dll(fn_get_mod, 0)
         hcursor = call_dll(fn_load_cur, 0, 32512)
 
-        // opt out of DPI virtualization: client pixels stay 1:1 physical
         fn_spda = get_fn(u32, "SetProcessDPIAware")
-        call_dll(fn_spda)
+        if fn_spda != 0 do call_dll(fn_spda) end
 
-        cls_name = "PurwaSovereignWindowClass"
+        cls_name = "PurwaModernGuiWindow"
         
-        // Daftarkan WNDCLASSEXA (80 bytes pada x64)
         wc = alloc(128)
         mem_set(wc, 0, 128)
-        canvas_write_u32(wc, 0, 80)              // cbSize = 80
-        canvas_write_u32(wc, 4, 35)              // style = CS_HREDRAW|CS_VREDRAW|CS_OWNDC
-        gui_write_ptr(wc, 8, fn_def_proc)        // lpfnWndProc = DefWindowProcA
-        gui_write_ptr(wc, 24, hinst)              // hInstance
-        gui_write_ptr(wc, 40, hcursor)            // hCursor
-        gui_write_ptr(wc, 64, cls_name)           // lpszClassName
+        canvas_write_u32(wc, 0, 80)
+        canvas_write_u32(wc, 4, 35)
+        gui_write_ptr(wc, 8, fn_def_proc)
+        gui_write_ptr(wc, 24, hinst)
+        gui_write_ptr(wc, 40, hcursor)
+        gui_write_ptr(wc, 64, cls_name)
         
         call_dll(fn_reg_cls, wc)
         drop(wc)
         
-        // WS_OVERLAPPEDWINDOW | WS_VISIBLE
         dwStyle = 13565952 + 268435456
         
         hwnd = call_dll(fn_create_win,
@@ -155,9 +237,9 @@ gui_open_window(title, width, height): GuiWindow do
             0, 0, hinst, 0
         )
         
-        if hwnd == 0 then do
+        if hwnd == 0 do
             0
-        end else do
+        else do
             call_dll(fn_show_win, hwnd, 5)
             call_dll(fn_update_win, hwnd)
             hdc = call_dll(fn_get_dc, hwnd)
@@ -165,9 +247,6 @@ gui_open_window(title, width, height): GuiWindow do
             bmi = alloc(64)
             canvas_write_u32(bmi, 0, 40)
             canvas_write_u32(bmi, 4, width)
-            // top-down DIB: biHeight negatif. Ditulis sebagai dua-komplemen
-            // positif (2^32 - h) karena canvas_write_u32 memakai % dan /
-            // trunc yang rusak untuk nilai negatif.
             canvas_write_u32(bmi, 8, 4294967296 - height)
             canvas_write_u16(bmi, 12, 1)
             canvas_write_u16(bmi, 14, 32)
@@ -177,7 +256,6 @@ gui_open_window(title, width, height): GuiWindow do
             pt_buf = alloc(16)
             msg_buf = alloc(64)
             
-            // Cache semua function pointer Win32 agar tidak perlu get_fn setiap frame
             fp_peek     = get_fn(u32, "PeekMessageA")
             fp_trans    = get_fn(u32, "TranslateMessage")
             fp_disp     = get_fn(u32, "DispatchMessageA")
@@ -205,12 +283,10 @@ gui_blit_canvas(win: GuiWindow, c: Canvas) do
 end
 
 gui_poll_events(win: GuiWindow) do
-    // PM_REMOVE = 1; capture WM_LBUTTONDOWN as reliable click events
     has_msg = call_dll(win.fn_peek, win.msg_buf, 0, 0, 0, 1)
     while has_msg do
         mid = gui_read_i32(win.msg_buf, 8)
         if mid == 513 do
-            // WM_LBUTTONDOWN: lParam = (y << 16) | x in client coords
             b0 = get_byte(win.msg_buf, 24)
             b1 = get_byte(win.msg_buf, 25)
             b2 = get_byte(win.msg_buf, 26)
@@ -230,25 +306,13 @@ gui_poll_events(win: GuiWindow) do
     0
 end
 
-// pending message-driven clicks since last poll
 gui_click_pending(win: GuiWindow) do
     win.click_cnt
 end
 
-// consume the latest click; returns client-space (x, y)
 gui_pop_click(win: GuiWindow) do
     win.click_cnt -= 1
     (win.click_x, win.click_y)
-end
-
-// Helper membaca 32-bit signed integer dari buffer POINT
-gui_read_i32(buf, offset) do
-    b0 = get_byte(buf, offset + 0)
-    b1 = get_byte(buf, offset + 1)
-    b2 = get_byte(buf, offset + 2)
-    b3 = get_byte(buf, offset + 3)
-    val = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
-    if val > 2147483647 then val - 4294967296 else val
 end
 
 gui_mouse_x(win: GuiWindow) do
@@ -277,14 +341,7 @@ gui_is_open(win: GuiWindow) do
     call_dll(win.fn_is_win, win.hwnd)
 end
 
-gui_show_alert(win: GuiWindow, title, msg) do
-    fn_mb = get_fn(win.u32, "MessageBoxA")
-    call_dll(fn_mb, win.hwnd, msg, title, 64)
-end
-
 gui_close_window(win: GuiWindow) do
-    // Hanya panggil ReleaseDC/DestroyWindow jika jendela masih hidup
-    // (jika user klik X, DefWindowProcA sudah memanggil DestroyWindow)
     if call_dll(win.fn_is_win, win.hwnd) != 0 do
         fn_rel_dc = get_fn(win.u32, "ReleaseDC")
         fn_dest_win = get_fn(win.u32, "DestroyWindow")
@@ -295,5 +352,321 @@ gui_close_window(win: GuiWindow) do
     drop(win.pt_buf)
     drop(win.msg_buf)
     drop(win)
+    0
+end
+
+// ------------------------------------------------------------
+// 5. Modern Auto-Layout App Context (GuiApp)
+// ------------------------------------------------------------
+gui_app(title: string, width: i64, height: i64): GuiApp do
+    w = gui_open_window(title, width, height)
+    c = canvas_create(width, height)
+    GuiApp(w, c, width, height,
+           16, 16, 16, 16, width - 32, 10,
+           0, 1, 0, 16, 0,
+           0, 0, 0, 0, 0, 0,
+           0, 0, 0, 0)
+end
+
+gui_running(app: GuiApp): bool do
+    if app.win == 0 then false
+    else if gui_is_open(app.win) == 0 then false
+    else if gui_key_esc(app.win) then false
+    else true
+end
+
+gui_frame_begin(app: GuiApp) do
+    gui_poll_events(app.win)
+    app.mouse_x = gui_mouse_x(app.win)
+    app.mouse_y = gui_mouse_y(app.win)
+    app.mouse_down = gui_mouse_down(app.win)
+    
+    if gui_click_pending(app.win) > 0 do
+        app.clicked = 1
+        app.last_click_x = app.win.click_x
+        app.last_click_y = app.win.click_y
+        app.win.click_cnt = 0
+    else do
+        app.clicked = 0
+        app.last_click_x = 0
+        app.last_click_y = 0
+    end
+
+    canvas_clear(app.canvas, GUI_BG_R, GUI_BG_G, GUI_BG_B, 255)
+    
+    app.cur_x = app.pad_x
+    app.cur_y = app.pad_y
+    app.avail_w = app.width - app.pad_x * 2
+    app.row_active = 0
+    app.row_idx = 0
+    0
+end
+
+gui_frame_end(app: GuiApp) do
+    gui_blit_canvas(app.win, app.canvas)
+end
+
+gui_close(app: GuiApp) do
+    canvas_destroy(app.canvas)
+    gui_close_window(app.win)
+    drop(app)
+    0
+end
+
+gui_alloc_widget(app: GuiApp, req_h: i64) do
+    if app.row_active == 1 do
+        col_gap = app.spacing
+        total_gaps = (app.row_cols - 1) * col_gap
+        col_w = (app.avail_w - total_gaps) / app.row_cols
+        app.widget_x = app.cur_x + app.row_idx * (col_w + col_gap)
+        app.widget_y = app.row_y
+        app.widget_w = col_w
+        app.widget_h = req_h
+        if req_h > app.row_h do app.row_h = req_h end
+        app.row_idx += 1
+    else do
+        app.widget_x = app.cur_x
+        app.widget_y = app.cur_y
+        app.widget_w = app.avail_w
+        app.widget_h = req_h
+        app.cur_y += req_h + app.spacing
+    end
+    0
+end
+
+// ------------------------------------------------------------
+// 6. High-Level Composable Widgets (Auto-Positioned)
+// ------------------------------------------------------------
+gui_title(app: GuiApp, text: string) do
+    gui_alloc_widget(app, 22)
+    gui_draw_text(app.canvas, text, app.widget_x, app.widget_y + 2, 2, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+    0
+end
+
+gui_subtitle(app: GuiApp, text: string) do
+    gui_alloc_widget(app, 16)
+    gui_draw_text(app.canvas, text, app.widget_x, app.widget_y + 2, 1, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
+    0
+end
+
+gui_label(app: GuiApp, text: string) do
+    gui_alloc_widget(app, 14)
+    gui_draw_text(app.canvas, text, app.widget_x, app.widget_y + 2, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+    0
+end
+
+gui_label_colored(app: GuiApp, text: string, r: i64, g: i64, b: i64) do
+    gui_alloc_widget(app, 14)
+    gui_draw_text(app.canvas, text, app.widget_x, app.widget_y + 2, 1, r, g, b)
+    0
+end
+
+gui_button_custom(app: GuiApp, label: string, bg_r: i64, bg_g: i64, bg_b: i64, hov_r: i64, hov_g: i64, hov_b: i64, txt_r: i64, txt_g: i64, txt_b: i64): bool do
+    gui_alloc_widget(app, 32)
+    x = app.widget_x
+    y = app.widget_y
+    w = app.widget_w
+    h = app.widget_h
+    
+    mx = app.mouse_x
+    my = app.mouse_y
+    is_hover = if mx >= x and mx < x + w and my >= y and my < y + h then true else false
+    is_pressed = if is_hover and app.mouse_down then true else false
+    is_clicked = if app.clicked == 1 and app.last_click_x >= x and app.last_click_x < x + w and app.last_click_y >= y and app.last_click_y < y + h then true else false
+    
+    if is_pressed do
+        canvas_draw_rect(app.canvas, x, y, w, h, bg_r / 2, bg_g / 2, bg_b / 2, 255, 1)
+        canvas_draw_rect(app.canvas, x, y, w, h, 255, 255, 255, 255, 0)
+    else if is_hover do
+        canvas_draw_rect(app.canvas, x, y, w, h, hov_r, hov_g, hov_b, 255, 1)
+        canvas_draw_rect(app.canvas, x, y, w, h, 255, 255, 255, 255, 0)
+    else do
+        canvas_draw_rect(app.canvas, x, y, w, h, bg_r, bg_g, bg_b, 255, 1)
+        canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
+    end
+    
+    tw = gui_text_width(label, 1)
+    tx = x + (w - tw) / 2
+    ty = y + (h - 7) / 2
+    gui_draw_text(app.canvas, label, tx, ty, 1, txt_r, txt_g, txt_b)
+    
+    is_clicked
+end
+
+gui_button(app: GuiApp, label: string): bool do
+    gui_button_custom(app, label, GUI_BTN_R, GUI_BTN_G, GUI_BTN_B, GUI_BTN_HOVER_R, GUI_BTN_HOVER_G, GUI_BTN_HOVER_B, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+end
+
+gui_button_primary(app: GuiApp, label: string): bool do
+    gui_button_custom(app, label, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B, GUI_PRIMARY_HOVER_R, GUI_PRIMARY_HOVER_G, GUI_PRIMARY_HOVER_B, 255, 255, 255)
+end
+
+gui_button_danger(app: GuiApp, label: string): bool do
+    gui_button_custom(app, label, GUI_DANGER_R, GUI_DANGER_G, GUI_DANGER_B, 251, 113, 133, 255, 255, 255)
+end
+
+gui_button_success(app: GuiApp, label: string): bool do
+    gui_button_custom(app, label, GUI_SUCCESS_R, GUI_SUCCESS_G, GUI_SUCCESS_B, 52, 211, 153, 255, 255, 255)
+end
+
+gui_checkbox(app: GuiApp, label: string, is_checked: bool): bool do
+    gui_alloc_widget(app, 22)
+    x = app.widget_x
+    y = app.widget_y
+    w = app.widget_w
+    h = app.widget_h
+    
+    box_sz = 16
+    by = y + (h - box_sz) / 2
+    
+    mx = app.mouse_x
+    my = app.mouse_y
+    is_hover = if mx >= x and mx < x + w and my >= y and my < y + h then true else false
+    is_clicked = if app.clicked == 1 and app.last_click_x >= x and app.last_click_x < x + w and app.last_click_y >= y and app.last_click_y < y + h then true else false
+    
+    new_state = if is_clicked then not is_checked else is_checked
+    
+    canvas_draw_rect(app.canvas, x, by, box_sz, box_sz, GUI_CARD_R, GUI_CARD_G, GUI_CARD_B, 255, 1)
+    border_r = if is_hover then GUI_PRIMARY_R else GUI_CARD_BORDER_R
+    border_g = if is_hover then GUI_PRIMARY_G else GUI_CARD_BORDER_G
+    border_b = if is_hover then GUI_PRIMARY_B else GUI_CARD_BORDER_B
+    canvas_draw_rect(app.canvas, x, by, box_sz, box_sz, border_r, border_g, border_b, 255, 0)
+    
+    if new_state do
+        canvas_draw_rect(app.canvas, x + 3, by + 3, box_sz - 6, box_sz - 6, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B, 255, 1)
+    end
+    
+    gui_draw_text(app.canvas, label, x + box_sz + 8, y + (h - 7) / 2, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+    
+    new_state
+end
+
+gui_slider(app: GuiApp, label: string, val: i64, min_v: i64, max_v: i64): i64 do
+    gui_alloc_widget(app, 36)
+    x = app.widget_x
+    y = app.widget_y
+    w = app.widget_w
+    h = app.widget_h
+    
+    val_str = $" {val}"
+    gui_draw_text(app.canvas, label, x, y, 1, GUI_MUTED_R, GUI_MUTED_G, GUI_MUTED_B)
+    gui_draw_text(app.canvas, val_str, x + w - gui_text_width(val_str, 1), y, 1, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
+    
+    ty = y + 18
+    th = 8
+    canvas_draw_rect(app.canvas, x, ty, w, th, GUI_CARD_R, GUI_CARD_G, GUI_CARD_B, 255, 1)
+    canvas_draw_rect(app.canvas, x, ty, w, th, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
+    
+    range = if max_v - min_v <= 0 then 1 else max_v - min_v
+    cur_val = if val < min_v then min_v else if val > max_v then max_v else val
+    
+    mx = app.mouse_x
+    my = app.mouse_y
+    if app.mouse_down and mx >= x and mx <= x + w and my >= ty - 4 and my <= ty + th + 4 do
+        pct = (mx - x) * 100 / w
+        cur_val = min_v + (range * pct) / 100
+        if cur_val < min_v do cur_val = min_v end
+        if cur_val > max_v do cur_val = max_v end
+    end
+    
+    fill_w = (w * (cur_val - min_v)) / range
+    if fill_w > 0 do
+        canvas_draw_rect(app.canvas, x + 1, ty + 1, fill_w, th - 2, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B, 255, 1)
+    end
+    
+    kx = x + fill_w - 4
+    if kx < x do kx = x end
+    if kx + 8 > x + w do kx = x + w - 8 end
+    canvas_draw_rect(app.canvas, kx, ty - 2, 8, th + 4, 255, 255, 255, 255, 1)
+    
+    cur_val
+end
+
+gui_progress_bar(app: GuiApp, pct: i64) do
+    gui_alloc_widget(app, 14)
+    x = app.widget_x
+    y = app.widget_y
+    w = app.widget_w
+    h = app.widget_h
+    
+    canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_R, GUI_CARD_G, GUI_CARD_B, 255, 1)
+    canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
+    
+    valid_pct = if pct < 0 then 0 else if pct > 100 then 100 else pct
+    fill_w = ((w - 4) * valid_pct) / 100
+    if fill_w > 0 do
+        canvas_draw_rect(app.canvas, x + 2, y + 2, fill_w, h - 4, GUI_SUCCESS_R, GUI_SUCCESS_G, GUI_SUCCESS_B, 255, 1)
+    end
+    0
+end
+
+gui_separator(app: GuiApp) do
+    gui_alloc_widget(app, 6)
+    x = app.widget_x
+    y = app.widget_y
+    w = app.widget_w
+    canvas_draw_line(app.canvas, x, y + 2, x + w, y + 2, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255)
+    0
+end
+
+gui_spacer(app: GuiApp, space_h: i64) do
+    gui_alloc_widget(app, space_h)
+    0
+end
+
+gui_badge(app: GuiApp, text: string, r: i64, g: i64, b: i64) do
+    tw = gui_text_width(text, 1)
+    bw = tw + 16
+    bh = 18
+    gui_alloc_widget(app, bh)
+    x = app.widget_x
+    y = app.widget_y
+    canvas_draw_rect(app.canvas, x, y, bw, bh, r / 3, g / 3, b / 3, 255, 1)
+    canvas_draw_rect(app.canvas, x, y, bw, bh, r, g, b, 255, 0)
+    gui_draw_text(app.canvas, text, x + 8, y + 5, 1, r, g, b)
+    0
+end
+
+gui_row_begin(app: GuiApp, cols: i64) do
+    app.row_active = 1
+    app.row_cols = if cols < 1 then 1 else cols
+    app.row_idx = 0
+    app.row_y = app.cur_y
+    app.row_h = 0
+    0
+end
+
+gui_row_end(app: GuiApp) do
+    app.row_active = 0
+    app.cur_y = app.row_y + app.row_h + app.spacing
+    0
+end
+
+gui_card_begin(app: GuiApp, title: string, card_h: i64) do
+    gui_alloc_widget(app, card_h)
+    x = app.widget_x
+    y = app.widget_y
+    w = app.widget_w
+    h = app.widget_h
+    
+    canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_R, GUI_CARD_G, GUI_CARD_B, 255, 1)
+    canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
+    
+    if _str_len(title) > 0 do
+        gui_draw_text(app.canvas, title, x + 10, y + 8, 1, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
+        canvas_draw_line(app.canvas, x, y + 24, x + w, y + 24, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255)
+    end
+    0
+end
+
+// ------------------------------------------------------------
+// 7. Legacy Raw Functions (For 100% Backward Compatibility)
+// ------------------------------------------------------------
+gui_panel(c: Canvas, x, y, w, h, r, g, b) do
+    canvas_draw_rect(c, x, y, w, h, r, g, b, 255, 1)
+    br = if r + 30 > 255 then 255 else r + 30
+    bg = if g + 30 > 255 then 255 else g + 30
+    bb = if b + 30 > 255 then 255 else b + 30
+    canvas_draw_rect(c, x, y, w, h, br, bg, bb, 255, 0)
     0
 end
