@@ -1,0 +1,49 @@
+// lib/memory.pw — High-Level Memory Management & Global Frame Scratchpad
+// Provides ergonomic scoped frame memory for UI engines, game loops, and worker tasks.
+import "arena"
+
+global G_FRAME_ARENA = 0
+
+// Initialize global frame scratchpad with given capacity (default 2 MB)
+frame_init(capacity_bytes: i64) do
+    if G_FRAME_ARENA == 0 do
+        cap = if capacity_bytes <= 0 then 2097152 else capacity_bytes // 2 MB
+        G_FRAME_ARENA = arena_new(cap)
+    end
+    G_FRAME_ARENA
+end
+
+// Allocate temporary memory from the global frame scratchpad
+frame_alloc(size_bytes: i64): i64 do
+    if G_FRAME_ARENA == 0 do frame_init(2097152) end
+    arena_alloc_raw(G_FRAME_ARENA, size_bytes)
+end
+
+// Allocate a string copy into the global frame scratchpad
+frame_alloc_str(s: string): string do
+    if G_FRAME_ARENA == 0 do frame_init(2097152) end
+    arena_alloc_str(G_FRAME_ARENA, s)
+end
+
+// Allocate a formatted integer string into the global frame scratchpad
+frame_fmt_int(prefix: string, n: i64, suffix: string): string do
+    if G_FRAME_ARENA == 0 do frame_init(2097152) end
+    arena_fmt_int(G_FRAME_ARENA, prefix, n, suffix)
+end
+
+// Reset the global frame scratchpad (called at the end of each frame/tick)
+frame_reset() do
+    if G_FRAME_ARENA != 0 do
+        arena_reset_all(G_FRAME_ARENA)
+    end
+    0
+end
+
+// Free the global frame scratchpad on shutdown
+frame_destroy() do
+    if G_FRAME_ARENA != 0 do
+        arena_free(G_FRAME_ARENA)
+        G_FRAME_ARENA = 0
+    end
+    0
+end

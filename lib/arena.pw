@@ -1,0 +1,122 @@
+// lib/arena.pw — High-Performance Arena Memory Management for Purwa
+// Built on native x86_64 Atomic Lock-Free Hardware Bump Pointer (LOCK XADD).
+// Zero GC, Zero Fragmentation, Sub-nanosecond Allocations.
+import "strings"
+
+struct Arena {
+    handle,
+    capacity
+}
+
+// Create a new memory arena with specified capacity in bytes
+arena_new(capacity_bytes: i64): Arena do
+    cap = if capacity_bytes <= 0 then 1048576 else capacity_bytes // Default 1 MB
+    h = create_arena(cap)
+    Arena(h, cap)
+end
+
+// Allocate raw aligned memory buffer from the arena
+arena_alloc_raw(a: Arena, size_bytes: i64): i64 do
+    if a.handle == 0 then 0
+    else arena_alloc(a.handle, size_bytes)
+end
+
+// Allocate a string copy into the arena
+arena_alloc_str(a: Arena, s: string): string do
+    if a.handle == 0 or _str_len(s) == 0 then ""
+    else do
+        L = _str_len(s)
+        buf = arena_alloc(a.handle, L + 1)
+        if buf == 0 then ""
+        else do
+            i = 0
+            while i < L do
+                set_byte(buf, i, get_byte(s, i))
+                i += 1
+            end
+            set_byte(buf, L, 0)
+            buf
+        end
+    end
+end
+
+// Allocate a formatted integer string into the arena
+arena_fmt_int(a: Arena, prefix: string, n: i64, suffix: string): string do
+    if a.handle == 0 then ""
+    else do
+        lp = _str_len(prefix)
+        ls = _str_len(suffix)
+        buf = arena_alloc(a.handle, lp + ls + 32)
+        if buf == 0 then ""
+        else do
+            i = 0
+            while i < lp do
+                set_byte(buf, i, get_byte(prefix, i))
+                i += 1
+            end
+            
+            v = if n < 0 then 0 - n else n
+            if n < 0 do
+                set_byte(buf, i, 45) // '-'
+                i += 1
+            end
+            if v == 0 do
+                set_byte(buf, i, 48) // '0'
+                i += 1
+            else do
+                temp = v
+                d_cnt = 0
+                while temp > 0 do
+                    d_cnt += 1
+                    temp /= 10
+                end
+                k = i + d_cnt - 1
+                i += d_cnt
+                while v > 0 do
+                    set_byte(buf, k, 48 + (v % 10))
+                    v /= 10
+                    k -= 1
+                end
+            end
+            
+            j = 0
+            while j < ls do
+                set_byte(buf, i, get_byte(suffix, j))
+                i += 1
+                j += 1
+            end
+            set_byte(buf, i, 0)
+            buf
+        end
+    end
+end
+
+// Reset the arena bump pointer back to 0 (1 CPU instruction, instant reuse)
+arena_reset_all(a: Arena) do
+    if a.handle != 0 do
+        arena_reset(a.handle)
+    end
+    0
+end
+
+// Get current bytes allocated in the arena
+arena_get_used(a: Arena): i64 do
+    if a.handle == 0 then 0
+    else arena_size(a.handle)
+end
+
+// Get remaining available capacity in bytes
+arena_get_available(a: Arena): i64 do
+    if a.handle == 0 then 0
+    else a.capacity - arena_size(a.handle)
+end
+
+// Free the arena back to the operating system
+arena_free(a: Arena) do
+    if a.handle != 0 do
+        drop_arena(a.handle)
+        a.handle = 0
+    end
+    drop(a)
+    0
+end
