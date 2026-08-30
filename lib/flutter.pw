@@ -143,7 +143,8 @@ struct FlutterApp {
     click_y,
     snackbar_text,
     snackbar_frames,
-    active_slider_action
+    active_slider_action,
+    slider_val
 }
 
 // ------------------------------------------------------------
@@ -331,17 +332,17 @@ FloatingActionButton(icon, action_id: i64): Widget do
 end
 
 Card(child): Widget do
-    Widget(W_CARD, 0, 0, 0, 10,
+    Widget(W_CARD, 0, 0, 0, 8,
            FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 6,
            "", 1, 0, 0, 0, 0,
            child, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 end
 
 ListTile(leading, title: string, subtitle: string, trailing, action_id: i64): Widget do
-    Widget(W_LIST_TILE, 0, 44, 0, 8,
+    Widget(W_LIST_TILE, 0, 40, 0, 8,
            FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 0,
            title, 1, FL_TEXT_R, FL_TEXT_G, FL_TEXT_B, 0,
-           leading, [trailing], action_id, 0, 0, 0, 0, 0, 0, 44)
+           leading, [trailing], action_id, 0, 0, 0, 0, 0, 0, 40)
 end
 
 Switch(is_active: bool, action_id: i64): Widget do
@@ -355,10 +356,11 @@ Switch(is_active: bool, action_id: i64): Widget do
 end
 
 Checkbox(is_checked: bool, label: string, action_id: i64): Widget do
-    Widget(W_CHECKBOX, 0, 22, 0, 0,
+    tw = if _str_len(label) > 0 then 24 + _str_len(label) * 6 else 18
+    Widget(W_CHECKBOX, tw, 20, 0, 0,
            FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 2,
            label, 1, FL_TEXT_R, FL_TEXT_G, FL_TEXT_B, 0,
-           0, 0, action_id, if is_checked then 1 else 0, 0, 0, 0, 0, 0, 22)
+           0, 0, action_id, if is_checked then 1 else 0, 0, 0, 0, 0, tw, 20)
 end
 
 Slider(val: i64, min_v: i64, max_v: i64, action_id: i64): Widget do
@@ -402,6 +404,18 @@ fl_measure(w: Widget, parent_w: i64, parent_h: i64) do
         else do
             w.measured_w = parent_w
             w.measured_h = w.pad * 2
+        end
+    else if w.kind == W_LIST_TILE do
+        w.measured_w = parent_w
+        w.measured_h = if w.h > 0 then w.h else 40
+        if w.child != 0 do
+            fl_measure(w.child, 16, 16)
+        end
+        if w.children != 0 and size(w.children) > 0 do
+            tr = w.children[0]
+            if tr != 0 do
+                fl_measure(tr, tr.w, tr.h)
+            end
         end
     else if w.kind == W_COLUMN do
         total_h = 0
@@ -508,6 +522,18 @@ fl_layout(w: Widget, origin_x: i64, origin_y: i64) do
         if w.child != 0 do
             fl_layout(w.child, origin_x + w.pad, origin_y + w.pad)
         end
+    else if w.kind == W_LIST_TILE do
+        if w.child != 0 do
+            w.child.measured_w = 12
+            w.child.measured_h = 12
+            fl_layout(w.child, origin_x + 8, origin_y + (w.measured_h - 12) / 2)
+        end
+        if w.children != 0 and size(w.children) > 0 do
+            tr = w.children[0]
+            if tr != 0 do
+                fl_layout(tr, origin_x + w.measured_w - tr.measured_w - 8, origin_y + (w.measured_h - tr.measured_h) / 2)
+            end
+        end
     else if w.kind == W_EXPANDED do
         if w.child != 0 do
             w.child.measured_w = w.measured_w
@@ -589,7 +615,7 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
             if act != 0 do triggered_action = act end
         end
     else if w.kind == W_TEXT do
-        gui_draw_text(app.canvas, w.text, x, y + 2, w.text_size, w.text_r, w.text_g, w.text_b)
+        gui_draw_text(app.canvas, w.text, x, y + (mh - 7 * w.text_size) / 2, w.text_size, w.text_r, w.text_g, w.text_b)
     else if w.kind == W_ICON do
         fl_draw_icon(app.canvas, w.icon_id, x + 2, y + 2, w.text_r, w.text_g, w.text_b)
     else if w.kind == W_ELEV_BTN or w.kind == W_CUPERTINO_BTN do
@@ -654,33 +680,28 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
         end
     else if w.kind == W_LIST_TILE do
         canvas_draw_rect(app.canvas, x, y, mw, mh, if is_hover then FL_CARD_BORDER_R else w.bg_r, if is_hover then FL_CARD_BORDER_G else w.bg_g, if is_hover then FL_CARD_BORDER_B else w.bg_b, 255, 1)
-        canvas_draw_rect(app.canvas, x, y, mw, mh, w.border_r, w.border_g, w.border_b, 255, 0)
-        tx = x + 12
+        tx = x + 8
         if w.child != 0 do
-            w.child.layout_x = tx
-            w.child.layout_y = y + (mh - 12) / 2
             fl_render_node(app, w.child)
-            tx += 20
+            tx += 22
         end
-        gui_draw_text(app.canvas, w.text, tx, y + 16, 1, w.text_r, w.text_g, w.text_b)
+        gui_draw_text(app.canvas, w.text, tx, y + (mh - 7) / 2, 1, w.text_r, w.text_g, w.text_b)
         if w.children != 0 and size(w.children) > 0 do
             tr = w.children[0]
             if tr != 0 do
-                tr.layout_x = x + mw - tr.measured_w - 12
-                tr.layout_y = y + (mh - tr.measured_h) / 2
                 act = fl_render_node(app, tr)
                 if act != 0 do triggered_action = act end
             end
         end
         if is_clicked do triggered_action = w.action_id end
     else if w.kind == W_SWITCH do
-        sw_w = 40
-        sw_h = 20
-        bg_r = if w.val_i64 == 1 then FL_PRIMARY_R else FL_CARD_R
-        bg_g = if w.val_i64 == 1 then FL_PRIMARY_G else FL_CARD_G
-        bg_b = if w.val_i64 == 1 then FL_PRIMARY_B else FL_CARD_B
+        sw_w = w.measured_w
+        sw_h = w.measured_h
+        bg_r = if w.val_i64 == 1 then FL_PRIMARY_R else FL_CARD_BORDER_R
+        bg_g = if w.val_i64 == 1 then FL_PRIMARY_G else FL_CARD_BORDER_G
+        bg_b = if w.val_i64 == 1 then FL_PRIMARY_B else FL_CARD_BORDER_B
         canvas_draw_rect(app.canvas, x, y, sw_w, sw_h, bg_r, bg_g, bg_b, 255, 1)
-        canvas_draw_rect(app.canvas, x, y, sw_w, sw_h, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 255, 0)
+        canvas_draw_rect(app.canvas, x, y, sw_w, sw_h, 255, 255, 255, 255, 0)
         knob_x = if w.val_i64 == 1 then x + sw_w - 18 else x + 2
         canvas_draw_rect(app.canvas, knob_x, y + 2, 16, 16, 255, 255, 255, 255, 1)
         if is_clicked do triggered_action = w.action_id end
@@ -718,6 +739,7 @@ fl_render_node(app: FlutterApp, w: Widget): i64 do
             if new_val < w.min_val do new_val = w.min_val end
             if new_val > w.max_val do new_val = w.max_val end
             app.active_slider_action = w.action_id
+            app.slider_val = new_val
             triggered_action = w.action_id
         end
     else if w.kind == W_PROGRESS do
@@ -783,7 +805,7 @@ flutter_app(title: string, width: i64, height: i64): FlutterApp do
     c = canvas_create(width, height)
     FlutterApp(w, c, width, height,
                0, 0, 0, 0, 0, 0,
-               "", 0, 0)
+               "", 0, 0, 0)
 end
 
 flutter_running(app: FlutterApp): bool do
@@ -791,6 +813,10 @@ flutter_running(app: FlutterApp): bool do
     else if gui_is_open(app.win) == 0 then false
     else if gui_key_esc(app.win) then false
     else true
+end
+
+flutter_slider_val(app: FlutterApp): i64 do
+    app.slider_val
 end
 
 flutter_render(app: FlutterApp, root: Widget): i64 do
