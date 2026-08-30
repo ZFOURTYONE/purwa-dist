@@ -131,11 +131,23 @@ tls_create_client_context(): TlsContext do
     expiry_buf = alloc(16)
     cleanup drop(expiry_buf)
 
-    pkg_name = "Schannel"
     status = 0 - 1
 
     if FN_ACQUIRE_CRED != 0 do
-        status = call_dll(FN_ACQUIRE_CRED, 0, pkg_name, SECPKG_CRED_OUTBOUND, 0, 0, 0, 0, cred_buf, expiry_buf)
+        // 1. Try standard Schannel with NULL pAuthData
+        status = call_dll(FN_ACQUIRE_CRED, 0, "Schannel", SECPKG_CRED_OUTBOUND, 0, 0, 0, 0, cred_buf, expiry_buf)
+
+        // 2. If rejected (e.g. Windows Server Core in CI), supply SCHANNEL_CRED structure (version 4)
+        if status != 0 do
+            sch_cred = alloc(128)
+            mem_set(sch_cred, 0, 128)
+            write_u32(sch_cred, 0, 4) // SCHANNEL_CRED_VERSION = 4
+            status = call_dll(FN_ACQUIRE_CRED, 0, "Schannel", SECPKG_CRED_OUTBOUND, 0, sch_cred, 0, 0, cred_buf, expiry_buf)
+            if status != 0 do
+                status = call_dll(FN_ACQUIRE_CRED, 0, "Microsoft Unified Security Protocol Provider", SECPKG_CRED_OUTBOUND, 0, sch_cred, 0, 0, cred_buf, expiry_buf)
+            end
+            drop(sch_cred)
+        end
     end
 
     if status == 0 do
