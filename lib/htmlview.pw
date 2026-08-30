@@ -354,7 +354,7 @@ html_compute_layout(root: DomNode, cur_x: i64, cur_y: i64, max_w: i64) do
         gap = 12
         total_gaps = (root.child_count - 1) * gap
         col_w = (content_w - total_gaps) / root.child_count
-        if col_w < 60 then col_w = 60
+        if col_w < 60 do col_w = 60 end
 
         max_child_h = 0
         i = 0
@@ -366,7 +366,7 @@ html_compute_layout(root: DomNode, cur_x: i64, cur_y: i64, max_w: i64) do
 
             if child.child_count > 0 do
                 html_compute_layout(child, child.x, child.y, col_w)
-                if child.h > max_child_h then max_child_h = child.h
+                if child.h > max_child_h do max_child_h = child.h end
             else do
                 child_h = if child.tag == "h1" then 36
                           else if child.tag == "h2" then 26
@@ -374,12 +374,12 @@ html_compute_layout(root: DomNode, cur_x: i64, cur_y: i64, max_w: i64) do
                           else if child.tag == "p" then 20
                           else 32
                 child.h = child_h
-                if child_h > max_child_h then max_child_h = child_h
+                if child_h > max_child_h do max_child_h = child_h end
             end
             i = i + 1
         end
         root.h = max_child_h + (root.padding * 2)
-    end else do
+    else do
         // Vertical Column Layout
         offset_y = cur_y + root.padding
         i = 0
@@ -438,7 +438,7 @@ html_render_text(node: DomNode, win: GuiWindow) do
 
         tx = if node.is_centered then node.x + (node.w - txt_px) / 2
              else node.x + 8
-        if tx < node.x + 4 then tx = node.x + 4
+        if tx < node.x + 4 do tx = node.x + 4 end
 
         ty = node.y + (node.h - 16) / 2
         gui_draw_text(win, node.text_content, tx, ty, node.font_size, node.fg_r, node.fg_g, node.fg_b)
