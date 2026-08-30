@@ -41,9 +41,7 @@ html_clean_text(s: string): string do
 
     while i < L do
         b = get_byte(s, i)
-        // Check for common UTF-8 emoji prefix bytes (0xE0-0xF4)
         if b >= 194 and b <= 244 do
-            // Skip multi-byte UTF-8 sequence
             if b >= 240 do
                 i = i + 4
             else if b >= 224 do
@@ -73,7 +71,7 @@ html_create_node(tag: string, text: string): DomNode do
         9, 13, 22,       // bg (slate-950)
         248, 250, 252,   // fg (white)
         30, 41, 59,      // border (slate-800)
-        6, 4, 8, 1,
+        8, 4, 8, 1,
         false, false,
         0, 0, 100, 30
     )
@@ -114,7 +112,6 @@ html_parse(html_str: string): DomNode do
         if c == 60 do // '<'
             i = i + 1
             if i < L and get_byte(html_str, i) == 47 do // '</' closing tag
-                // Pop parent from stack
                 if stack_depth > 1 do
                     stack_depth = stack_depth - 1
                 end
@@ -207,7 +204,7 @@ html_apply_css(root: DomNode, css_str: string) do
             child.border_b = 85
             child.border_radius = 12
             child.padding = 14
-            child.margin = 6
+            child.margin = 4
         end
 
         if contains(cls, "stat-card") do
@@ -217,24 +214,24 @@ html_apply_css(root: DomNode, css_str: string) do
             child.border_r = 30
             child.border_g = 42
             child.border_b = 64
-            child.border_radius = 12
-            child.padding = 12
+            child.border_radius = 14
+            child.padding = 10
             child.margin = 4
             child.is_centered = true
         end
 
         if contains(cls, "badge") do
-            child.bg_r = 15
-            child.bg_g = 35
-            child.bg_b = 60
+            child.bg_r = 12
+            child.bg_g = 28
+            child.bg_b = 48
             child.border_r = 56
             child.border_g = 189
             child.border_b = 248
             child.fg_r = 56
             child.fg_g = 189
             child.fg_b = 248
-            child.padding = 6
-            child.margin = 4
+            child.padding = 4
+            child.margin = 2
             child.border_radius = 16
             child.is_centered = true
         end
@@ -250,21 +247,21 @@ html_apply_css(root: DomNode, css_str: string) do
             child.fg_g = 0
             child.fg_b = 0
             child.border_radius = 8
-            child.padding = 10
-            child.margin = 6
+            child.padding = 8
+            child.margin = 4
             child.is_centered = true
         end
 
         if contains(cls, "btn-primary") or contains(cls, "primary") do
-            child.bg_r = 2
-            child.bg_g = 132
-            child.bg_b = 199
-            child.border_r = 56
-            child.border_g = 189
-            child.border_b = 248
-            child.fg_r = 255
-            child.fg_g = 255
-            child.fg_b = 255
+            child.bg_r = 56
+            child.bg_g = 189
+            child.bg_b = 248
+            child.border_r = 14
+            child.border_g = 165
+            child.border_b = 233
+            child.fg_r = 0
+            child.fg_g = 0
+            child.fg_b = 0
             child.is_centered = true
         end
 
@@ -272,9 +269,9 @@ html_apply_css(root: DomNode, css_str: string) do
             child.bg_r = 18
             child.bg_g = 24
             child.bg_b = 38
-            child.border_r = 51
-            child.border_g = 65
-            child.border_b = 85
+            child.border_r = 45
+            child.border_g = 58
+            child.border_b = 78
             child.fg_r = 241
             child.fg_g = 245
             child.fg_b = 249
@@ -285,7 +282,7 @@ html_apply_css(root: DomNode, css_str: string) do
             child.bg_r = 9
             child.bg_g = 13
             child.bg_b = 22
-            child.padding = 16
+            child.padding = 8
             child.is_centered = true
         end
 
@@ -295,7 +292,7 @@ html_apply_css(root: DomNode, css_str: string) do
             child.fg_r = 255
             child.fg_g = 255
             child.fg_b = 255
-            child.margin = 4
+            child.margin = 2
             child.is_centered = true
         else if child.tag == "h2" or child.tag == "h3" do
             child.font_size = 3
@@ -331,6 +328,9 @@ html_apply_css(root: DomNode, css_str: string) do
             child.fg_r = 56
             child.fg_g = 189
             child.fg_b = 248
+            if child.is_centered do
+                child.is_centered = true
+            end
         end
 
         if child.child_count > 0 do
@@ -349,9 +349,50 @@ html_compute_layout(root: DomNode, cur_x: i64, cur_y: i64, max_w: i64) do
 
     content_w = max_w - (root.padding * 2)
 
-    if root.is_flex_row and root.child_count > 0 do
-        // Horizontal Flex Row Layout
-        gap = 12
+    // Check for special header / nav layout
+    if contains(root.class_name, "nav") or root.tag == "header" do
+        // Top Nav: Logo left, right actions right
+        if root.child_count >= 3 do
+            c0 = html_get_child(root, 0) // logo
+            c1 = html_get_child(root, 1) // badge
+            c2 = html_get_child(root, 2) // button
+
+            c0.x = cur_x + root.padding
+            c0.y = cur_y + root.padding
+            c0.w = 200
+            c0.h = 32
+
+            c1.x = cur_x + max_w - 320
+            c1.y = cur_y + root.padding
+            c1.w = 180
+            c1.h = 30
+
+            c2.x = cur_x + max_w - 120
+            c2.y = cur_y + root.padding
+            c2.w = 100
+            c2.h = 30
+        end
+        root.h = 42
+    else if contains(root.class_name, "btn-group") do
+        // Centered Button Group (2 buttons side by side)
+        total_w = 400
+        start_x = cur_x + (max_w - total_w) / 2
+        btn_w = 190
+        btn_gap = 20
+
+        i = 0
+        while i < root.child_count do
+            child = html_get_child(root, i)
+            child.x = start_x + i * (btn_w + btn_gap)
+            child.y = cur_y + root.padding
+            child.w = btn_w
+            child.h = 38
+            i = i + 1
+        end
+        root.h = 46
+    else if root.is_flex_row and root.child_count > 0 do
+        // Generic Horizontal Flex Row / Grid
+        gap = 14
         total_gaps = (root.child_count - 1) * gap
         col_w = (content_w - total_gaps) / root.child_count
         if col_w < 60 do col_w = 60 end
@@ -370,7 +411,7 @@ html_compute_layout(root: DomNode, cur_x: i64, cur_y: i64, max_w: i64) do
             else do
                 child_h = if child.tag == "h1" then 36
                           else if child.tag == "h2" then 26
-                          else if child.tag == "button" then 38
+                          else if child.tag == "button" then 36
                           else if child.tag == "p" then 20
                           else 32
                 child.h = child_h
@@ -385,24 +426,35 @@ html_compute_layout(root: DomNode, cur_x: i64, cur_y: i64, max_w: i64) do
         i = 0
         while i < root.child_count do
             child = html_get_child(root, i)
-            child_w = content_w - (child.margin * 2)
-            child.x = cur_x + root.padding + child.margin
-            child.y = offset_y + child.margin
-            child.w = child_w
-
-            if child.child_count > 0 do
-                html_compute_layout(child, child.x, child.y, child_w)
-                child_h = child.h
+            
+            // Check if child is a centered compact pill badge
+            if contains(child.class_name, "badge") do
+                badge_w = 260
+                child.x = cur_x + (max_w - badge_w) / 2
+                child.y = offset_y + child.margin
+                child.w = badge_w
+                child.h = 28
+                offset_y = offset_y + 34
             else do
-                child_h = if child.tag == "h1" then 36
-                          else if child.tag == "h2" then 26
-                          else if child.tag == "button" then 38
-                          else if child.tag == "p" then 20
-                          else 28
-                child.h = child_h
-            end
+                child_w = content_w - (child.margin * 2)
+                child.x = cur_x + root.padding + child.margin
+                child.y = offset_y + child.margin
+                child.w = child_w
 
-            offset_y = offset_y + child.h + (child.margin * 2) + 6
+                if child.child_count > 0 do
+                    html_compute_layout(child, child.x, child.y, child_w)
+                    child_h = child.h
+                else do
+                    child_h = if child.tag == "h1" then 34
+                              else if child.tag == "h2" then 26
+                              else if child.tag == "button" then 36
+                              else if child.tag == "p" then 20
+                              else 28
+                    child.h = child_h
+                end
+
+                offset_y = offset_y + child.h + (child.margin * 2) + 4
+            end
             i = i + 1
         end
         root.h = offset_y - cur_y + root.padding
@@ -428,20 +480,46 @@ html_render_node(node: DomNode, c: Canvas) do
     end
 end
 
+// ---- ClearType Text Renderer with Multi-line Wrapping ----
+
 html_render_text(node: DomNode, win: GuiWindow) do
-    if str_len(node.text_content) > 0 do
+    txt_len = _str_len(node.text_content)
+    if txt_len > 0 do
         char_w = if node.font_size == 2 then 11
                  else if node.font_size == 3 then 9
                  else if node.font_size == 0 then 6
                  else 8
-        txt_px = _str_len(node.text_content) * char_w
+        txt_px = txt_len * char_w
 
-        tx = if node.is_centered then node.x + (node.w - txt_px) / 2
-             else node.x + 8
-        if tx < node.x + 4 do tx = node.x + 4 end
+        // Word wrapping for long paragraphs inside cards
+        if node.tag == "p" and txt_px > (node.w - 16) and txt_len > 30 do
+            // Find midpoint space to break line
+            mid = txt_len / 2
+            split_idx = mid
+            while split_idx > 10 and get_byte(node.text_content, split_idx) != 32 do
+                split_idx = split_idx - 1
+            end
+            if split_idx <= 10 do split_idx = mid end
 
-        ty = node.y + (node.h - 16) / 2
-        gui_draw_text(win, node.text_content, tx, ty, node.font_size, node.fg_r, node.fg_g, node.fg_b)
+            line1 = slice(node.text_content, 0, split_idx)
+            line2 = slice(node.text_content, split_idx + 1, txt_len)
+
+            ty = node.y + (node.h - 32) / 2
+            tx1 = if node.is_centered then node.x + (node.w - (_str_len(line1) * char_w)) / 2 else node.x + 10
+            tx2 = if node.is_centered then node.x + (node.w - (_str_len(line2) * char_w)) / 2 else node.x + 10
+            if tx1 < node.x + 4 do tx1 = node.x + 4 end
+            if tx2 < node.x + 4 do tx2 = node.x + 4 end
+
+            gui_draw_text(win, line1, tx1, ty, node.font_size, node.fg_r, node.fg_g, node.fg_b)
+            gui_draw_text(win, line2, tx2, ty + 16, node.font_size, node.fg_r, node.fg_g, node.fg_b)
+        else do
+            tx = if node.is_centered then node.x + (node.w - txt_px) / 2
+                 else node.x + 10
+            if tx < node.x + 4 do tx = node.x + 4 end
+
+            ty = node.y + (node.h - 16) / 2
+            gui_draw_text(win, node.text_content, tx, ty, node.font_size, node.fg_r, node.fg_g, node.fg_b)
+        end
     end
 
     i = 0
@@ -504,7 +582,7 @@ html_run_window(title: string, width: i64, height: i64, html_src: string, css_sr
         c = canvas_create(width, height)
         root = html_parse(html_src)
         html_apply_css(root, css_src)
-        html_compute_layout(root, 20, 20, width - 40)
+        html_compute_layout(root, 20, 15, width - 40)
 
         show($"[HTMLView] Native GUI Window Launched: {title} ({width}x{height})\n")
         show("[HTMLView] Press ESC or close window [X] to exit.\n")
