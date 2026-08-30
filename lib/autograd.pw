@@ -1,0 +1,439 @@
+// lib/autograd.pw — Reverse-Mode Automatic Differentiation & Neural Optimizer Engine
+// Pure Purwa, zero external dependencies.
+// Builds dynamic DAG computation graphs and backpropagates analytical gradients.
+
+import "tensor"
+import "mathf"
+
+// ---- Topological Sort & Graph Traversal ----
+
+struct DAGContext {
+    topo,
+    visited_ids,
+    v_count,
+    t_count
+}
+
+_autograd_visit(node, ctx: DAGContext) do
+    if node != 0 do
+        nid = node.id
+        found = false
+        i = 0
+        v_ids = ctx.visited_ids
+        vc = ctx.v_count
+        while i < vc do
+            if v_ids[i] == nid do
+                found = true
+            end
+            i = i + 1
+        end
+
+        if not found do
+            v_ids[vc] = nid
+            ctx.v_count = vc + 1
+
+            _autograd_visit(node.prev_a, ctx)
+            _autograd_visit(node.prev_b, ctx)
+
+            tp = ctx.topo
+            tc = ctx.t_count
+            tp[tc] = node
+            ctx.t_count = tc + 1
+        end
+    end
+end
+
+// Reverse-mode automatic differentiation entry point
+tensor_backward(loss: Tensor) do
+    // Set seed gradient dLoss/dLoss = 1.0
+    loss_grad = loss.grad
+    loss_grad[0] = 1.0
+
+    // Build topological order
+    topo = make_array(1024, 0)
+    visited_ids = make_array(1024, 0)
+    ctx = DAGContext(topo, visited_ids, 0, 0)
+    _autograd_visit(loss, ctx)
+
+    num_nodes = ctx.t_count
+    tp = ctx.topo
+
+    // Traverse in reverse topological order (from loss down to leaves)
+    idx = num_nodes - 1
+    while idx >= 0 do
+        node = tp[idx]
+        op = node.op
+        a = node.prev_a
+        b = node.prev_b
+
+        nd_data = node.data
+        nd_grad = node.grad
+
+        if op == OP_ADD do
+            // out = a + b
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    n = a.rows * a.cols
+                    k = 0
+                    while k < n do
+                        va: f64 = ag[k]
+                        vg: f64 = nd_grad[k]
+                        ag[k] = fadd(va, vg)
+                        k = k + 1
+                    end
+                end
+            end
+
+            if b != 0 do
+                if b.requires_grad do
+                    bg = b.grad
+                    is_b_broadcast_row = if b.rows == 1 and b.cols == node.cols then true else false
+                    if is_b_broadcast_row do
+                        // Accumulate column-wise across all rows
+                        r = node.rows
+                        c = node.cols
+                        j = 0
+                        while j < c do
+                            col_sum: f64 = 0.0
+                            i = 0
+                            while i < r do
+                                vg: f64 = nd_grad[i * c + j]
+                                col_sum = fadd(col_sum, vg)
+                                i = i + 1
+                            end
+                            vb: f64 = bg[j]
+                            bg[j] = fadd(vb, col_sum)
+                            j = j + 1
+                        end
+                    else do
+                        n = b.rows * b.cols
+                        k = 0
+                        while k < n do
+                            vb: f64 = bg[k]
+                            vg: f64 = nd_grad[k]
+                            bg[k] = fadd(vb, vg)
+                            k = k + 1
+                        end
+                    end
+                end
+            end
+        else if op == OP_SUB do
+            // out = a - b
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    n = a.rows * a.cols
+                    k = 0
+                    while k < n do
+                        va: f64 = ag[k]
+                        vg: f64 = nd_grad[k]
+                        ag[k] = fadd(va, vg)
+                        k = k + 1
+                    end
+                end
+            end
+            if b != 0 do
+                if b.requires_grad do
+                    bg = b.grad
+                    n = b.rows * b.cols
+                    k = 0
+                    while k < n do
+                        vb: f64 = bg[k]
+                        vg: f64 = nd_grad[k]
+                        bg[k] = fsub(vb, vg)
+                        k = k + 1
+                    end
+                end
+            end
+        else if op == OP_MUL do
+            // out = a * b (Hadamard)
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    bd = b.data
+                    n = a.rows * a.cols
+                    k = 0
+                    while k < n do
+                        va: f64 = ag[k]
+                        vg: f64 = nd_grad[k]
+                        vbd: f64 = bd[k]
+                        ag[k] = fadd(va, fmul(vg, vbd))
+                        k = k + 1
+                    end
+                end
+            end
+            if b != 0 do
+                if b.requires_grad do
+                    bg = b.grad
+                    ad = a.data
+                    n = b.rows * b.cols
+                    k = 0
+                    while k < n do
+                        vb: f64 = bg[k]
+                        vg: f64 = nd_grad[k]
+                        vad: f64 = ad[k]
+                        bg[k] = fadd(vb, fmul(vg, vad))
+                        k = k + 1
+                    end
+                end
+            end
+        else if op == OP_DIV do
+            // out = a / b
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    bd = b.data
+                    n = a.rows * a.cols
+                    k = 0
+                    while k < n do
+                        va: f64 = ag[k]
+                        vg: f64 = nd_grad[k]
+                        vbd: f64 = bd[k]
+                        ag[k] = fadd(va, fdiv(vg, vbd))
+                        k = k + 1
+                    end
+                end
+            end
+            if b != 0 do
+                if b.requires_grad do
+                    bg = b.grad
+                    ad = a.data
+                    bd = b.data
+                    n = b.rows * b.cols
+                    k = 0
+                    while k < n do
+                        vb: f64 = bg[k]
+                        vg: f64 = nd_grad[k]
+                        vad: f64 = ad[k]
+                        vbd: f64 = bd[k]
+                        // d/db = -a / b^2
+                        term = fdiv(fmul(vg, vad), fmul(vbd, vbd))
+                        bg[k] = fsub(vb, term)
+                        k = k + 1
+                    end
+                end
+            end
+        else if op == OP_MATMUL do
+            // out = a (M x K) * b (K x N)
+            m = a.rows
+            k_dim = a.cols
+            n = b.cols
+
+            ad = a.data
+            ag = a.grad
+            bd = b.data
+            bg = b.grad
+
+            // da = dout * b^T (M x N * N x K -> M x K)
+            if a != 0 do
+                if a.requires_grad do
+                    i = 0
+                    while i < m do
+                        p = 0
+                        while p < k_dim do
+                            sum: f64 = 0.0
+                            j = 0
+                            while j < n do
+                                vg: f64 = nd_grad[i * n + j]
+                                vbd: f64 = bd[p * n + j]
+                                sum = fadd(sum, fmul(vg, vbd))
+                                j = j + 1
+                            end
+                            vag: f64 = ag[i * k_dim + p]
+                            ag[i * k_dim + p] = fadd(vag, sum)
+                            p = p + 1
+                        end
+                        i = i + 1
+                    end
+                end
+            end
+
+            // db = a^T * dout (K x M * M x N -> K x N)
+            if b != 0 do
+                if b.requires_grad do
+                    p = 0
+                    while p < k_dim do
+                        j = 0
+                        while j < n do
+                            sum: f64 = 0.0
+                            i = 0
+                            while i < m do
+                                vad: f64 = ad[i * k_dim + p]
+                                vg: f64 = nd_grad[i * n + j]
+                                sum = fadd(sum, fmul(vad, vg))
+                                i = i + 1
+                            end
+                            vbg: f64 = bg[p * n + j]
+                            bg[p * n + j] = fadd(vbg, sum)
+                            j = j + 1
+                        end
+                        p = p + 1
+                    end
+                end
+            end
+        else if op == OP_RELU do
+            // out = relu(a)
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    ad = a.data
+                    n = a.rows * a.cols
+                    k = 0
+                    while k < n do
+                        vad: f64 = ad[k]
+                        vg: f64 = nd_grad[k]
+                        vag: f64 = ag[k]
+                        grad_contrib = if fgt(vad, 0.0) then vg else 0.0
+                        ag[k] = fadd(vag, grad_contrib)
+                        k = k + 1
+                    end
+                end
+            end
+        else if op == OP_SIGMOID do
+            // out = sigmoid(a) -> d/da = out * (1 - out) * dout
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    n = a.rows * a.cols
+                    k = 0
+                    while k < n do
+                        s: f64 = nd_data[k]
+                        vg: f64 = nd_grad[k]
+                        vag: f64 = ag[k]
+                        ds = fmul(s, fsub(1.0, s))
+                        ag[k] = fadd(vag, fmul(vg, ds))
+                        k = k + 1
+                    end
+                end
+            end
+        else if op == OP_TANH do
+            // out = tanh(a) -> d/da = (1 - out^2) * dout
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    n = a.rows * a.cols
+                    k = 0
+                    while k < n do
+                        t: f64 = nd_data[k]
+                        vg: f64 = nd_grad[k]
+                        vag: f64 = ag[k]
+                        dt = fsub(1.0, fmul(t, t))
+                        ag[k] = fadd(vag, fmul(vg, dt))
+                        k = k + 1
+                    end
+                end
+            end
+        else if op == OP_MSE do
+            // out = (1/N) * sum((pred - target)^2)
+            // d/dpred = (2/N) * (pred - target) * dout
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    ad = a.data
+                    bd = b.data
+                    n = a.rows * a.cols
+                    loss_g: f64 = nd_grad[0]
+                    factor = fdiv(2.0, to_float(n))
+                    k = 0
+                    while k < n do
+                        vp: f64 = ad[k]
+                        vt: f64 = bd[k]
+                        vag: f64 = ag[k]
+                        diff = fsub(vp, vt)
+                        d_pred = fmul(factor, fmul(diff, loss_g))
+                        ag[k] = fadd(vag, d_pred)
+                        k = k + 1
+                    end
+                end
+            end
+        else if op == OP_SCALE do
+            // out = a * s
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    ad = a.data
+                    n = a.rows * a.cols
+                    k = 0
+                    while k < n do
+                        vag: f64 = ag[k]
+                        vg: f64 = nd_grad[k]
+                        ag[k] = fadd(vag, vg)
+                        k = k + 1
+                    end
+                end
+            end
+        else if op == OP_TRANSPOSE do
+            // out = a^T (M x N -> N x M)
+            if a != 0 do
+                if a.requires_grad do
+                    ag = a.grad
+                    r = a.rows
+                    c = a.cols
+                    i = 0
+                    while i < r do
+                        j = 0
+                        while j < c do
+                            vg: f64 = nd_grad[j * r + i]
+                            vag: f64 = ag[i * c + j]
+                            ag[i * c + j] = fadd(vag, vg)
+                            j = j + 1
+                        end
+                        i = i + 1
+                    end
+                end
+            end
+        end
+
+        idx = idx - 1
+    end
+end
+
+// ---- Optimizers ----
+
+struct SGD {
+    params,
+    count,
+    lr
+}
+
+sgd_new(params, count: i64, lr: f64): SGD do
+    SGD(params, count, lr)
+end
+
+// Updates parameters: W = W - lr * grad
+sgd_step(opt: SGD) do
+    p = opt.params
+    n_params = opt.count
+    rate: f64 = opt.lr
+
+    i = 0
+    while i < n_params do
+        t = p[i]
+        td = t.data
+        tg = t.grad
+        n_elem = t.rows * t.cols
+
+        k = 0
+        while k < n_elem do
+            w: f64 = td[k]
+            g: f64 = tg[k]
+            td[k] = fsub(w, fmul(rate, g))
+            k = k + 1
+        end
+        i = i + 1
+    end
+end
+
+// Resets all gradients in parameter list to 0.0
+sgd_zero_grad(opt: SGD) do
+    p = opt.params
+    n_params = opt.count
+
+    i = 0
+    while i < n_params do
+        t = p[i]
+        tensor_zero_grad(t)
+        i = i + 1
+    end
+end

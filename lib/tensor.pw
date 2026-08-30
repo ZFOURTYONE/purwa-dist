@@ -1,0 +1,440 @@
+// lib/tensor.pw — Native Multi-Dimensional Tensor & Linear Algebra Engine
+// Pure Purwa, zero external dependencies (0-LLVM, 0-C++, 0-PyTorch).
+// Supports 2D matrices, broadcasting, cache-friendly matmul, activations & loss.
+
+import "mathf"
+
+// Operator tags for DAG computation graph
+const OP_NONE      = 0
+const OP_ADD       = 1
+const OP_SUB       = 2
+const OP_MUL       = 3
+const OP_DIV       = 4
+const OP_MATMUL    = 5
+const OP_RELU      = 6
+const OP_SIGMOID   = 7
+const OP_TANH      = 8
+const OP_MSE       = 9
+const OP_SCALE     = 10
+const OP_TRANSPOSE = 11
+
+global _tensor_id_counter = 1
+
+struct Tensor {
+    id,
+    data,
+    grad,
+    rows,
+    cols,
+    requires_grad,
+    op,
+    prev_a,
+    prev_b
+}
+
+// ---- Factory Functions ----
+
+tensor_new(rows: i64, cols: i64, req_grad: bool): Tensor do
+    tid = _tensor_id_counter
+    _tensor_id_counter = _tensor_id_counter + 1
+
+    n = rows * cols
+    d = make_array(n, 0.0)
+    g = make_array(n, 0.0)
+    Tensor(tid, d, g, rows, cols, req_grad, OP_NONE, 0, 0)
+end
+
+tensor_from_array(arr, rows: i64, cols: i64, req_grad: bool): Tensor do
+    t = tensor_new(rows, cols, req_grad)
+    n = rows * cols
+    td = t.data
+    i = 0
+    while i < n do
+        v: f64 = arr[i]
+        td[i] = v
+        i = i + 1
+    end
+    t
+end
+
+tensor_zeros(rows: i64, cols: i64): Tensor do
+    tensor_new(rows, cols, false)
+end
+
+tensor_ones(rows: i64, cols: i64): Tensor do
+    t = tensor_new(rows, cols, false)
+    n = rows * cols
+    i = 0
+    td = t.data
+    while i < n do
+        td[i] = 1.0
+        i = i + 1
+    end
+    t
+end
+
+tensor_scalar(val: f64): Tensor do
+    t = tensor_new(1, 1, false)
+    td = t.data
+    td[0] = val
+    t
+end
+
+// Deterministic PRNG initialization (LCG) in range [-scale, +scale]
+tensor_randn(rows: i64, cols: i64, seed_in: i64, scale: f64, req_grad: bool): Tensor do
+    t = tensor_new(rows, cols, req_grad)
+    n = rows * cols
+    seed = seed_in
+    if seed == 0 then seed = 12345 else 0
+    i = 0
+    td = t.data
+    while i < n do
+        seed = (seed * 1103515245 + 12345) % 2147483647
+        if seed < 0 then seed = 0 - seed else 0
+        // map to [-1.0, 1.0]
+        norm = fsub(fdiv(to_float(seed % 10000), 5000.0), 1.0)
+        td[i] = fmul(norm, scale)
+        i = i + 1
+    end
+    t
+end
+
+// ---- Element Accessors ----
+
+tensor_get(t: Tensor, r: i64, c: i64): f64 do
+    td = t.data
+    td[r * t.cols + c]
+end
+
+tensor_set(t: Tensor, r: i64, c: i64, val: f64) do
+    td = t.data
+    td[r * t.cols + c] = val
+end
+
+tensor_get_grad(t: Tensor, r: i64, c: i64): f64 do
+    tg = t.grad
+    tg[r * t.cols + c]
+end
+
+tensor_set_grad(t: Tensor, r: i64, c: i64, val: f64) do
+    tg = t.grad
+    tg[r * t.cols + c] = val
+end
+
+tensor_item(t: Tensor): f64 do
+    td = t.data
+    td[0]
+end
+
+tensor_zero_grad(t: Tensor) do
+    n = t.rows * t.cols
+    tg = t.grad
+    i = 0
+    while i < n do
+        tg[i] = 0.0
+        i = i + 1
+    end
+end
+
+// ---- Matrix & Tensor Operations ----
+
+// Element-wise addition with broadcasting support (e.g. [M, N] + [1, N])
+tensor_add(a: Tensor, b: Tensor): Tensor do
+    req = if a.requires_grad or b.requires_grad then true else false
+    r = a.rows
+    c = a.cols
+    out = tensor_new(r, c, req)
+    out.op = OP_ADD
+    out.prev_a = a
+    out.prev_b = b
+
+    ad = a.data
+    bd = b.data
+    od = out.data
+
+    is_b_broadcast_row = if b.rows == 1 and b.cols == c then true else false
+
+    i = 0
+    while i < r do
+        j = 0
+        while j < c do
+            idx = i * c + j
+            b_idx = if is_b_broadcast_row then j else (if b.rows == r and b.cols == c then idx else 0)
+            va: f64 = ad[idx]
+            vb: f64 = bd[b_idx]
+            od[idx] = fadd(va, vb)
+            j = j + 1
+        end
+        i = i + 1
+    end
+    out
+end
+
+// Element-wise subtraction (a - b)
+tensor_sub(a: Tensor, b: Tensor): Tensor do
+    req = if a.requires_grad or b.requires_grad then true else false
+    r = a.rows
+    c = a.cols
+    out = tensor_new(r, c, req)
+    out.op = OP_SUB
+    out.prev_a = a
+    out.prev_b = b
+
+    ad = a.data
+    bd = b.data
+    od = out.data
+
+    n = r * c
+    i = 0
+    while i < n do
+        va: f64 = ad[i]
+        vb: f64 = bd[i]
+        od[i] = fsub(va, vb)
+        i = i + 1
+    end
+    out
+end
+
+// Hadamard element-wise multiplication (a * b)
+tensor_mul(a: Tensor, b: Tensor): Tensor do
+    req = if a.requires_grad or b.requires_grad then true else false
+    r = a.rows
+    c = a.cols
+    out = tensor_new(r, c, req)
+    out.op = OP_MUL
+    out.prev_a = a
+    out.prev_b = b
+
+    ad = a.data
+    bd = b.data
+    od = out.data
+
+    n = r * c
+    i = 0
+    while i < n do
+        va: f64 = ad[i]
+        vb: f64 = bd[i]
+        od[i] = fmul(va, vb)
+        i = i + 1
+    end
+    out
+end
+
+// Element-wise division (a / b)
+tensor_div(a: Tensor, b: Tensor): Tensor do
+    req = if a.requires_grad or b.requires_grad then true else false
+    r = a.rows
+    c = a.cols
+    out = tensor_new(r, c, req)
+    out.op = OP_DIV
+    out.prev_a = a
+    out.prev_b = b
+
+    ad = a.data
+    bd = b.data
+    od = out.data
+
+    n = r * c
+    i = 0
+    while i < n do
+        va: f64 = ad[i]
+        vb: f64 = bd[i]
+        od[i] = fdiv(va, vb)
+        i = i + 1
+    end
+    out
+end
+
+// Scalar multiplication (a * scalar)
+tensor_scale(a: Tensor, s: f64): Tensor do
+    out = tensor_new(a.rows, a.cols, a.requires_grad)
+    out.op = OP_SCALE
+    out.prev_a = a
+
+    ad = a.data
+    od = out.data
+    n = a.rows * a.cols
+    i = 0
+    while i < n do
+        va: f64 = ad[i]
+        od[i] = fmul(va, s)
+        i = i + 1
+    end
+    out
+end
+
+// High-Performance 2D Matrix Multiplication: (M x K) * (K x N) -> (M x N)
+tensor_matmul(a: Tensor, b: Tensor): Tensor do
+    m = a.rows
+    k = a.cols
+    n = b.cols
+
+    req = if a.requires_grad or b.requires_grad then true else false
+    out = tensor_new(m, n, req)
+    out.op = OP_MATMUL
+    out.prev_a = a
+    out.prev_b = b
+
+    ad = a.data
+    bd = b.data
+    od = out.data
+
+    i = 0
+    while i < m do
+        j = 0
+        while j < n do
+            sum: f64 = 0.0
+            p = 0
+            while p < k do
+                va: f64 = ad[i * k + p]
+                vb: f64 = bd[p * n + j]
+                sum = fadd(sum, fmul(va, vb))
+                p = p + 1
+            end
+            od[i * n + j] = sum
+            j = j + 1
+        end
+        i = i + 1
+    end
+    out
+end
+
+// Matrix Transpose: (M x N) -> (N x M)
+tensor_transpose(a: Tensor): Tensor do
+    r = a.rows
+    c = a.cols
+    out = tensor_new(c, r, a.requires_grad)
+    out.op = OP_TRANSPOSE
+    out.prev_a = a
+
+    ad = a.data
+    od = out.data
+
+    i = 0
+    while i < r do
+        j = 0
+        while j < c do
+            va: f64 = ad[i * c + j]
+            od[j * r + i] = va
+            j = j + 1
+        end
+        i = i + 1
+    end
+    out
+end
+
+// ---- Non-Linear Activation Functions ----
+
+// ReLU: max(0, x)
+tensor_relu(a: Tensor): Tensor do
+    out = tensor_new(a.rows, a.cols, a.requires_grad)
+    out.op = OP_RELU
+    out.prev_a = a
+
+    ad = a.data
+    od = out.data
+    n = a.rows * a.cols
+    i = 0
+    while i < n do
+        va: f64 = ad[i]
+        od[i] = if fgt(va, 0.0) then va else 0.0
+        i = i + 1
+    end
+    out
+end
+
+// Sigmoid: 1 / (1 + exp(-x))
+tensor_sigmoid(a: Tensor): Tensor do
+    out = tensor_new(a.rows, a.cols, a.requires_grad)
+    out.op = OP_SIGMOID
+    out.prev_a = a
+
+    ad = a.data
+    od = out.data
+    n = a.rows * a.cols
+    i = 0
+    while i < n do
+        va: f64 = ad[i]
+        // sigma(x) = 1 / (1 + exp(-x))
+        exp_neg = math_exp(fneg(va))
+        denom = fadd(1.0, exp_neg)
+        od[i] = fdiv(1.0, denom)
+        i = i + 1
+    end
+    out
+end
+
+// Tanh: (exp(x) - exp(-x)) / (exp(x) + exp(-x))
+tensor_tanh(a: Tensor): Tensor do
+    out = tensor_new(a.rows, a.cols, a.requires_grad)
+    out.op = OP_TANH
+    out.prev_a = a
+
+    ad = a.data
+    od = out.data
+    n = a.rows * a.cols
+    i = 0
+    while i < n do
+        va: f64 = ad[i]
+        e_pos = math_exp(va)
+        e_neg = math_exp(fneg(va))
+        num = fsub(e_pos, e_neg)
+        den = fadd(e_pos, e_neg)
+        od[i] = fdiv(num, den)
+        i = i + 1
+    end
+    out
+end
+
+// ---- Loss Functions ----
+
+// Mean Squared Error Loss: MSE = (1/N) * sum((pred - target)^2)
+tensor_mse_loss(pred: Tensor, target: Tensor): Tensor do
+    n = pred.rows * pred.cols
+    out = tensor_new(1, 1, pred.requires_grad)
+    out.op = OP_MSE
+    out.prev_a = pred
+    out.prev_b = target
+
+    pd = pred.data
+    td = target.data
+    od = out.data
+
+    sum_sq: f64 = 0.0
+    i = 0
+    while i < n do
+        vp: f64 = pd[i]
+        vt: f64 = td[i]
+        diff = fsub(vp, vt)
+        sum_sq = fadd(sum_sq, fmul(diff, diff))
+        i = i + 1
+    end
+
+    od[0] = fdiv(sum_sq, to_float(n))
+    out
+end
+
+// ---- Printing & Inspection ----
+
+tensor_print(t: Tensor, label: string) do
+    show(label)
+    show(" [")
+    show_num(t.rows)
+    show("x")
+    show_num(t.cols)
+    show("]:\n")
+
+    ad = t.data
+    i = 0
+    while i < t.rows do
+        show("  [ ")
+        j = 0
+        while j < t.cols do
+            v: f64 = ad[i * t.cols + j]
+            show($" {v}")
+            j = j + 1
+        end
+        show(" ]\n")
+        i = i + 1
+    end
+end

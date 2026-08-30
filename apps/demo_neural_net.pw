@@ -1,0 +1,134 @@
+// apps/demo_neural_net.pw — Native Multi-Layer Perceptron (MLP) Neural Network Demo
+// Pure Purwa, zero external dependencies (0-PyTorch, 0-Python, 0-C++).
+// Trains a 2-layer Neural Network (2 -> 4 -> 1) to solve the non-linear XOR classification problem.
+
+import "tensor"
+import "autograd"
+import "mathf"
+
+main() do
+    show("=================================================================\n")
+    show("      PURWA AI/ML ENGINE — NATIVE NEURAL NETWORK (MLP) DEMO      \n")
+    show("=================================================================\n\n")
+
+    show("Problem: Non-Linear XOR Classification Gate\n")
+    show("Architecture: Dense(2 -> 4, Tanh) -> Dense(4 -> 1, Sigmoid)\n")
+    show("Optimizer: Stochastic Gradient Descent (SGD, lr=0.8)\n\n")
+
+    // Training Dataset: XOR Truth Table (4 samples x 2 features)
+    // [0, 0] -> 0
+    // [0, 1] -> 1
+    // [1, 0] -> 1
+    // [1, 1] -> 0
+    x_train = tensor_new(4, 2, false)
+    tensor_set(x_train, 0, 0, 0.0)
+    tensor_set(x_train, 0, 1, 0.0)
+
+    tensor_set(x_train, 1, 0, 0.0)
+    tensor_set(x_train, 1, 1, 1.0)
+
+    tensor_set(x_train, 2, 0, 1.0)
+    tensor_set(x_train, 2, 1, 0.0)
+
+    tensor_set(x_train, 3, 0, 1.0)
+    tensor_set(x_train, 3, 1, 1.0)
+
+    // Targets: (4 samples x 1 output)
+    y_train = tensor_new(4, 1, false)
+    tensor_set(y_train, 0, 0, 0.0)
+    tensor_set(y_train, 1, 0, 1.0)
+    tensor_set(y_train, 2, 0, 1.0)
+    tensor_set(y_train, 3, 0, 0.0)
+
+    // Weight & Bias Initialization (Deterministic Xavier initialization)
+    // Layer 1: W1 (2 x 4), B1 (1 x 4)
+    w1 = tensor_randn(2, 4, 12345, 1.5, true)
+    b1 = tensor_zeros(1, 4)
+    b1.requires_grad = true
+
+    // Layer 2: W2 (4 x 1), B2 (1 x 1)
+    w2 = tensor_randn(4, 1, 67890, 1.5, true)
+    b2 = tensor_zeros(1, 1)
+    b2.requires_grad = true
+
+    // Register parameters for SGD optimizer
+    params = make_array(4, 0)
+    params[0] = w1
+    params[1] = b1
+    params[2] = w2
+    params[3] = b2
+
+    opt = sgd_new(params, 4, 0.8)
+
+    show("Training Neural Network for 300 epochs...\n")
+    show("-----------------------------------------------------------------\n")
+    show(" Epoch   | Loss       | [0,0] Pred | [0,1] Pred | [1,0] Pred | [1,1] Pred\n")
+    show("-----------------------------------------------------------------\n")
+
+    epoch = 0
+    while epoch <= 300 do
+        // Forward Pass:
+        // z1 = X * W1 + B1
+        // h1 = tanh(z1)
+        // z2 = h1 * W2 + B2
+        // y_pred = sigmoid(z2)
+        z1 = tensor_add(tensor_matmul(x_train, w1), b1)
+        h1 = tensor_tanh(z1)
+        z2 = tensor_add(tensor_matmul(h1, w2), b2)
+        y_pred = tensor_sigmoid(z2)
+
+        // Loss computation
+        loss = tensor_mse_loss(y_pred, y_train)
+        loss_val: f64 = tensor_item(loss)
+
+        // Print progress every 30 epochs
+        if epoch % 30 == 0 do
+            p00: f64 = tensor_get(y_pred, 0, 0)
+            p01: f64 = tensor_get(y_pred, 1, 0)
+            p10: f64 = tensor_get(y_pred, 2, 0)
+            p11: f64 = tensor_get(y_pred, 3, 0)
+
+            show($"  {epoch}      | {loss_val} | {p00}   | {p01}   | {p10}   | {p11}\n")
+        end
+
+        if epoch < 300 do
+            // Backward pass & gradient step
+            sgd_zero_grad(opt)
+            tensor_backward(loss)
+            sgd_step(opt)
+        end
+
+        epoch = epoch + 1
+    end
+
+    show("-----------------------------------------------------------------\n\n")
+
+    // Final Evaluation
+    z1_f = tensor_add(tensor_matmul(x_train, w1), b1)
+    h1_f = tensor_tanh(z1_f)
+    z2_f = tensor_add(tensor_matmul(h1_f, w2), b2)
+    final_pred = tensor_sigmoid(z2_f)
+
+    f00: f64 = tensor_get(final_pred, 0, 0)
+    f01: f64 = tensor_get(final_pred, 1, 0)
+    f10: f64 = tensor_get(final_pred, 2, 0)
+    f11: f64 = tensor_get(final_pred, 3, 0)
+
+    show("Final XOR Gate Predictions vs Ground Truth:\n")
+    show($"  [0, 0] -> Expected: 0.0 | Predicted: {f00} -> Classified: {if flt(f00, 0.5) then 0 else 1}\n")
+    show($"  [0, 1] -> Expected: 1.0 | Predicted: {f01} -> Classified: {if flt(f01, 0.5) then 0 else 1}\n")
+    show($"  [1, 0] -> Expected: 1.0 | Predicted: {f10} -> Classified: {if flt(f10, 0.5) then 0 else 1}\n")
+    show($"  [1, 1] -> Expected: 0.0 | Predicted: {f11} -> Classified: {if flt(f11, 0.5) then 0 else 1}\n\n")
+
+    c00 = if flt(f00, 0.5) then 1 else 0
+    c01 = if fgt(f01, 0.5) then 1 else 0
+    c10 = if fgt(f10, 0.5) then 1 else 0
+    c11 = if flt(f11, 0.5) then 1 else 0
+
+    if c00 == 1 and c01 == 1 and c10 == 1 and c11 == 1 do
+        show(">>> NEURAL NETWORK TRAINING CONVERGED PERFECTLY (100% ACCURACY) <<<\n")
+    else do
+        show(">>> Model still training <<<\n")
+    end
+    0
+end
