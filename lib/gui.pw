@@ -1,6 +1,6 @@
 // lib/gui.pw — Sovereign Modern Desktop GUI Engine
-// High-level Auto-Layout Immediate-Mode GUI with Zero Manual Coordinate Calculations.
-// Built on top of Win32 Sovereign Windowing and Canvas 2D Rasterizer.
+// High-level Auto-Layout Immediate-Mode GUI with Native ClearType Typography.
+// Built on top of Win32 Sovereign Windowing, GDI ClearType & Canvas 2D Rasterizer.
 import "canvas"
 
 // ------------------------------------------------------------
@@ -27,12 +27,24 @@ struct GuiWindow {
     fn_is_win,
     click_cnt,
     click_x,
-    click_y
+    click_y,
+    mem_dc,
+    mem_bmp,
+    hfont_body,
+    hfont_bold,
+    hfont_title,
+    hfont_sub,
+    hfont_small,
+    fn_text_out,
+    fn_select_obj,
+    fn_set_bkmode,
+    fn_set_txtcol,
+    fn_bitblt
 }
 
 struct GuiApp {
-    win,
-    canvas,
+    win: GuiWindow,
+    canvas: Canvas,
     width,
     height,
     pad_x,
@@ -106,117 +118,25 @@ const GUI_MUTED_G = 163
 const GUI_MUTED_B = 184
 
 // ------------------------------------------------------------
-// 3. Embedded 5x7 Font (ASCII 32..95)
+// 3. ClearType Text & Font Helper Functions
 // ------------------------------------------------------------
-global GUI_FONT = 0
-
-gui_init_font() do
-    if GUI_FONT == 0 do
-        GUI_FONT = [
-            [0, 0, 0, 0, 0, 0, 0],
-            [4, 4, 4, 4, 4, 0, 4],
-            [10, 10, 10, 0, 0, 0, 0],
-            [10, 10, 31, 10, 31, 10, 10],
-            [4, 15, 20, 14, 5, 30, 4],
-            [25, 26, 2, 4, 8, 11, 19],
-            [12, 18, 18, 12, 21, 18, 13],
-            [4, 4, 8, 0, 0, 0, 0],
-            [2, 4, 8, 8, 8, 4, 2],
-            [8, 4, 2, 2, 2, 4, 8],
-            [0, 10, 4, 31, 4, 10, 0],
-            [0, 4, 4, 31, 4, 4, 0],
-            [0, 0, 0, 0, 4, 4, 8],
-            [0, 0, 0, 31, 0, 0, 0],
-            [0, 0, 0, 0, 0, 12, 12],
-            [1, 2, 4, 8, 16, 0, 0],
-            [14, 17, 19, 21, 25, 17, 14],
-            [4, 12, 4, 4, 4, 4, 14],
-            [14, 17, 1, 2, 4, 8, 31],
-            [31, 2, 4, 2, 1, 17, 14],
-            [2, 6, 10, 18, 31, 2, 2],
-            [31, 16, 30, 1, 1, 17, 14],
-            [6, 8, 16, 30, 17, 17, 14],
-            [31, 1, 2, 4, 8, 8, 8],
-            [14, 17, 17, 14, 17, 17, 14],
-            [14, 17, 17, 15, 1, 2, 12],
-            [0, 12, 12, 0, 12, 12, 0],
-            [0, 12, 12, 0, 12, 4, 8],
-            [2, 4, 8, 16, 8, 4, 2],
-            [0, 0, 31, 0, 31, 0, 0],
-            [8, 4, 2, 1, 2, 4, 8],
-            [14, 17, 1, 2, 4, 0, 4],
-            [14, 17, 1, 21, 21, 17, 14],
-            [14, 17, 17, 31, 17, 17, 17],
-            [30, 17, 17, 30, 17, 17, 30],
-            [14, 17, 16, 16, 16, 17, 14],
-            [30, 17, 17, 17, 17, 17, 30],
-            [31, 16, 16, 30, 16, 16, 31],
-            [31, 16, 16, 30, 16, 16, 16],
-            [14, 17, 16, 23, 17, 17, 15],
-            [17, 17, 17, 31, 17, 17, 17],
-            [14, 4, 4, 4, 4, 4, 14],
-            [7, 2, 2, 2, 2, 18, 12],
-            [17, 18, 20, 24, 20, 18, 17],
-            [16, 16, 16, 16, 16, 16, 31],
-            [17, 27, 21, 21, 17, 17, 17],
-            [17, 25, 21, 19, 17, 17, 17],
-            [14, 17, 17, 17, 17, 17, 14],
-            [30, 17, 17, 30, 16, 16, 16],
-            [14, 17, 17, 17, 21, 18, 13],
-            [30, 17, 17, 30, 20, 18, 17],
-            [15, 16, 16, 14, 1, 1, 30],
-            [31, 4, 4, 4, 4, 4, 4],
-            [17, 17, 17, 17, 17, 17, 14],
-            [17, 17, 17, 17, 17, 10, 4],
-            [17, 17, 17, 21, 21, 27, 17],
-            [17, 10, 4, 4, 10, 17, 17],
-            [17, 10, 4, 4, 4, 4, 4],
-            [31, 1, 2, 4, 8, 16, 31],
-            [14, 8, 8, 8, 8, 8, 14],
-            [16, 8, 4, 2, 1, 0, 0],
-            [14, 2, 2, 2, 2, 2, 14],
-            [4, 10, 17, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 31]
-        ]
-    end
-    0
+gui_text_width(s: string, sc: i64): i64 do
+    if sc >= 2 then _str_len(s) * 11
+    else if sc == 1 then _str_len(s) * 8
+    else _str_len(s) * 6
 end
 
-gui_text_width(s, sc) do
-    _str_len(s) * 6 * sc
-end
-
-gui_draw_text(c: Canvas, s, px, py, sc, r, g, b) do
-    gui_init_font()
-    len = _str_len(s)
-    cur_x = px
-    i = 0
-    while i < len do
-        code = get_byte(s, i)
-        if code >= 97 and code <= 122 do code = code - 32 end
-        if code < 32 or code > 95 do code = 63 end
-        gl = GUI_FONT[code - 32]
+gui_draw_text(win: GuiWindow, s: string, px: i64, py: i64, sc: i64, r: i64, g: i64, b: i64) do
+    if win != 0 and win.mem_dc != 0 do
+        fnt = if sc == 2 then win.hfont_title
+              else if sc == 3 then win.hfont_sub
+              else if sc == 0 then win.hfont_small
+              else win.hfont_body
         
-        dy = 0
-        while dy < 7 do
-            row_bits = gl[dy]
-            dx = 0
-            while dx < 5 do
-                bit_val = if dx == 0 then 16 else if dx == 1 then 8 else if dx == 2 then 4 else if dx == 3 then 2 else 1
-                bit_set = (row_bits / bit_val) % 2
-                if bit_set == 1 do
-                    if sc == 1 do
-                        canvas_set_pixel(c, cur_x + dx, py + dy, r, g, b, 255)
-                    else do
-                        canvas_draw_rect(c, cur_x + dx * sc, py + dy * sc, sc, sc, r, g, b, 255, 1)
-                    end
-                end
-                dx += 1
-            end
-            dy += 1
-        end
-        cur_x += 6 * sc
-        i += 1
+        call_dll(win.fn_select_obj, win.mem_dc, fnt)
+        call_dll(win.fn_set_bkmode, win.mem_dc, 1) // TRANSPARENT
+        call_dll(win.fn_set_txtcol, win.mem_dc, r + g * 256 + b * 65536)
+        call_dll(win.fn_text_out, win.mem_dc, px, py, s, _str_len(s))
     end
     0
 end
@@ -253,7 +173,7 @@ gui_read_i32(buf, offset) do
     if val > 2147483647 then val - 4294967296 else val
 end
 
-gui_open_window(title, width, height): GuiWindow do
+gui_open_window(title: string, width: i64, height: i64): GuiWindow do
     u32 = load_dll("user32.dll")
     k32 = load_dll("kernel32.dll")
     g32 = load_dll("gdi32.dll")
@@ -330,21 +250,60 @@ gui_open_window(title, width, height): GuiWindow do
             fp_asynckey = get_fn(u32, "GetAsyncKeyState")
             fp_is_win   = get_fn(u32, "IsWindow")
             
+            // Setup Native ClearType Double-Buffering & Fonts
+            fn_create_font = get_fn(g32, "CreateFontA")
+            fn_create_cdc  = get_fn(g32, "CreateCompatibleDC")
+            fn_create_cbmp = get_fn(g32, "CreateCompatibleBitmap")
+            fn_select_obj  = get_fn(g32, "SelectObject")
+            fn_set_bkmode  = get_fn(g32, "SetBkMode")
+            fn_set_txtcol  = get_fn(g32, "SetTextColor")
+            fn_text_out    = get_fn(g32, "TextOutA")
+            fn_bitblt      = get_fn(g32, "BitBlt")
+
+            mem_dc = call_dll(fn_create_cdc, hdc)
+            mem_bmp = call_dll(fn_create_cbmp, hdc, width, height)
+            call_dll(fn_select_obj, mem_dc, mem_bmp)
+
+            // Segoe UI Fonts with CLEARTYPE_QUALITY (5)
+            font_face = "Segoe UI"
+            hfont_body  = call_dll(fn_create_font, -14, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, font_face)
+            hfont_bold  = call_dll(fn_create_font, -14, 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, font_face)
+            hfont_title = call_dll(fn_create_font, -22, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 5, 0, font_face)
+            hfont_sub   = call_dll(fn_create_font, -16, 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, font_face)
+            hfont_small = call_dll(fn_create_font, -12, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, font_face)
+
             GuiWindow(hwnd, hdc, width, height, bmi, pt_buf, msg_buf,
                       u32, g32, k32,
                       fp_peek, fp_trans, fp_disp, fp_set_dib,
                       fp_cursor, fp_s2c, fp_asynckey, fp_is_win,
-                      0, 0, 0)
+                      0, 0, 0,
+                      mem_dc, mem_bmp,
+                      hfont_body, hfont_bold, hfont_title, hfont_sub, hfont_small,
+                      fn_text_out, fn_select_obj, fn_set_bkmode, fn_set_txtcol, fn_bitblt)
         end
     end
 end
 
 gui_blit_canvas(win: GuiWindow, c: Canvas) do
-    call_dll(win.fn_set_dib,
-        win.hdc, 0, 0, win.width, win.height,
-        0, 0, 0, win.height,
-        c.buffer, win.bmi_buf, 0
-    )
+    if win.mem_dc != 0 do
+        call_dll(win.fn_set_dib,
+            win.mem_dc, 0, 0, win.width, win.height,
+            0, 0, 0, win.height,
+            c.buffer, win.bmi_buf, 0
+        )
+    else do
+        call_dll(win.fn_set_dib,
+            win.hdc, 0, 0, win.width, win.height,
+            0, 0, 0, win.height,
+            c.buffer, win.bmi_buf, 0
+        )
+    end
+end
+
+gui_flip_buffer(win: GuiWindow) do
+    if win.mem_dc != 0 do
+        call_dll(win.fn_bitblt, win.hdc, 0, 0, win.width, win.height, win.mem_dc, 0, 0, 13369376)
+    end
 end
 
 gui_poll_events(win: GuiWindow) do
@@ -410,6 +369,17 @@ gui_close_window(win: GuiWindow) do
     if call_dll(win.fn_is_win, win.hwnd) != 0 do
         fn_rel_dc = get_fn(win.u32, "ReleaseDC")
         fn_dest_win = get_fn(win.u32, "DestroyWindow")
+        fn_del_obj = get_fn(win.g32, "DeleteObject")
+        fn_del_dc = get_fn(win.g32, "DeleteDC")
+
+        if win.hfont_body != 0 do call_dll(fn_del_obj, win.hfont_body) end
+        if win.hfont_bold != 0 do call_dll(fn_del_obj, win.hfont_bold) end
+        if win.hfont_title != 0 do call_dll(fn_del_obj, win.hfont_title) end
+        if win.hfont_sub != 0 do call_dll(fn_del_obj, win.hfont_sub) end
+        if win.hfont_small != 0 do call_dll(fn_del_obj, win.hfont_small) end
+        if win.mem_bmp != 0 do call_dll(fn_del_obj, win.mem_bmp) end
+        if win.mem_dc != 0 do call_dll(fn_del_dc, win.mem_dc) end
+
         call_dll(fn_rel_dc, win.hwnd, win.hdc)
         call_dll(fn_dest_win, win.hwnd)
     end
@@ -469,6 +439,7 @@ end
 
 gui_frame_end(app: GuiApp) do
     gui_blit_canvas(app.win, app.canvas)
+    gui_flip_buffer(app.win)
 end
 
 gui_close(app: GuiApp) do
@@ -500,29 +471,33 @@ gui_alloc_widget(app: GuiApp, req_h: i64) do
 end
 
 // ------------------------------------------------------------
-// 6. High-Level Composable Widgets (Auto-Positioned)
+// 6. High-Level Composable Widgets (ClearType Typography)
 // ------------------------------------------------------------
 gui_title(app: GuiApp, text: string) do
-    gui_alloc_widget(app, 22)
-    gui_draw_text(app.canvas, text, app.widget_x, app.widget_y + 2, 2, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+    gui_alloc_widget(app, 26)
+    gui_blit_canvas(app.win, app.canvas)
+    gui_draw_text(app.win, text, app.widget_x, app.widget_y + 1, 2, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
     0
 end
 
 gui_subtitle(app: GuiApp, text: string) do
-    gui_alloc_widget(app, 16)
-    gui_draw_text(app.canvas, text, app.widget_x, app.widget_y + 2, 1, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
+    gui_alloc_widget(app, 18)
+    gui_blit_canvas(app.win, app.canvas)
+    gui_draw_text(app.win, text, app.widget_x, app.widget_y + 1, 3, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
     0
 end
 
 gui_label(app: GuiApp, text: string) do
-    gui_alloc_widget(app, 14)
-    gui_draw_text(app.canvas, text, app.widget_x, app.widget_y + 2, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+    gui_alloc_widget(app, 18)
+    gui_blit_canvas(app.win, app.canvas)
+    gui_draw_text(app.win, text, app.widget_x, app.widget_y + 1, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
     0
 end
 
 gui_label_colored(app: GuiApp, text: string, r: i64, g: i64, b: i64) do
-    gui_alloc_widget(app, 14)
-    gui_draw_text(app.canvas, text, app.widget_x, app.widget_y + 2, 1, r, g, b)
+    gui_alloc_widget(app, 18)
+    gui_blit_canvas(app.win, app.canvas)
+    gui_draw_text(app.win, text, app.widget_x, app.widget_y + 1, 1, r, g, b)
     0
 end
 
@@ -550,10 +525,11 @@ gui_button_custom(app: GuiApp, label: string, bg_r: i64, bg_g: i64, bg_b: i64, h
         canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
     end
     
+    gui_blit_canvas(app.win, app.canvas)
     tw = gui_text_width(label, 1)
     tx = x + (w - tw) / 2
-    ty = y + (h - 7) / 2
-    gui_draw_text(app.canvas, label, tx, ty, 1, txt_r, txt_g, txt_b)
+    ty = y + (h - 16) / 2
+    gui_draw_text(app.win, label, tx, ty, 1, txt_r, txt_g, txt_b)
     
     is_clicked
 end
@@ -601,23 +577,22 @@ gui_checkbox(app: GuiApp, label: string, is_checked: bool): bool do
         canvas_draw_rect(app.canvas, x + 3, by + 3, box_sz - 6, box_sz - 6, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B, 255, 1)
     end
     
-    gui_draw_text(app.canvas, label, x + box_sz + 8, y + (h - 7) / 2, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
+    gui_blit_canvas(app.win, app.canvas)
+    gui_draw_text(app.win, label, x + box_sz + 8, y + (h - 16) / 2, 1, GUI_TEXT_R, GUI_TEXT_G, GUI_TEXT_B)
     
     new_state
 end
 
 gui_slider(app: GuiApp, label: string, val: i64, min_v: i64, max_v: i64): i64 do
-    gui_alloc_widget(app, 36)
+    gui_alloc_widget(app, 38)
     x = app.widget_x
     y = app.widget_y
     w = app.widget_w
     h = app.widget_h
     
     val_str = $" {val}"
-    gui_draw_text(app.canvas, label, x, y, 1, GUI_MUTED_R, GUI_MUTED_G, GUI_MUTED_B)
-    gui_draw_text(app.canvas, val_str, x + w - gui_text_width(val_str, 1), y, 1, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
     
-    ty = y + 18
+    ty = y + 20
     th = 8
     canvas_draw_rect(app.canvas, x, ty, w, th, GUI_CARD_R, GUI_CARD_G, GUI_CARD_B, 255, 1)
     canvas_draw_rect(app.canvas, x, ty, w, th, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
@@ -643,6 +618,10 @@ gui_slider(app: GuiApp, label: string, val: i64, min_v: i64, max_v: i64): i64 do
     if kx < x do kx = x end
     if kx + 8 > x + w do kx = x + w - 8 end
     canvas_draw_rect(app.canvas, kx, ty - 2, 8, th + 4, 255, 255, 255, 255, 1)
+    
+    gui_blit_canvas(app.win, app.canvas)
+    gui_draw_text(app.win, label, x, y, 1, GUI_MUTED_R, GUI_MUTED_G, GUI_MUTED_B)
+    gui_draw_text(app.win, val_str, x + w - gui_text_width(val_str, 1), y, 1, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
     
     cur_val
 end
@@ -680,15 +659,16 @@ gui_spacer(app: GuiApp, space_h: i64) do
 end
 
 gui_badge(app: GuiApp, text: string, r: i64, g: i64, b: i64) do
-    tw = gui_text_width(text, 1)
-    bw = tw + 16
-    bh = 18
+    tw = gui_text_width(text, 0)
+    bw = tw + 20
+    bh = 22
     gui_alloc_widget(app, bh)
     x = app.widget_x
     y = app.widget_y
     canvas_draw_rect(app.canvas, x, y, bw, bh, r / 3, g / 3, b / 3, 255, 1)
     canvas_draw_rect(app.canvas, x, y, bw, bh, r, g, b, 255, 0)
-    gui_draw_text(app.canvas, text, x + 8, y + 5, 1, r, g, b)
+    gui_blit_canvas(app.win, app.canvas)
+    gui_draw_text(app.win, text, x + 10, y + 4, 0, r, g, b)
     0
 end
 
@@ -718,8 +698,9 @@ gui_card_begin(app: GuiApp, title: string, card_h: i64) do
     canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
     
     if _str_len(title) > 0 do
-        gui_draw_text(app.canvas, title, x + 10, y + 8, 1, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
-        canvas_draw_line(app.canvas, x, y + 24, x + w, y + 24, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255)
+        gui_blit_canvas(app.win, app.canvas)
+        gui_draw_text(app.win, title, x + 12, y + 8, 3, GUI_PRIMARY_R, GUI_PRIMARY_G, GUI_PRIMARY_B)
+        canvas_draw_line(app.canvas, x, y + 30, x + w, y + 30, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255)
     end
     0
 end
