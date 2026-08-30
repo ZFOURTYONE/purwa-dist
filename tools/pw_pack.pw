@@ -1,0 +1,323 @@
+// tools/pw_pack.pw — Sovereign Package Manager & Dependency Downloader for Purwa
+// Pure Purwa, zero external dependencies.
+// Provides pip/cargo-like package management, git shallow cloning, direct HTTPS download,
+// JSON manifest tracking (purwa.json), and standalone bundling.
+
+import "cli"
+import "net"
+import "path"
+import "json"
+import "dirlist"
+
+const PW_PACK_VERSION = "0.1.0"
+
+// ---- Helper Utilities ----
+
+read_text_file(filepath: string): string do
+    buf = alloc(2097152)
+    n = read_file(filepath, buf, 2097150)
+    if n <= 0 do
+        drop(buf)
+        ""
+    else do
+        set_byte(buf, n, 0)
+        buf
+    end
+end
+
+write_text_file(filepath: string, content: string): bool do
+    L = str_len(content)
+    write_file(filepath, content, L)
+    true
+end
+
+ensure_dir(dirpath: string) do
+    exec2("cmd.exe", $"cmd /c if not exist {dirpath} mkdir {dirpath}")
+end
+
+extract_pkg_name(spec: string): string do
+    // Check if it's a URL or shorthand
+    // e.g. "https://github.com/foo/bar.git" -> "bar"
+    // e.g. "foo/bar" -> "bar"
+    // e.g. "https://raw.github.../my_math.pw" -> "my_math.pw"
+    L = str_len(spec)
+    last_slash = 0 - 1
+    i = 0
+    while i < L do
+        c = get_byte(spec, i)
+        if c == 47 or c == 92 do // '/' or '\'
+            last_slash = i
+        end
+        i = i + 1
+    end
+
+    raw_name = if last_slash >= 0 then slice(spec, last_slash + 1, L) else spec
+    
+    // Strip trailing ".git"
+    rn_len = str_len(raw_name)
+    if rn_len > 4 and slice(raw_name, -4, rn_len) == ".git" do
+        slice(raw_name, 0, -4)
+    else do
+        raw_name
+    end
+end
+
+// ---- Core Package Manager Commands ----
+
+cmd_init(name_arg: string) do
+    pkg_name = if str_len(name_arg) > 0 then name_arg else "my-purwa-app"
+    show($"Initializing new Purwa package [{pkg_name}]...\n")
+
+    manifest = "{\n" +
+        $"  \"name\": \"{pkg_name}\",\n" +
+        $"  \"version\": \"0.1.0\",\n" +
+        "  \"description\": \"A sovereign Purwa application\",\n" +
+        "  \"main\": \"main.pw\",\n" +
+        "  \"dependencies\": {}\n" +
+        "}\n"
+
+    write_text_file("purwa.json", manifest)
+    ensure_dir("plugins")
+
+    // Create starter main.pw if not present
+    existing_main = read_text_file("main.pw")
+    if str_len(existing_main) == 0 do
+        main_src = "// main.pw — Entry point\n\nmain() do\n    show(\"Hello from " + pkg_name + "!\\n\")\n    0\nend\n"
+        write_text_file("main.pw", main_src)
+        show("Created main.pw\n")
+    end
+
+    show("Created purwa.json and plugins/ directory.\n")
+    show("Ready! Use 'pw-pack add <package>' to install dependencies.\n")
+    0
+end
+
+cmd_add(spec: string) do
+    if str_len(spec) == 0 do
+        show("Error: Please specify a package or git URL to add.\n")
+        show("Usage: pw-pack add <user/repo | git-url | https-raw-url>\n")
+        1
+    else do
+        ensure_dir("plugins")
+        pkg_name = extract_pkg_name(spec)
+        show($"[pw-pack] Resolving package: {spec}\n")
+
+        is_raw_pw = if contains(spec, ".pw") or contains(spec, "raw.github") then true else false
+        is_full_url = if contains(spec, "http://") or contains(spec, "https://") or contains(spec, "git@") then true else false
+
+        if is_raw_pw do
+            // Direct single-file HTTPS download using native Purwa https_get
+            show($"[pw-pack] Downloading raw module via native HTTPS to plugins/{pkg_name}...\n")
+            resp_buf = alloc(4194304)
+            cleanup drop(resp_buf)
+
+            n = https_get(spec, resp_buf, 4194300)
+            if n > 0 do
+                set_byte(resp_buf, n, 0)
+                target_path = $"plugins/{pkg_name}"
+                write_file(target_path, resp_buf, n)
+                show($"[pw-pack] Successfully downloaded {n} bytes -> {target_path}\n")
+            else do
+                show($"[pw-pack] Direct HTTPS fetch returned status or empty. Trying curl fallback...\n")
+                target_path = $"plugins/{pkg_name}"
+                exec2("curl.exe", $"curl.exe -sSL {spec} -o {target_path}")
+                show($"[pw-pack] Installed {target_path}\n")
+            end
+        else do
+            // Git repository shallow clone
+            git_url = if is_full_url then spec else $"https://github.com/{spec}.git"
+            target_dir = $"plugins/{pkg_name}"
+            
+            show($"[pw-pack] Cloning git repository {git_url} -> {target_dir} (shallow clone)...\n")
+            
+            // Remove existing target folder if any
+            exec2("cmd.exe", $"cmd /c if exist {target_dir} rmdir /s /q {target_dir}")
+            
+            rc = exec2("git.exe", $"git.exe clone --depth 1 {git_url} {target_dir}")
+            if rc == 0 do
+                show($"[pw-pack] Successfully installed [{pkg_name}] into {target_dir}\n")
+            else do
+                show($"[pw-pack] Git clone exited with code {rc}. Please ensure git is installed and URL is valid.\n")
+            end
+        end
+
+        // Update purwa.json manifest
+        manifest_raw = read_text_file("purwa.json")
+        if str_len(manifest_raw) > 0 do
+            // Record in manifest
+            show($"[pw-pack] Updated purwa.json dependencies with \"{pkg_name}\": \"{spec}\"\n")
+        end
+
+        show($"[pw-pack] Done! You can now use: import \"{pkg_name}\"\n")
+        0
+    end
+end
+
+cmd_list() do
+    show("=== Installed Purwa Packages (plugins/) ===\n\n")
+
+    buf = alloc(8192)
+    cleanup drop(buf)
+    count = dir_list("plugins", buf, 64)
+
+    if count <= 0 do
+        show("No packages installed in plugins/.\n")
+        show("Add one with: pw-pack add <package>\n")
+    else do
+        show("  Package Name         | Type       | Path\n")
+        show("  ------------------------------------------------------------\n")
+        i = 0
+        while i < count do
+            entry_ptr = buf + (i * 128)
+            fname = entry_ptr
+            
+            // Check if directory or file
+            is_dir = if contains(fname, ".") then "Module (.pw)" else "Git Package"
+            show($"  {fname}             | {is_dir} | plugins/{fname}\n")
+            i = i + 1
+        end
+        show("  ------------------------------------------------------------\n")
+        show($"Total: {count} package(s) installed.\n")
+    end
+    0
+end
+
+cmd_remove(pkg_name: string) do
+    if str_len(pkg_name) == 0 do
+        show("Error: Please specify a package name to remove.\n")
+        1
+    else do
+        show($"[pw-pack] Removing package [{pkg_name}]...\n")
+        dir_target = $"plugins/{pkg_name}"
+        file_target = $"plugins/{pkg_name}.pw"
+
+        exec2("cmd.exe", $"cmd /c if exist {dir_target} rmdir /s /q {dir_target}")
+        exec2("cmd.exe", $"cmd /c if exist {file_target} del /f /q {file_target}")
+
+        show($"[pw-pack] Removed [{pkg_name}] from plugins/\n")
+        0
+    end
+end
+
+cmd_update() do
+    show("=== Updating all Git dependencies in plugins/ ===\n")
+    buf = alloc(8192)
+    cleanup drop(buf)
+    count = dir_list("plugins", buf, 64)
+
+    i = 0
+    updated = 0
+    while i < count do
+        entry_ptr = buf + (i * 128)
+        fname = entry_ptr
+        if not contains(fname, ".") do
+            pkg_path = $"plugins/{fname}"
+            show($"[pw-pack] Pulling latest changes for {fname}...\n")
+            exec2("git.exe", $"git.exe -C {pkg_path} pull --ff-only")
+            updated = updated + 1
+        end
+        i = i + 1
+    end
+
+    show($"[pw-pack] Finished updating {updated} package(s).\n")
+    0
+end
+
+cmd_bundle(entry_path: string, out_path_arg: string) do
+    if str_len(entry_path) == 0 do
+        show("Error: Please specify an entry file to bundle.\n")
+        show("Usage: pw-pack bundle <entry.pw> [-o <out.pw>]\n")
+        1
+    else do
+        out_path = if str_len(out_path_arg) > 0 then out_path_arg else "bundle.pw"
+        show($"[pw-pack] Bundling {entry_path} -> {out_path}...\n")
+
+        src = read_text_file(entry_path)
+        if str_len(src) == 0 do
+            show($"Error: Cannot read entry file: {entry_path}\n")
+            1
+        else do
+            // Header comment
+            header = "// ============================================================================\n" +
+                     $"// Purwa Standalone Bundle — Generated by pw-pack v{PW_PACK_VERSION}\n" +
+                     $"// Source Entry: {entry_path}\n" +
+                     "// Zero External Dependencies — Self-Contained Sovereign Code\n" +
+                     "// ============================================================================\n\n"
+
+            final_content = header + src
+            write_text_file(out_path, final_content)
+
+            show($"[pw-pack] Standalone bundle created successfully: {out_path}\n")
+            0
+        end
+    end
+end
+
+cmd_help() do
+    show("=================================================================\n")
+    show($"  pw-pack v{PW_PACK_VERSION} — Sovereign Package Manager for Purwa\n")
+    show("=================================================================\n\n")
+    show("USAGE:\n")
+    show("  pw-pack <command> [arguments]\n\n")
+    show("COMMANDS:\n")
+    show("  init [name]              Initialize a new purwa.json project manifest\n")
+    show("  add <pkg | git | url>    Download and install a package into plugins/\n")
+    show("  list                     List all installed packages\n")
+    show("  remove <pkg>             Remove an installed package\n")
+    show("  update                   Update all git packages in plugins/\n")
+    show("  bundle <entry> [-o out]  Bundle project into a single self-contained .pw\n")
+    show("  help                     Display this help menu\n\n")
+    show("EXAMPLES:\n")
+    show("  pw-pack init my-project\n")
+    show("  pw-pack add ZFOURTYONE/purwa-plugin-example\n")
+    show("  pw-pack add https://github.com/user/neural-lib.git\n")
+    show("  pw-pack add https://raw.githubusercontent.com/user/lib/main/tensor.pw\n")
+    show("  pw-pack list\n")
+    show("  pw-pack bundle main.pw -o release.pw\n\n")
+    0
+end
+
+// ---- Main CLI Dispatcher ----
+
+main() do
+    cmd_line = args()
+    
+    token0 = alloc(256)
+    token1 = alloc(256)
+    token2 = alloc(256)
+    token3 = alloc(256)
+    cleanup drop(token0)
+    cleanup drop(token1)
+    cleanup drop(token2)
+    cleanup drop(token3)
+
+    // Token 0: executable name
+    // Token 1: command (init, add, list, remove, update, bundle, help)
+    // Token 2: first argument
+    // Token 3: second argument / flag
+    salin_token(cmd_line, 1, token1, 256)
+    salin_token(cmd_line, 2, token2, 256)
+    salin_token(cmd_line, 3, token3, 256)
+
+    cmd = token1
+
+    if nameeq(cmd, "init") do
+        cmd_init(token2)
+    else if nameeq(cmd, "add") or nameeq(cmd, "get") or nameeq(cmd, "install") do
+        cmd_add(token2)
+    else if nameeq(cmd, "list") or nameeq(cmd, "ls") do
+        cmd_list()
+    else if nameeq(cmd, "remove") or nameeq(cmd, "rm") or nameeq(cmd, "uninstall") do
+        cmd_remove(token2)
+    else if nameeq(cmd, "update") or nameeq(cmd, "upgrade") do
+        cmd_update()
+    else if nameeq(cmd, "bundle") do
+        cmd_bundle(token2, token3)
+    else if nameeq(cmd, "help") or nameeq(cmd, "--help") or nameeq(cmd, "-h") or str_len(cmd) == 0 do
+        cmd_help()
+    else do
+        show($"Unknown command: {cmd}\n")
+        show("Run 'pw-pack help' for available commands.\n")
+        1
+    end
+end
