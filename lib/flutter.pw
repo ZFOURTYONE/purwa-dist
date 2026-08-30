@@ -1,0 +1,850 @@
+// lib/flutter.pw — Purwa Flutter-like Declarative & Reactive UI Framework
+// Pure Native, Zero GC, Flexbox Auto-Layout, Material & Cupertino Widgets.
+import "canvas"
+import "gui"
+
+// ------------------------------------------------------------
+// 1. Widget Types Constants
+// ------------------------------------------------------------
+const W_CONTAINER    = 1
+const W_ROW          = 2
+const W_COLUMN       = 3
+const W_STACK        = 4
+const W_EXPANDED     = 5
+const W_SIZED_BOX    = 6
+const W_SAFE_AREA    = 7
+const W_TEXT         = 8
+const W_ICON         = 9
+const W_PLACEHOLDER  = 10
+const W_SCAFFOLD     = 11
+const W_APP_BAR      = 12
+const W_ELEV_BTN     = 13
+const W_OUTL_BTN     = 14
+const W_TEXT_BTN     = 15
+const W_FAB          = 16
+const W_CARD         = 17
+const W_LIST_TILE    = 18
+const W_SWITCH       = 19
+const W_CHECKBOX     = 20
+const W_SLIDER       = 21
+const W_PROGRESS     = 22
+const W_SNACKBAR     = 23
+const W_CUPERTINO_BTN= 24
+
+// ------------------------------------------------------------
+// 2. Material & Cupertino Palette Constants
+// ------------------------------------------------------------
+const FL_BG_R = 15
+const FL_BG_G = 23
+const FL_BG_B = 42
+
+const FL_CARD_R = 30
+const FL_CARD_G = 41
+const FL_CARD_B = 59
+
+const FL_CARD_BORDER_R = 51
+const FL_CARD_BORDER_G = 65
+const FL_CARD_BORDER_B = 85
+
+const FL_PRIMARY_R = 14
+const FL_PRIMARY_G = 165
+const FL_PRIMARY_B = 233
+
+const FL_PRIMARY_HOVER_R = 56
+const FL_PRIMARY_HOVER_G = 189
+const FL_PRIMARY_HOVER_B = 248
+
+const FL_ACCENT_R = 168
+const FL_ACCENT_G = 85
+const FL_ACCENT_B = 247
+
+const FL_SUCCESS_R = 16
+const FL_SUCCESS_G = 185
+const FL_SUCCESS_B = 129
+
+const FL_WARNING_R = 245
+const FL_WARNING_G = 158
+const FL_WARNING_B = 11
+
+const FL_DANGER_R = 244
+const FL_DANGER_G = 63
+const FL_DANGER_B = 94
+
+const FL_TEXT_R = 241
+const FL_TEXT_G = 245
+const FL_TEXT_B = 249
+
+const FL_MUTED_R = 148
+const FL_MUTED_G = 163
+const FL_MUTED_B = 184
+
+// Built-in Vector Icon IDs
+const ICON_NONE        = 0
+const ICON_ADD         = 1
+const ICON_CLOSE       = 2
+const ICON_CHECK       = 3
+const ICON_STAR        = 4
+const ICON_HEART       = 5
+const ICON_SETTINGS    = 6
+const ICON_SEARCH      = 7
+const ICON_PLAY        = 8
+const ICON_HOME        = 9
+const ICON_USER        = 10
+const ICON_MENU        = 11
+const ICON_DELETE      = 12
+const ICON_ARROW_LEFT  = 13
+const ICON_ARROW_RIGHT = 14
+const ICON_INFO        = 15
+
+// ------------------------------------------------------------
+// 3. Widget Struct & Flutter App Context
+// ------------------------------------------------------------
+struct Widget {
+    kind,
+    w,
+    h,
+    flex,
+    pad,
+    bg_r,
+    bg_g,
+    bg_b,
+    border_r,
+    border_g,
+    border_b,
+    radius,
+    text,
+    text_size,
+    text_r,
+    text_g,
+    text_b,
+    icon_id,
+    child,
+    children,
+    action_id,
+    val_i64,
+    min_val,
+    max_val,
+    layout_x,
+    layout_y,
+    measured_w,
+    measured_h
+}
+
+struct FlutterApp {
+    win: GuiWindow,
+    canvas: Canvas,
+    width,
+    height,
+    mouse_x,
+    mouse_y,
+    mouse_down,
+    clicked,
+    click_x,
+    click_y,
+    snackbar_text,
+    snackbar_frames,
+    active_slider_action
+}
+
+// ------------------------------------------------------------
+// 4. Vector Icon Rasterizer (8x8 Vector Grid)
+// ------------------------------------------------------------
+global FL_ICONS = 0
+
+fl_init_icons() do
+    if FL_ICONS == 0 do
+        FL_ICONS = [
+            [0, 0, 0, 0, 0, 0, 0, 0],         // 0: NONE
+            [0, 24, 24, 126, 126, 24, 24, 0], // 1: ADD (+)
+            [0, 99, 119, 62, 62, 119, 99, 0], // 2: CLOSE (X)
+            [0, 1, 3, 6, 140, 216, 112, 32],  // 3: CHECK (✓)
+            [0, 24, 60, 255, 126, 90, 66, 0], // 4: STAR (★)
+            [0, 102, 255, 255, 126, 60, 24, 0],// 5: HEART (♥)
+            [60, 66, 153, 129, 129, 153, 66, 60], // 6: SETTINGS (⚙)
+            [0, 60, 66, 66, 60, 12, 18, 33], // 7: SEARCH (🔍)
+            [0, 96, 112, 120, 120, 112, 96, 0],// 8: PLAY (▶)
+            [0, 24, 60, 126, 255, 153, 153, 0],// 9: HOME (🏠)
+            [0, 60, 60, 24, 126, 255, 255, 0], // 10: USER (👤)
+            [0, 255, 0, 255, 0, 255, 0, 0],   // 11: MENU (☰)
+            [0, 126, 24, 255, 153, 153, 126, 0],// 12: DELETE (🗑)
+            [0, 12, 24, 48, 255, 48, 24, 12], // 13: ARROW_LEFT (←)
+            [0, 48, 24, 12, 255, 12, 24, 48], // 14: ARROW_RIGHT (→)
+            [0, 24, 24, 0, 24, 24, 24, 0]      // 15: INFO (i)
+        ]
+    end
+    0
+end
+
+fl_draw_icon(c: Canvas, icon_id: i64, px: i64, py: i64, r: i64, g: i64, b: i64) do
+    fl_init_icons()
+    id = if icon_id < 0 or icon_id > 15 then 0 else icon_id
+    if id > 0 do
+        icon_data = FL_ICONS[id]
+        dy = 0
+        while dy < 8 do
+            row = icon_data[dy]
+            dx = 0
+            while dx < 8 do
+                b_val = if dx == 0 then 128 else if dx == 1 then 64 else if dx == 2 then 32 else if dx == 3 then 16 else if dx == 4 then 8 else if dx == 5 then 4 else if dx == 6 then 2 else 1
+                b_set = (row / b_val) % 2
+                if b_set == 1 do
+                    canvas_set_pixel(c, px + dx, py + dy, r, g, b, 255)
+                end
+                dx += 1
+            end
+            dy += 1
+        end
+    end
+    0
+end
+
+// ------------------------------------------------------------
+// 5. Declarative Flutter Widget Constructors
+// ------------------------------------------------------------
+Container(child, pad: i64, bg_r: i64, bg_g: i64, bg_b: i64, radius: i64): Widget do
+    Widget(W_CONTAINER, 0, 0, 0, pad,
+           bg_r, bg_g, bg_b, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B,
+           radius, "", 1, 0, 0, 0, 0,
+           child, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+end
+
+Row(children): Widget do
+    Widget(W_ROW, 0, 0, 0, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           "", 1, 0, 0, 0, 0,
+           0, children, 0, 0, 0, 0, 0, 0, 0, 0)
+end
+
+Column(children): Widget do
+    Widget(W_COLUMN, 0, 0, 0, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           "", 1, 0, 0, 0, 0,
+           0, children, 0, 0, 0, 0, 0, 0, 0, 0)
+end
+
+Stack(children): Widget do
+    Widget(W_STACK, 0, 0, 0, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           "", 1, 0, 0, 0, 0,
+           0, children, 0, 0, 0, 0, 0, 0, 0, 0)
+end
+
+Expanded(child, flex: i64): Widget do
+    Widget(W_EXPANDED, 0, 0, if flex <= 0 then 1 else flex, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           "", 1, 0, 0, 0, 0,
+           child, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+end
+
+SizedBox(width: i64, height: i64): Widget do
+    Widget(W_SIZED_BOX, width, height, 0, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           "", 1, 0, 0, 0, 0,
+           0, 0, 0, 0, 0, 0, 0, 0, width, height)
+end
+
+SafeArea(child): Widget do
+    Widget(W_SAFE_AREA, 0, 0, 0, 8,
+           0, 0, 0, 0, 0, 0, 0,
+           "", 1, 0, 0, 0, 0,
+           child, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+end
+
+Text(s: string): Widget do
+    Widget(W_TEXT, _str_len(s) * 6, 12, 0, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           s, 1, FL_TEXT_R, FL_TEXT_G, FL_TEXT_B, 0,
+           0, 0, 0, 0, 0, 0, 0, 0, _str_len(s) * 6, 12)
+end
+
+TextStyled(s: string, size: i64, r: i64, g: i64, b: i64): Widget do
+    sc = if size <= 1 then 1 else size
+    w = _str_len(s) * 6 * sc
+    h = 7 * sc + 4
+    Widget(W_TEXT, w, h, 0, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           s, sc, r, g, b, 0,
+           0, 0, 0, 0, 0, 0, 0, 0, w, h)
+end
+
+Icon(icon_id: i64): Widget do
+    Widget(W_ICON, 12, 12, 0, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           "", 1, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, icon_id,
+           0, 0, 0, 0, 0, 0, 0, 0, 12, 12)
+end
+
+IconColored(icon_id: i64, r: i64, g: i64, b: i64): Widget do
+    Widget(W_ICON, 12, 12, 0, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           "", 1, r, g, b, icon_id,
+           0, 0, 0, 0, 0, 0, 0, 0, 12, 12)
+end
+
+Placeholder(w: i64, h: i64): Widget do
+    Widget(W_PLACEHOLDER, w, h, 0, 0,
+           FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 0,
+           "", 1, 0, 0, 0, 0,
+           0, 0, 0, 0, 0, 0, 0, 0, w, h)
+end
+
+Scaffold(app_bar, body, fab): Widget do
+    Widget(W_SCAFFOLD, 0, 0, 0, 0,
+           FL_BG_R, FL_BG_G, FL_BG_B, 0, 0, 0, 0,
+           "", 1, 0, 0, 0, 0,
+           body, [app_bar, fab], 0, 0, 0, 0, 0, 0, 0, 0)
+end
+
+AppBar(title: string, actions): Widget do
+    Widget(W_APP_BAR, 0, 42, 0, 8,
+           FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 0,
+           title, 2, FL_TEXT_R, FL_TEXT_G, FL_TEXT_B, 0,
+           0, actions, 0, 0, 0, 0, 0, 0, 0, 42)
+end
+
+ElevatedButton(label: string, action_id: i64): Widget do
+    Widget(W_ELEV_BTN, 0, 32, 0, 0,
+           FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, FL_PRIMARY_HOVER_R, FL_PRIMARY_HOVER_G, FL_PRIMARY_HOVER_B, 4,
+           label, 1, 255, 255, 255, 0,
+           0, 0, action_id, 0, 0, 0, 0, 0, 0, 32)
+end
+
+OutlinedButton(label: string, action_id: i64): Widget do
+    Widget(W_OUTL_BTN, 0, 32, 0, 0,
+           FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 4,
+           label, 1, FL_TEXT_R, FL_TEXT_G, FL_TEXT_B, 0,
+           0, 0, action_id, 0, 0, 0, 0, 0, 0, 32)
+end
+
+TextButton(label: string, action_id: i64): Widget do
+    Widget(W_TEXT_BTN, 0, 28, 0, 0,
+           0, 0, 0, 0, 0, 0, 0,
+           label, 1, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, 0,
+           0, 0, action_id, 0, 0, 0, 0, 0, 0, 28)
+end
+
+FloatingActionButton(icon, action_id: i64): Widget do
+    Widget(W_FAB, 48, 48, 0, 0,
+           FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, FL_PRIMARY_HOVER_R, FL_PRIMARY_HOVER_G, FL_PRIMARY_HOVER_B, 24,
+           "", 1, 255, 255, 255, 0,
+           icon, 0, action_id, 0, 0, 0, 0, 0, 48, 48)
+end
+
+Card(child): Widget do
+    Widget(W_CARD, 0, 0, 0, 10,
+           FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 6,
+           "", 1, 0, 0, 0, 0,
+           child, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+end
+
+ListTile(leading, title: string, subtitle: string, trailing, action_id: i64): Widget do
+    Widget(W_LIST_TILE, 0, 44, 0, 8,
+           FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 0,
+           title, 1, FL_TEXT_R, FL_TEXT_G, FL_TEXT_B, 0,
+           leading, [trailing], action_id, 0, 0, 0, 0, 0, 0, 44)
+end
+
+Switch(is_active: bool, action_id: i64): Widget do
+    Widget(W_SWITCH, 40, 20, 0, 0,
+           if is_active then FL_PRIMARY_R else FL_CARD_R,
+           if is_active then FL_PRIMARY_G else FL_CARD_G,
+           if is_active then FL_PRIMARY_B else FL_CARD_B,
+           FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 10,
+           "", 1, 0, 0, 0, 0,
+           0, 0, action_id, if is_active then 1 else 0, 0, 0, 0, 0, 40, 20)
+end
+
+Checkbox(is_checked: bool, label: string, action_id: i64): Widget do
+    Widget(W_CHECKBOX, 0, 22, 0, 0,
+           FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 2,
+           label, 1, FL_TEXT_R, FL_TEXT_G, FL_TEXT_B, 0,
+           0, 0, action_id, if is_checked then 1 else 0, 0, 0, 0, 0, 0, 22)
+end
+
+Slider(val: i64, min_v: i64, max_v: i64, action_id: i64): Widget do
+    Widget(W_SLIDER, 0, 28, 0, 0,
+           FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 0,
+           "", 1, 0, 0, 0, 0,
+           0, 0, action_id, val, min_v, max_v, 0, 0, 0, 28)
+end
+
+LinearProgressIndicator(pct: i64): Widget do
+    Widget(W_PROGRESS, 0, 10, 0, 0,
+           FL_CARD_R, FL_CARD_G, FL_CARD_B, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 0,
+           "", 1, 0, 0, 0, 0,
+           0, 0, 0, if pct < 0 then 0 else if pct > 100 then 100 else pct, 0, 100, 0, 0, 0, 10)
+end
+
+CupertinoButton(label: string, action_id: i64): Widget do
+    Widget(W_CUPERTINO_BTN, 0, 34, 0, 0,
+           FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, FL_PRIMARY_HOVER_R, FL_PRIMARY_HOVER_G, FL_PRIMARY_HOVER_B, 8,
+           label, 1, 255, 255, 255, 0,
+           0, 0, action_id, 0, 0, 0, 0, 0, 0, 34)
+end
+
+// ------------------------------------------------------------
+// 6. Flutter Flexbox Layout Engine (Two-Pass: Measure & Layout)
+// ------------------------------------------------------------
+fl_measure(w: Widget, parent_w: i64, parent_h: i64) do
+    if w.kind == W_SIZED_BOX do
+        w.measured_w = w.w
+        w.measured_h = w.h
+    else if w.kind == W_TEXT or w.kind == W_ICON or w.kind == W_PROGRESS or w.kind == W_SWITCH or w.kind == W_CHECKBOX or w.kind == W_SLIDER or w.kind == W_ELEV_BTN or w.kind == W_OUTL_BTN or w.kind == W_TEXT_BTN or w.kind == W_CUPERTINO_BTN or w.kind == W_FAB or w.kind == W_PLACEHOLDER do
+        w.measured_w = if w.w > 0 then w.w else parent_w
+        w.measured_h = w.h
+    else if w.kind == W_CONTAINER or w.kind == W_SAFE_AREA or w.kind == W_CARD do
+        inner_w = parent_w - w.pad * 2
+        inner_h = parent_h - w.pad * 2
+        if w.child != 0 do
+            fl_measure(w.child, inner_w, inner_h)
+            w.measured_w = parent_w
+            w.measured_h = w.child.measured_h + w.pad * 2
+        else do
+            w.measured_w = parent_w
+            w.measured_h = w.pad * 2
+        end
+    else if w.kind == W_COLUMN do
+        total_h = 0
+        if w.children != 0 do
+            cnt = size(w.children)
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                if ch.kind != W_EXPANDED do
+                    fl_measure(ch, parent_w, parent_h)
+                    total_h += ch.measured_h
+                end
+                i += 1
+            end
+            
+            // Flex expansion pass for Expanded widgets in Column
+            rem_h = parent_h - total_h
+            if rem_h < 0 do rem_h = 0 end
+            total_flex = 0
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                if ch.kind == W_EXPANDED do total_flex += ch.flex end
+                i += 1
+            end
+            
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                if ch.kind == W_EXPANDED do
+                    alloc_h = if total_flex > 0 then (rem_h * ch.flex) / total_flex else 0
+                    if ch.child != 0 do
+                        fl_measure(ch.child, parent_w, alloc_h)
+                        ch.measured_w = parent_w
+                        ch.measured_h = alloc_h
+                    end
+                    total_h += alloc_h
+                end
+                i += 1
+            end
+        end
+        w.measured_w = parent_w
+        w.measured_h = total_h
+    else if w.kind == W_ROW do
+        total_w = 0
+        max_h = 0
+        if w.children != 0 do
+            cnt = size(w.children)
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                if ch.kind != W_EXPANDED do
+                    fl_measure(ch, parent_w, parent_h)
+                    total_w += ch.measured_w
+                    if ch.measured_h > max_h do max_h = ch.measured_h end
+                end
+                i += 1
+            end
+            
+            // Flex expansion pass for Expanded widgets in Row
+            rem_w = parent_w - total_w
+            if rem_w < 0 do rem_w = 0 end
+            total_flex = 0
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                if ch.kind == W_EXPANDED do total_flex += ch.flex end
+                i += 1
+            end
+            
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                if ch.kind == W_EXPANDED do
+                    alloc_w = if total_flex > 0 then (rem_w * ch.flex) / total_flex else 0
+                    if ch.child != 0 do
+                        fl_measure(ch.child, alloc_w, parent_h)
+                        ch.measured_w = alloc_w
+                        ch.measured_h = ch.child.measured_h
+                        if ch.measured_h > max_h do max_h = ch.measured_h end
+                    end
+                    total_w += alloc_w
+                end
+                i += 1
+            end
+        end
+        w.measured_w = parent_w
+        w.measured_h = max_h
+    else if w.kind == W_SCAFFOLD do
+        w.measured_w = parent_w
+        w.measured_h = parent_h
+        if w.child != 0 do
+            fl_measure(w.child, parent_w - 32, parent_h - 60)
+        end
+    end
+    0
+end
+
+fl_layout(w: Widget, origin_x: i64, origin_y: i64) do
+    w.layout_x = origin_x
+    w.layout_y = origin_y
+    
+    if w.kind == W_CONTAINER or w.kind == W_SAFE_AREA or w.kind == W_CARD do
+        if w.child != 0 do
+            fl_layout(w.child, origin_x + w.pad, origin_y + w.pad)
+        end
+    else if w.kind == W_EXPANDED do
+        if w.child != 0 do
+            w.child.measured_w = w.measured_w
+            w.child.measured_h = w.measured_h
+            fl_layout(w.child, origin_x, origin_y)
+        end
+    else if w.kind == W_COLUMN do
+        cur_y = origin_y
+        if w.children != 0 do
+            cnt = size(w.children)
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                fl_layout(ch, origin_x, cur_y)
+                cur_y += ch.measured_h
+                i += 1
+            end
+        end
+    else if w.kind == W_ROW do
+        cur_x = origin_x
+        if w.children != 0 do
+            cnt = size(w.children)
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                fl_layout(ch, cur_x, origin_y)
+                cur_x += ch.measured_w
+                i += 1
+            end
+        end
+    else if w.kind == W_SCAFFOLD do
+        // Layout AppBar
+        if w.children != 0 do
+            app_bar = w.children[0]
+            if app_bar != 0 do
+                app_bar.measured_w = w.measured_w
+                fl_layout(app_bar, origin_x, origin_y)
+            end
+            
+            // Layout Body
+            if w.child != 0 do
+                fl_layout(w.child, origin_x + 16, origin_y + 54)
+            end
+            
+            // Layout FAB (Floating Action Button at bottom right)
+            fab = w.children[1]
+            if fab != 0 do
+                fab_x = origin_x + w.measured_w - 64
+                fab_y = origin_y + w.measured_h - 64
+                fl_layout(fab, fab_x, fab_y)
+            end
+        end
+    end
+    0
+end
+
+// ------------------------------------------------------------
+// 7. Flutter Render & Event Engine
+// ------------------------------------------------------------
+fl_render_node(app: FlutterApp, w: Widget): i64 do
+    triggered_action = 0
+    x = w.layout_x
+    y = w.layout_y
+    mw = w.measured_w
+    mh = w.measured_h
+    
+    mx = app.mouse_x
+    my = app.mouse_y
+    is_hover = if mx >= x and mx < x + mw and my >= y and my < y + mh then true else false
+    is_clicked = if app.clicked == 1 and app.click_x >= x and app.click_x < x + mw and app.click_y >= y and app.click_y < y + mh then true else false
+    
+    if w.kind == W_CONTAINER or w.kind == W_CARD do
+        canvas_draw_rect(app.canvas, x, y, mw, mh, w.bg_r, w.bg_g, w.bg_b, 255, 1)
+        if w.radius > 0 do
+            canvas_draw_rect(app.canvas, x, y, mw, mh, w.border_r, w.border_g, w.border_b, 255, 0)
+        end
+        if w.child != 0 do
+            act = fl_render_node(app, w.child)
+            if act != 0 do triggered_action = act end
+        end
+    else if w.kind == W_TEXT do
+        gui_draw_text(app.canvas, w.text, x, y + 2, w.text_size, w.text_r, w.text_g, w.text_b)
+    else if w.kind == W_ICON do
+        fl_draw_icon(app.canvas, w.icon_id, x + 2, y + 2, w.text_r, w.text_g, w.text_b)
+    else if w.kind == W_ELEV_BTN or w.kind == W_CUPERTINO_BTN do
+        btn_r = if is_hover then w.border_r else w.bg_r
+        btn_g = if is_hover then w.border_g else w.bg_g
+        btn_b = if is_hover then w.border_b else w.bg_b
+        canvas_draw_rect(app.canvas, x, y, mw, mh, btn_r, btn_g, btn_b, 255, 1)
+        if is_hover do
+            canvas_draw_rect(app.canvas, x, y, mw, mh, 255, 255, 255, 255, 0)
+        end
+        tw = gui_text_width(w.text, w.text_size)
+        tx = x + (mw - tw) / 2
+        ty = y + (mh - 7 * w.text_size) / 2
+        gui_draw_text(app.canvas, w.text, tx, ty, w.text_size, w.text_r, w.text_g, w.text_b)
+        if is_clicked do triggered_action = w.action_id end
+    else if w.kind == W_OUTL_BTN do
+        bg_r = if is_hover then FL_CARD_BORDER_R else FL_CARD_R
+        bg_g = if is_hover then FL_CARD_BORDER_G else FL_CARD_G
+        bg_b = if is_hover then FL_CARD_BORDER_B else FL_CARD_B
+        canvas_draw_rect(app.canvas, x, y, mw, mh, bg_r, bg_g, bg_b, 255, 1)
+        canvas_draw_rect(app.canvas, x, y, mw, mh, if is_hover then FL_PRIMARY_R else FL_CARD_BORDER_R, if is_hover then FL_PRIMARY_G else FL_CARD_BORDER_G, if is_hover then FL_PRIMARY_B else FL_CARD_BORDER_B, 255, 0)
+        tw = gui_text_width(w.text, w.text_size)
+        tx = x + (mw - tw) / 2
+        ty = y + (mh - 7 * w.text_size) / 2
+        gui_draw_text(app.canvas, w.text, tx, ty, w.text_size, w.text_r, w.text_g, w.text_b)
+        if is_clicked do triggered_action = w.action_id end
+    else if w.kind == W_TEXT_BTN do
+        tw = gui_text_width(w.text, w.text_size)
+        tx = x + (mw - tw) / 2
+        ty = y + (mh - 7 * w.text_size) / 2
+        txt_r = if is_hover then 255 else w.text_r
+        txt_g = if is_hover then 255 else w.text_g
+        txt_b = if is_hover then 255 else w.text_b
+        gui_draw_text(app.canvas, w.text, tx, ty, w.text_size, txt_r, txt_g, txt_b)
+        if is_clicked do triggered_action = w.action_id end
+    else if w.kind == W_FAB do
+        canvas_draw_rect(app.canvas, x, y, mw, mh, if is_hover then w.border_r else w.bg_r, if is_hover then w.border_g else w.bg_g, if is_hover then w.border_b else w.bg_b, 255, 1)
+        canvas_draw_rect(app.canvas, x, y, mw, mh, 255, 255, 255, 255, 0)
+        if w.child != 0 do
+            w.child.layout_x = x + (mw - 12) / 2
+            w.child.layout_y = y + (mh - 12) / 2
+            fl_render_node(app, w.child)
+        end
+        if is_clicked do triggered_action = w.action_id end
+    else if w.kind == W_APP_BAR do
+        canvas_draw_rect(app.canvas, x, y, mw, mh, w.bg_r, w.bg_g, w.bg_b, 255, 1)
+        canvas_draw_line(app.canvas, x, y + mh - 1, x + mw, y + mh - 1, w.border_r, w.border_g, w.border_b, 255)
+        gui_draw_text(app.canvas, w.text, x + 16, y + 12, w.text_size, w.text_r, w.text_g, w.text_b)
+        if w.children != 0 do
+            ax = x + mw - 32
+            cnt = size(w.children)
+            i = 0
+            while i < cnt do
+                act_w = w.children[i]
+                act_w.layout_x = ax
+                act_w.layout_y = y + 14
+                act = fl_render_node(app, act_w)
+                if act != 0 do triggered_action = act end
+                ax -= 28
+                i += 1
+            end
+        end
+    else if w.kind == W_LIST_TILE do
+        canvas_draw_rect(app.canvas, x, y, mw, mh, if is_hover then FL_CARD_BORDER_R else w.bg_r, if is_hover then FL_CARD_BORDER_G else w.bg_g, if is_hover then FL_CARD_BORDER_B else w.bg_b, 255, 1)
+        canvas_draw_rect(app.canvas, x, y, mw, mh, w.border_r, w.border_g, w.border_b, 255, 0)
+        tx = x + 12
+        if w.child != 0 do
+            w.child.layout_x = tx
+            w.child.layout_y = y + (mh - 12) / 2
+            fl_render_node(app, w.child)
+            tx += 20
+        end
+        gui_draw_text(app.canvas, w.text, tx, y + 16, 1, w.text_r, w.text_g, w.text_b)
+        if w.children != 0 and size(w.children) > 0 do
+            tr = w.children[0]
+            if tr != 0 do
+                tr.layout_x = x + mw - tr.measured_w - 12
+                tr.layout_y = y + (mh - tr.measured_h) / 2
+                act = fl_render_node(app, tr)
+                if act != 0 do triggered_action = act end
+            end
+        end
+        if is_clicked do triggered_action = w.action_id end
+    else if w.kind == W_SWITCH do
+        sw_w = 40
+        sw_h = 20
+        bg_r = if w.val_i64 == 1 then FL_PRIMARY_R else FL_CARD_R
+        bg_g = if w.val_i64 == 1 then FL_PRIMARY_G else FL_CARD_G
+        bg_b = if w.val_i64 == 1 then FL_PRIMARY_B else FL_CARD_B
+        canvas_draw_rect(app.canvas, x, y, sw_w, sw_h, bg_r, bg_g, bg_b, 255, 1)
+        canvas_draw_rect(app.canvas, x, y, sw_w, sw_h, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 255, 0)
+        knob_x = if w.val_i64 == 1 then x + sw_w - 18 else x + 2
+        canvas_draw_rect(app.canvas, knob_x, y + 2, 16, 16, 255, 255, 255, 255, 1)
+        if is_clicked do triggered_action = w.action_id end
+    else if w.kind == W_CHECKBOX do
+        cb_sz = 16
+        cy = y + (mh - cb_sz) / 2
+        canvas_draw_rect(app.canvas, x, cy, cb_sz, cb_sz, FL_CARD_R, FL_CARD_G, FL_CARD_B, 255, 1)
+        canvas_draw_rect(app.canvas, x, cy, cb_sz, cb_sz, if is_hover then FL_PRIMARY_R else FL_CARD_BORDER_R, if is_hover then FL_PRIMARY_G else FL_CARD_BORDER_G, if is_hover then FL_PRIMARY_B else FL_CARD_BORDER_B, 255, 0)
+        if w.val_i64 == 1 do
+            canvas_draw_rect(app.canvas, x + 3, cy + 3, cb_sz - 6, cb_sz - 6, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, 255, 1)
+        end
+        if _str_len(w.text) > 0 do
+            gui_draw_text(app.canvas, w.text, x + cb_sz + 8, y + (mh - 7) / 2, 1, w.text_r, w.text_g, w.text_b)
+        end
+        if is_clicked do triggered_action = w.action_id end
+    else if w.kind == W_SLIDER do
+        th = 8
+        ty = y + 10
+        canvas_draw_rect(app.canvas, x, ty, mw, th, FL_CARD_R, FL_CARD_G, FL_CARD_B, 255, 1)
+        canvas_draw_rect(app.canvas, x, ty, mw, th, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 255, 0)
+        range = if w.max_val - w.min_val <= 0 then 1 else w.max_val - w.min_val
+        val = if w.val_i64 < w.min_val then w.min_val else if w.val_i64 > w.max_val then w.max_val else w.val_i64
+        fill_w = (mw * (val - w.min_val)) / range
+        if fill_w > 0 do
+            canvas_draw_rect(app.canvas, x + 1, ty + 1, fill_w, th - 2, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, 255, 1)
+        end
+        kx = x + fill_w - 4
+        if kx < x do kx = x end
+        if kx + 8 > x + mw do kx = x + mw - 8 end
+        canvas_draw_rect(app.canvas, kx, ty - 2, 8, th + 4, 255, 255, 255, 255, 1)
+        
+        if app.mouse_down and mx >= x and mx <= x + mw and my >= ty - 6 and my <= ty + th + 6 do
+            pct = (mx - x) * 100 / mw
+            new_val = w.min_val + (range * pct) / 100
+            if new_val < w.min_val do new_val = w.min_val end
+            if new_val > w.max_val do new_val = w.max_val end
+            app.active_slider_action = w.action_id
+            triggered_action = w.action_id
+        end
+    else if w.kind == W_PROGRESS do
+        canvas_draw_rect(app.canvas, x, y, mw, mh, FL_CARD_R, FL_CARD_G, FL_CARD_B, 255, 1)
+        canvas_draw_rect(app.canvas, x, y, mw, mh, FL_CARD_BORDER_R, FL_CARD_BORDER_G, FL_CARD_BORDER_B, 255, 0)
+        fill_w = ((mw - 4) * w.val_i64) / 100
+        if fill_w > 0 do
+            canvas_draw_rect(app.canvas, x + 2, y + 2, fill_w, mh - 4, FL_SUCCESS_R, FL_SUCCESS_G, FL_SUCCESS_B, 255, 1)
+        end
+    else if w.kind == W_COLUMN or w.kind == W_ROW or w.kind == W_STACK do
+        if w.children != 0 do
+            cnt = size(w.children)
+            i = 0
+            while i < cnt do
+                ch = w.children[i]
+                act = fl_render_node(app, ch)
+                if act != 0 do triggered_action = act end
+                i += 1
+            end
+        end
+    else if w.kind == W_EXPANDED do
+        if w.child != 0 do
+            act = fl_render_node(app, w.child)
+            if act != 0 do triggered_action = act end
+        end
+    else if w.kind == W_SCAFFOLD do
+        // Render Scaffold background
+        canvas_clear(app.canvas, w.bg_r, w.bg_g, w.bg_b, 255)
+        
+        // Render AppBar & FAB
+        if w.children != 0 do
+            app_bar = w.children[0]
+            if app_bar != 0 do
+                act = fl_render_node(app, app_bar)
+                if act != 0 do triggered_action = act end
+            end
+        end
+        
+        // Render Body
+        if w.child != 0 do
+            act = fl_render_node(app, w.child)
+            if act != 0 do triggered_action = act end
+        end
+        
+        // Render FAB
+        if w.children != 0 do
+            fab = w.children[1]
+            if fab != 0 do
+                act = fl_render_node(app, fab)
+                if act != 0 do triggered_action = act end
+            end
+        end
+    end
+    
+    triggered_action
+end
+
+// ------------------------------------------------------------
+// 8. Flutter Application Lifecycle & Runner
+// ------------------------------------------------------------
+flutter_app(title: string, width: i64, height: i64): FlutterApp do
+    w = gui_open_window(title, width, height)
+    c = canvas_create(width, height)
+    FlutterApp(w, c, width, height,
+               0, 0, 0, 0, 0, 0,
+               "", 0, 0)
+end
+
+flutter_running(app: FlutterApp): bool do
+    if app.win == 0 then false
+    else if gui_is_open(app.win) == 0 then false
+    else if gui_key_esc(app.win) then false
+    else true
+end
+
+flutter_render(app: FlutterApp, root: Widget): i64 do
+    gui_poll_events(app.win)
+    app.mouse_x = gui_mouse_x(app.win)
+    app.mouse_y = gui_mouse_y(app.win)
+    app.mouse_down = gui_mouse_down(app.win)
+    
+    if gui_click_pending(app.win) > 0 do
+        app.clicked = 1
+        app.click_x = app.win.click_x
+        app.click_y = app.win.click_y
+        app.win.click_cnt = 0
+    else do
+        app.clicked = 0
+        app.click_x = 0
+        app.click_y = 0
+    end
+
+    // Pass 1: Measure Tree
+    fl_measure(root, app.width, app.height)
+
+    // Pass 2: Layout Coordinates
+    fl_layout(root, 0, 0)
+
+    // Pass 3: Render & Hit Test
+    act = fl_render_node(app, root)
+
+    // Render SnackBar Overlay if active
+    if app.snackbar_frames > 0 do
+        sb_h = 32
+        sb_y = app.height - sb_h - 16
+        sb_w = app.width - 32
+        canvas_draw_rect(app.canvas, 16, sb_y, sb_w, sb_h, 30, 41, 59, 240, 1)
+        canvas_draw_rect(app.canvas, 16, sb_y, sb_w, sb_h, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B, 255, 0)
+        gui_draw_text(app.canvas, app.snackbar_text, 28, sb_y + 11, 1, 255, 255, 255)
+        app.snackbar_frames -= 1
+    end
+
+    // Blit to hardware display
+    gui_blit_canvas(app.win, app.canvas)
+    
+    act
+end
+
+flutter_show_snackbar(app: FlutterApp, text: string) do
+    app.snackbar_text = text
+    app.snackbar_frames = 90 // ~1.5 seconds at 60fps
+    0
+end
+
+flutter_close(app: FlutterApp) do
+    canvas_destroy(app.canvas)
+    gui_close_window(app.win)
+    drop(app)
+    0
+end

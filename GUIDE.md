@@ -804,6 +804,7 @@ Since v37.3, reusable helpers are extracted into standard libraries under `lib/`
 | `lib/pui.pw` | `import "pui"` | Declarative widget tree GUI with software canvas rendering (dark theme) |
 | `lib/nui.pw` | `import "nui"` | Declarative widget tree GUI with native Win32 controls & ClearType font |
 | `lib/minifb.pw` | `import "minifb"` | Lightweight pixel window backend for animations and game loops |
+| `lib/flutter.pw` | `import "flutter"` | Flutter-like declarative UI framework (`Scaffold`, `AppBar`, `Container`, `Row`, `Column`, `Expanded`, `Card`, `ListTile`, `ElevatedButton`, `FAB`, `Switch`, `Slider`, `SnackBar`) |
 | `lib/gui.pw` | `import "gui"` | Modern zero-coordinate auto-layout immediate GUI (`gui_app`, `gui_button`, `gui_row_begin`, `gui_slider`, `gui_checkbox`, `gui_progress_bar`) |
 | `lib/canvas.pw` | `import "canvas"` | Off-screen 32-bit RGBA rasterizer: `canvas_create`, `canvas_set_pixel`, `canvas_fill_rect`, `canvas_draw_line`/`circle`, BMP exporter |
 | `lib/otui.pw` | `import "otui"` | Terminal grid UI over ANSI with diff-based repainting |
