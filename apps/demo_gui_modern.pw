@@ -1,0 +1,67 @@
+// apps/demo_gui_modern.pw — Modern GUI Auto-Layout Demo
+import "gui"
+
+global count = 0
+global turbo_mode = 1
+global volume = 65
+
+main() do
+    app = gui_app("Purwa Modern UI Studio", 420, 560)
+    if app.win == 0 do
+        show("Failed to create GUI window (requires desktop environment)\n")
+        1
+    else do
+        show("Purwa Modern GUI Studio running! Press ESC or click [X] to exit.\n")
+        
+        // Interactive UI loop: stays open until user closes window or presses ESC
+        while gui_running(app) do
+            gui_frame_begin(app)
+
+            gui_title(app, "Purwa Studio")
+            gui_subtitle(app, "Modern Auto-Layout GUI Engine")
+            gui_separator(app)
+
+            // Metrics Section (Auto-positioned)
+            gui_label(app, gui_fmt_int(app, "Live Metric Counter: ", count, ""))
+            gui_progress_bar(app, count % 100)
+            gui_spacer(app, 4)
+
+            // Row of 2 Action Buttons (Auto-sized side by side without coordinates)
+            gui_row_begin(app, 2)
+            if gui_button_primary(app, "+ Increment") do
+                count += 1
+            end
+            if gui_button_danger(app, "- Decrement") do
+                count -= 1
+            end
+            gui_row_end(app)
+
+            gui_spacer(app, 4)
+            gui_row_begin(app, 2)
+            if gui_button_success(app, "Boost +10") do
+                count += 10
+            end
+            if gui_button(app, "Reset Counter") do
+                count = 0
+            end
+            gui_row_end(app)
+
+            gui_separator(app)
+
+            // Interactive Controls
+            turbo_mode = gui_checkbox(app, "Turbo Acceleration Engine", turbo_mode)
+            volume = gui_slider(app, "Output Gain Level", volume, 0, 100)
+
+            gui_spacer(app, 6)
+            status_text = if turbo_mode then "ENGINE: TURBO ACTIVE" else "ENGINE: STANDBY"
+            gui_badge(app, status_text, 16, 185, 129)
+
+            gui_frame_end(app)
+            sleep(16) // Smooth 60 FPS
+        end
+
+        gui_close(app)
+        show("Purwa Modern GUI Studio closed cleanly.\n")
+        0
+    end
+end

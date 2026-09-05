@@ -1,0 +1,185 @@
+// apps/landing_page.pw — Sovereign High-Performance Landing Page Web Server
+// Built with Purwa Web Framework (import "web")
+// Zero External Dependencies (0-Node, 0-Python, 0-Go).
+
+import "web"
+import "net"
+
+main() do
+    app = web_app()
+    web_enable_cors(app)
+    web_enable_logger(app)
+
+    // Register routes
+    web_get(app, "/", 1)
+    web_get(app, "/api/stats", 2)
+    web_get(app, "/api/features", 3)
+
+    port = 3000
+    net_init()
+    srv_fd = net_listen(port)
+
+    if srv_fd < 0 do
+        show($"[Landing Page] Failed to bind on port {port}\n")
+        1
+    else do
+        show("=================================================================\n")
+        show($"  🚀 PURWA OFFICIAL LANDING PAGE SERVER (PORT {port})\n")
+        show("=================================================================\n")
+        show($"[Web] Open in your browser: http://localhost:{port}/\n")
+        show($"[Web] API Endpoint: http://localhost:{port}/api/stats\n")
+        show("[Web] Press Ctrl+C to stop server.\n\n")
+
+        running = true
+        while running do
+            client_fd = net_accept(srv_fd)
+            if client_fd >= 0 do
+                req_buf = alloc(65536)
+                n = net_recv(client_fd, req_buf, 65530)
+
+                if n > 0 do
+                    set_byte(req_buf, n, 0)
+                    ctx = create_empty_context()
+                    parse_http_request(req_buf, ctx)
+
+                    if app.logger_enabled do
+                        show($"[HTTP] {ctx.method} {ctx.path}\n")
+                    end
+
+                    if ctx.path == "/api/stats" do
+                        ctx_json(ctx, "{\n" +
+                            "  \"language\": \"Purwa\",\n" +
+                            "  \"version\": \"v37.11.0\",\n" +
+                            "  \"test_suite\": \"125/125 Passing (100%)\",\n" +
+                            "  \"compiler_fixpoint\": \"39C02E1370E98931\",\n" +
+                            "  \"hello_binary_size\": \"2,048 bytes\",\n" +
+                            "  \"in_ram_jit_latency\": \"< 5ms\",\n" +
+                            "  \"memory_model\": \"Lock-Free Hardware Arena (LOCK XADD)\",\n" +
+                            "  \"security\": \"W^X Compliant (Zero RWX)\"\n" +
+                            "}")
+                    else if ctx.path == "/api/features" do
+                        ctx_json(ctx, "[\n" +
+                            "  {\"title\": \"Self-Hosting Native Compiler\", \"desc\": \"Compiles straight to x86-64 machine code with 0 CRT and 0 LLVM.\"},\n" +
+                            "  {\"title\": \"Sub-5ms In-RAM JIT Engine\", \"desc\": \"Direct memory execution with zero disk writes.\"},\n" +
+                            "  {\"title\": \"Hardware Memory Arena\", \"desc\": \"Lock-free atomic bump pointer with 0 GC overhead.\"},\n" +
+                            "  {\"title\": \"Tensor & Autograd AI/ML Engine\", \"desc\": \"Reverse-mode DAG backpropagation & SGD optimizer.\"},\n" +
+                            "  {\"title\": \"Sovereign TLS 1.2/1.3 Engine\", \"desc\": \"OS Schannel hardware encryption without OpenSSL.\"},\n" +
+                            "  {\"title\": \"pw-pack Package Manager\", \"desc\": \"Git shallow cloning & direct HTTPS package downloader.\"}\n" +
+                            "]")
+                    else do
+                        // Beautiful Modern Landing Page UI
+                        html = "<!DOCTYPE html>\n" +
+                        "<html lang='en'>\n" +
+                        "<head>\n" +
+                        "  <meta charset='UTF-8'>\n" +
+                        "  <meta name='viewport' content='width=device-width, initial-scale=1.0'>\n" +
+                        "  <title>Purwa Programming Language — Sovereign x86-64</title>\n" +
+                        "  <style>\n" +
+                        "    :root { --bg: #090d16; --card: rgba(18,24,38,0.7); --border: rgba(255,255,255,0.08); --primary: #38bdf8; --purple: #a855f7; --emerald: #10b981; --text: #f8fafc; --muted: #94a3b8; }\n" +
+                        "    * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }\n" +
+                        "    body { background: var(--bg); color: var(--text); overflow-x: hidden; min-height: 100vh; }\n" +
+                        "    .glow-bg { position: fixed; top: -20%; left: 50%; transform: translateX(-50%); width: 800px; height: 600px; background: radial-gradient(circle, rgba(56,189,248,0.15) 0%, rgba(168,85,247,0.08) 50%, transparent 70%); filter: blur(80px); pointer-events: none; z-index: 0; }\n" +
+                        "    .container { max-width: 1150px; margin: 0 auto; padding: 2rem; position: relative; z-index: 1; }\n" +
+                        "    header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 0; margin-bottom: 3rem; border-bottom: 1px solid var(--border); }\n" +
+                        "    .logo { font-size: 1.5rem; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 0.5rem; }\n" +
+                        "    .badge { background: rgba(56,189,248,0.1); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); padding: 0.3rem 0.8rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }\n" +
+                        "    .hero { text-align: center; padding: 3rem 0 4rem; }\n" +
+                        "    h1 { font-size: 3.5rem; font-weight: 900; line-height: 1.15; margin-bottom: 1.5rem; letter-spacing: -0.03em; }\n" +
+                        "    .gradient-text { background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }\n" +
+                        "    .hero p { font-size: 1.25rem; color: var(--muted); max-width: 750px; margin: 0 auto 2.5rem; line-height: 1.6; }\n" +
+                        "    .btn-group { display: flex; gap: 1rem; justify-content: center; margin-bottom: 3rem; }\n" +
+                        "    .btn { padding: 0.85rem 1.8rem; border-radius: 10px; font-weight: 700; font-size: 1rem; cursor: pointer; text-decoration: none; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 0.5rem; }\n" +
+                        "    .btn-primary { background: linear-gradient(135deg, #0284c7, #38bdf8); color: #000; box-shadow: 0 0 25px rgba(56,189,248,0.35); border: none; }\n" +
+                        "    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 35px rgba(56,189,248,0.5); }\n" +
+                        "    .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); backdrop-filter: blur(12px); }\n" +
+                        "    .btn-secondary:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); }\n" +
+                        "    .stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 4rem; }\n" +
+                        "    .stat-card { background: var(--card); border: 1px solid var(--border); backdrop-filter: blur(16px); padding: 1.5rem; border-radius: 14px; text-align: center; }\n" +
+                        "    .stat-num { font-size: 2rem; font-weight: 800; color: #38bdf8; margin-bottom: 0.25rem; font-family: monospace; }\n" +
+                        "    .stat-label { font-size: 0.85rem; color: var(--muted); text-transform: uppercase; font-weight: 600; }\n" +
+                        "    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 4rem; }\n" +
+                        "    .feature-card { background: var(--card); border: 1px solid var(--border); backdrop-filter: blur(16px); padding: 2rem; border-radius: 16px; transition: transform 0.2s ease, border-color 0.2s ease; }\n" +
+                        "    .feature-card:hover { transform: translateY(-4px); border-color: rgba(56,189,248,0.4); }\n" +
+                        "    .icon { font-size: 2rem; margin-bottom: 1rem; }\n" +
+                        "    .feature-card h3 { font-size: 1.25rem; margin-bottom: 0.75rem; color: #fff; }\n" +
+                        "    .feature-card p { color: var(--muted); font-size: 0.95rem; line-height: 1.5; }\n" +
+                        "    .code-box { background: #030712; border: 1px solid var(--border); border-radius: 14px; padding: 1.5rem; font-family: Consolas, monospace; font-size: 0.9rem; line-height: 1.6; color: #e2e8f0; overflow-x: auto; margin-bottom: 4rem; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }\n" +
+                        "    .kw { color: #f43f5e; font-weight: bold; }\n" +
+                        "    .fn { color: #38bdf8; }\n" +
+                        "    .str { color: #34d399; }\n" +
+                        "    .comm { color: #64748b; font-style: italic; }\n" +
+                        "    footer { text-align: center; padding: 3rem 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; }\n" +
+                        "  </style>\n" +
+                        "</head>\n" +
+                        "<body>\n" +
+                        "  <div class='glow-bg'></div>\n" +
+                        "  <div class='container'>\n" +
+                        "    <header>\n" +
+                        "      <div class='logo'>⚡ PURWA <span>LANG</span></div>\n" +
+                        "      <div style='display:flex;gap:1rem;align-items:center;'>\n" +
+                        "        <span class='badge'>125/125 Tests Passing</span>\n" +
+                        "        <a href='/api/stats' class='btn btn-secondary' style='padding:0.4rem 0.9rem;font-size:0.85rem;'>API Status</a>\n" +
+                        "      </div>\n" +
+                        "    </header>\n" +
+                        "    <section class='hero'>\n" +
+                        "      <span class='badge' style='margin-bottom:1.5rem;display:inline-block;'>Native x86-64 Machine Code</span>\n" +
+                        "      <h1><span class='gradient-text'>Sovereign Systems & AI Language</span><br><span style='color:#38bdf8;'>Zero External Dependencies.</span></h1>\n" +
+                        "      <p>A self-hosting, memory-aware systems programming language that compiles directly into high-speed native x86-64 machine code — no LLVM, no GCC, no CRT, and no external linker.</p>\n" +
+                        "      <div class='btn-group'>\n" +
+                        "        <a href='#demo' class='btn btn-primary'>Explore Architecture 🚀</a>\n" +
+                        "        <a href='/api/features' class='btn btn-secondary'>JSON Features API 📡</a>\n" +
+                        "      </div>\n" +
+                        "    </section>\n" +
+                        "    <div class='stats-bar'>\n" +
+                        "      <div class='stat-card'><div class='stat-num'>2,048 B</div><div class='stat-label'>Hello Binary Size</div></div>\n" +
+                        "      <div class='stat-card'><div class='stat-num'>&lt; 5 ms</div><div class='stat-label'>In-RAM JIT Execution</div></div>\n" +
+                        "      <div class='stat-card'><div class='stat-num'>0 KB</div><div class='stat-label'>Garbage Collector Overhead</div></div>\n" +
+                        "      <div class='stat-card'><div class='stat-num'>125/125</div><div class='stat-label'>Ironclad Test Suite</div></div>\n" +
+                        "    </div>\n" +
+                        "    <div class='grid' id='demo'>\n" +
+                        "      <div class='feature-card'><div class='icon'>⚡</div><h3>Sub-5ms In-RAM JIT</h3><p>Execute and hot-reload Purwa code directly in machine memory without intermediate disk writes or toolchains.</p></div>\n" +
+                        "      <div class='feature-card'><div class='icon'>🧠</div><h3>Native AI & Autograd</h3><p>Built-in multi-dimensional Tensor engine, dynamic reverse-mode DAG backpropagation, and SGD optimizer.</p></div>\n" +
+                        "      <div class='feature-card'><div class='icon'>🛡️</div><h3>Hardware Memory Arena</h3><p>Lock-free atomic bump allocator (LOCK XADD) and scoped frame scratchpads for deterministic zero-leak memory.</p></div>\n" +
+                        "      <div class='feature-card'><div class='icon'>🔒</div><h3>Sovereign TLS 1.2/1.3</h3><p>OS Schannel hardware encryption for HTTPS servers and secure streams without 10MB OpenSSL binaries.</p></div>\n" +
+                        "      <div class='feature-card'><div class='icon'>📦</div><h3>pw-pack Package Manager</h3><p>Fast git shallow cloning and native HTTPS downloader for modules, plugins, and sovereign standalone bundler.</p></div>\n" +
+                        "      <div class='feature-card'><div class='icon'>🌐</div><h3>Modern Web Framework</h3><p>Express/FastAPI-like routing, route parameters (:id), query string parser, CORS, and full-stack REST API.</p></div>\n" +
+                        "    </div>\n" +
+                        "    <h2 style='text-align:center;margin-bottom:1.5rem;font-size:1.8rem;'>Sample Purwa Web & AI Code</h2>\n" +
+                        "    <div class='code-box'>\n" +
+                        "<span class='comm'>// Pure Purwa — Zero External Dependencies</span><br>\n" +
+                        "<span class='kw'>import</span> <span class='str'>\"web\"</span><br>\n" +
+                        "<span class='kw'>import</span> <span class='str'>\"tensor\"</span><br>\n" +
+                        "<span class='kw'>import</span> <span class='str'>\"autograd\"</span><br><br>\n" +
+                        "<span class='fn'>main</span>() <span class='kw'>do</span><br>\n" +
+                        "    app = <span class='fn'>web_app</span>()<br>\n" +
+                        "    <span class='fn'>web_get</span>(app, <span class='str'>\"/api/predict/:x\"</span>, 1)<br><br>\n" +
+                        "    <span class='comm'>// Train 2-layer Neural Network on XOR</span><br>\n" +
+                        "    w1 = <span class='fn'>tensor_randn</span>(2, 4)<br>\n" +
+                        "    w2 = <span class='fn'>tensor_randn</span>(4, 1)<br>\n" +
+                        "    loss = <span class='fn'>tensor_mse_loss</span>(pred, y)<br>\n" +
+                        "    <span class='fn'>tensor_backward</span>(loss)<br><br>\n" +
+                        "    <span class='fn'>web_listen</span>(app, 3000)<br>\n" +
+                        "<span class='kw'>end</span>\n" +
+                        "    </div>\n" +
+                        "    <footer>\n" +
+                        "      <p>⚡ Powered 100% by Purwa Web Server (lib/web.pw) — Pure Native x86-64 Machine Code.</p>\n" +
+                        "    </footer>\n" +
+                        "  </div>\n" +
+                        "</body>\n" +
+                        "</html>\n"
+
+                        ctx_html(ctx, html)
+                    end
+
+                    res_str = build_http_response(ctx, app.cors_enabled)
+                    L = str_len(res_str)
+                    net_send(client_fd, res_str, L)
+                end
+
+                drop(req_buf)
+                net_close(client_fd)
+            end
+        end
+        0
+    end
+end

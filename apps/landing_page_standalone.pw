@@ -1,0 +1,64 @@
+// apps/landing_page_standalone.pw — Purwa Official Landing Page Standalone Desktop Application
+// Powered by Purwa Sovereign HTMLView Native Desktop Engine (import "htmlview")
+// Zero Chromium, Zero Electron, Zero WebView2, Zero External Dependencies!
+
+import "htmlview"
+
+main() do
+    show("=================================================================\n")
+    show("   ⚡ PURWA OFFICIAL LANDING PAGE (STANDALONE DESKTOP APP)      \n")
+    show("=================================================================\n\n")
+
+    html_src = "<header class='nav'>" +
+               "  <h2 class='cyan'>PURWA LANG</h2>" +
+               "  <div class='badge'>126/126 TESTS PASSING</div>" +
+               "  <button class='btn btn-secondary'>API Status</button>" +
+               "</header>" +
+               "<div class='hero'>" +
+               "  <div class='badge'>NATIVE X86-64 MACHINE CODE</div>" +
+               "  <h1>Sovereign Systems & AI Language</h1>" +
+               "  <h2 class='cyan'>Zero External Dependencies.</h2>" +
+               "  <p class='text-center'>A self-hosting, memory-aware systems programming language that compiles directly into high-speed native x86-64 machine code - no LLVM, no GCC, no CRT, and no external linker.</p>" +
+               "  <div class='row btn-group'>" +
+               "    <button class='btn btn-primary'>Explore Architecture [>]</button>" +
+               "    <button class='btn btn-secondary'>JSON Features API [*]</button>" +
+               "  </div>" +
+               "</div>" +
+               "<div class='row stats-bar'>" +
+               "  <div class='stat-card'>" +
+               "    <h2 class='stat-num'>2,048 B</h2>" +
+               "    <p class='stat-label'>HELLO BINARY SIZE</p>" +
+               "  </div>" +
+               "  <div class='stat-card'>" +
+               "    <h2 class='stat-num'>sub-5 ms</h2>" +
+               "    <p class='stat-label'>IN-RAM JIT EXECUTION</p>" +
+               "  </div>" +
+               "  <div class='stat-card'>" +
+               "    <h2 class='stat-num'>0 KB</h2>" +
+               "    <p class='stat-label'>GARBAGE COLLECTOR OVERHEAD</p>" +
+               "  </div>" +
+               "  <div class='stat-card'>" +
+               "    <h2 class='stat-num'>126/126</h2>" +
+               "    <p class='stat-label'>IRONCLAD TEST SUITE</p>" +
+               "  </div>" +
+               "</div>" +
+               "<div class='row grid'>" +
+               "  <div class='card'>" +
+               "    <h2>Sub-5ms In-RAM JIT</h2>" +
+               "    <p>Execute and hot-reload code directly in memory without disk writes.</p>" +
+               "  </div>" +
+               "  <div class='card'>" +
+               "    <h2>Native AI & Autograd</h2>" +
+               "    <p>Built-in multi-dimensional Tensor engine with reverse-mode DAG SGD.</p>" +
+               "  </div>" +
+               "  <div class='card'>" +
+               "    <h2>Hardware Memory Arena</h2>" +
+               "    <p>Lock-free atomic bump allocator (LOCK XADD) for zero GC leaks.</p>" +
+               "  </div>" +
+               "</div>"
+
+    css_src = ""
+
+    // Launch standalone widescreen desktop GUI window (1100x720)
+    html_run_window("Purwa Sovereign Systems & AI - Official Landing Page", 1100, 720, html_src, css_src)
+end

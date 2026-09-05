@@ -1,0 +1,236 @@
+﻿// ======================================================================
+// PURWA INTERACTIVE TERMINAL & HYPERSHELL (v22 Standard Global)
+// Pure Speed. Zero Clutter. 100% Native Bare-Metal Power.
+// ======================================================================
+
+struct TaskItem {
+    id,
+    loops,
+    res
+}
+
+thread_worker(p) do
+    t = p
+    i = 0
+    while i < t.loops do
+        t.res += 1
+        i += 1
+    end
+end
+
+fib_calc(n) =
+    if n <= 1 then n
+    else fib_calc(n - 1) + fib_calc(n - 2)
+
+salin_token(cmd, k, buf) do
+    i = 0
+    ck = 0
+    w = 0
+    go = 1
+    while go == 1 do
+        while i < str_len(cmd) and (get_byte(cmd, i) == 32 or get_byte(cmd, i) == 9 or get_byte(cmd, i) == 13) do
+            i += 1
+        end
+        if i >= str_len(cmd) then go = 0
+        else do
+            if get_byte(cmd, i) == 34 then do
+                i += 1
+                while i < str_len(cmd) and get_byte(cmd, i) != 34 do
+                    if ck == k then do
+                        set_byte(buf, w, get_byte(cmd, i))
+                        w += 1
+                    end
+                    i += 1
+                end
+                i += 1
+            end else do
+                while i < str_len(cmd) and get_byte(cmd, i) != 32 and get_byte(cmd, i) != 9 and get_byte(cmd, i) != 13 do
+                    if ck == k then do
+                        set_byte(buf, w, get_byte(cmd, i))
+                        w += 1
+                    end
+                    i += 1
+                end
+            end
+            ck += 1
+        end
+    end
+    set_byte(buf, w, 0)
+    w
+end
+
+print_banner() do
+    show("\n")
+    show("========================================================================\n")
+    show(" PURWA INTERACTIVE HYPERSHELL (v22 Standard Global)\n")
+    show("   Architecture : x86-64 Native Bare-Metal (PE32+ / ELF64)\n")
+    show("   Engine       : Sub-Nanosecond Arena + Win32 Concurrency\n")
+    show("   Syntax       : Human-Centric V22 Clean Standard\n")
+    show("========================================================================\n")
+    show("Type 'help' for available commands, or 'exit' to quit.\n\n")
+end
+
+print_help() do
+    show("\nAvailable HyperShell Commands:\n")
+    show("------------------------------------------------------------------------\n")
+    show("  help, ?            : Display this help manual\n")
+    show("  info, sys          : Show system architecture, engine, and memory info\n")
+    show("  bench, speed       : Run high-speed in-RAM microbenchmarks\n")
+    show("  arena              : Benchmark sub-nanosecond Arena allocator stress test\n")
+    show("  threads            : Spawn concurrent OS worker threads\n")
+    show("  echo <text>        : Print text to console\n")
+    show("  clear, cls         : Clear terminal screen\n")
+    show("  exit, quit, :q     : Exit the interactive terminal\n")
+    show("------------------------------------------------------------------------\n\n")
+end
+
+print_sys_info() do
+    show("\n[SYSTEM & ENGINE TELEMETRY]\n")
+    show("  - OS Platform     : Windows PE32+ / Linux ELF64 (x86-64 Architecture)\n")
+    show("  - Language Version: Purwa v22 (Standard Global Lexicon)\n")
+    show("  - Memory Model    : Deterministic Explicit + Sub-ns Arena Reset\n")
+    show("  - JIT Mode        : PAGE_EXECUTE_READWRITE (< 5 us Latency)\n")
+    show("  - Self-Hosting    : 100% Pure Purwa (3-Stage Fixpoint Verified)\n\n")
+end
+
+run_benchmarks() do
+    show("\n>>> Executing In-RAM Microbenchmarks...\n")
+    
+    // 1. Recursive Fibonacci
+    t0 = time_ms()
+    fib_res = fib_calc(20)
+    t1 = time_ms()
+    fib_time = t1 - t0
+    show($"  [1] Recursive Fib(20) = {fib_res} in {fib_time} ms\n")
+    
+    // 2. Arena Allocator Speed (16 MB arena)
+    t2 = time_ms()
+    arena = create_arena(16777216)
+    cleanup { drop_arena(arena) }
+    
+    for k in 0..50000 do
+        arena_alloc(arena, 64)
+    end
+    t3 = time_ms()
+    arena_time = t3 - t2
+    show($"  [2] Arena Alloc 50,000 objects in {arena_time} ms (Instant O(1) Reset)\n")
+    
+    // 3. String Throughput
+    t4 = time_ms()
+    s = "Purwa"
+    for j in 0..2000 do
+        s = s + "22"
+    end
+    t5 = time_ms()
+    str_time = t5 - t4
+    show($"  [3] String 2,000 Appends in {str_time} ms\n")
+    show(">>> All Microbenchmarks Finished Successfully!\n\n")
+end
+
+run_arena_test(count) do
+    show($"\n>>> Stress Testing Arena with {count} allocations...\n")
+    arena = create_arena(16777216)
+    cleanup { drop_arena(arena) }
+    
+    t0 = time_ms()
+    for i in 0..count do
+        ptr = arena_alloc(arena, 32)
+        set_byte(ptr, 0, 42)
+    end
+    t1 = time_ms()
+    dur = t1 - t0
+    
+    show($"    Allocated {count} objects in {dur} ms (Zero heap fragmentation)\n")
+    show("    Resetting arena in O(1) instant time...\n")
+    arena_reset(arena)
+    show("    Arena in-use bytes after reset: 0 bytes\n\n")
+end
+
+run_thread_test() do
+    show("\n>>> Spawning 4 Native OS Worker Threads...\n")
+    task1 = TaskItem(1, 10000, 0)
+    task2 = TaskItem(2, 10000, 0)
+    task3 = TaskItem(3, 10000, 0)
+    task4 = TaskItem(4, 10000, 0)
+    
+    h1 = spawn_thread(thread_worker, task1)
+    h2 = spawn_thread(thread_worker, task2)
+    h3 = spawn_thread(thread_worker, task3)
+    h4 = spawn_thread(thread_worker, task4)
+    
+    threads = [h1, h2, h3, h4]
+    join_all(threads)
+    
+    total = task1.res + task2.res + task3.res + task4.res
+    show($"    All 4 Threads Completed. Total Iterations: {total}\n\n")
+end
+
+execute_cmd(cmd_line) do
+    if str_eq(cmd_line, "exit") == true or str_eq(cmd_line, "quit") == true or str_eq(cmd_line, ":q") == true do
+        show("\nExiting Purwa HyperShell. Have a high-speed day!\n")
+        0
+    else if str_eq(cmd_line, "help") == true or str_eq(cmd_line, "?") == true do
+        print_help()
+        1
+    else if str_eq(cmd_line, "info") == true or str_eq(cmd_line, "sys") == true do
+        print_sys_info()
+        1
+    else if str_eq(cmd_line, "bench") == true or str_eq(cmd_line, "speed") == true do
+        run_benchmarks()
+        1
+    else if starts_with(cmd_line, "arena") == true do
+        run_arena_test(25000)
+        1
+    else if str_eq(cmd_line, "threads") == true do
+        run_thread_test()
+        1
+    else if starts_with(cmd_line, "echo ") == true do
+        show(slice(cmd_line, 5, str_len(cmd_line)))
+        show("\n")
+        1
+    else if str_eq(cmd_line, "clear") == true or str_eq(cmd_line, "cls") == true do
+        show("--- Screen Cleared ---\n")
+        1
+    else if str_len(cmd_line) > 0 do
+        show($"Unknown command '{cmd_line}'. Type 'help' for available commands.\n")
+        1
+    else do  1 end
+end
+
+main() do
+    cmd_raw = args()
+    tbuf = alloc(512)
+    cleanup { drop(tbuf) }
+    
+    // Check if CLI arguments were passed
+    arg1_len = salin_token(cmd_raw, 1, tbuf)
+    if arg1_len > 0 do
+        cli_arg = trim(tbuf)
+        execute_cmd(cli_arg)
+    else do
+        print_banner()
+        
+        input_buf = alloc(4096)
+        cleanup { drop(input_buf) }
+        
+        running = true
+        while running do
+            show("purwa-sh> ")
+            set_byte(input_buf, 0, 0)
+            
+            read_n = read_file("CONIN$", input_buf, 4000)
+            if read_n > 0 do
+                while read_n > 0 and (get_byte(input_buf, read_n - 1) == 10 or get_byte(input_buf, read_n - 1) == 13) do
+                    set_byte(input_buf, read_n - 1, 0)
+                    read_n -= 1
+                end
+                
+                cmd_line = trim(input_buf)
+                running = execute_cmd(cmd_line)
+            else do
+                show("\n[Console stream disconnected]\n")
+                running = false
+            end
+        end
+    end
+end

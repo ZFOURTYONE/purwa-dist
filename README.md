@@ -2,21 +2,21 @@
 
 **Script-speed development. Native-code delivery.**  
 **A self-hosting systems programming language that compiles straight to native
-x86-64 machine code — no LLVM, no GCC, no external linker, no CRT.**
+machine code — no LLVM, no GCC, no external linker, no CRT.**
 
-![Version](https://img.shields.io/badge/version-v37.14-6d28d9)
-![Platform](https://img.shields.io/badge/Platform-Windows%20PE32%2B-informational)
+![Version](https://img.shields.io/badge/version-v37.37-6d28d9)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20x86--64%20%7C%20Linux%20ARM64-informational)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen)
-![Compiler](https://img.shields.io/badge/Compiler-%7E228%20KB-blue)
-![Hello-world](https://img.shields.io/badge/Hello--world-2.048%20bytes-orange)
+![Compiler](https://img.shields.io/badge/Compiler-%7E330%20KB-blue)
 ![Security](https://img.shields.io/badge/Security-W%5EX%20sections-success)
 
 Purwa is a small, fast, and **human-centric** systems language. Its compiler is
 a single zero-dependency binary that emits Windows PE32+ executables directly —
-and can cross-compile to Linux ELF64 from the same command line.
+and cross-compiles to Linux ELF64 (x86-64 **and ARM64**) from the same command
+line.
 
-This package contains everything you need: **compiler, formatter, editor
-language server, and a speed-testing tool**. No installation required —
+This package contains everything you need: **compiler (three targets), formatter,
+editor language server, and a speed-testing tool**. No installation required —
 download, unzip, and run.
 
 ---
@@ -43,10 +43,17 @@ That's it. No runtime, no libraries, no PATH setup beyond where you put
 
 | Binary | Description |
 |---|---|
-| `purwac.exe` | The compiler — build, cross-compile, JIT, REPL, watch mode |
+| `purwac.exe` / `purwac-win64.exe` | The compiler — build, cross-compile, JIT, REPL, watch mode |
+| `purwac-linux` | Same compiler, Linux x86-64 ELF64 build |
+| `purwac-arm64` | Same compiler, Linux ARM64 (aarch64) ELF64 build |
 | `purwa-fmt.exe` | Source code formatter |
 | `purwa-lsp.exe` | Language Server Protocol (LSP 3.17) server for editor support |
-| `speednet.exe` | Internet speed & ping tester (command-line) |
+| `speednet.exe` / `speednet-linux` | Internet speed & ping tester (command-line) |
+| `lib/` | Bundled standard libraries (35+ modules: net, json, crypto, tensor, …) |
+| `apps/` | Example applications |
+| `plugins/` | Optional plugin sources |
+| `tools/pw_pack.pw` | Package tool source |
+| `benchmarks/` | Cross-language benchmark suite (C, Rust, Go, Zig, Node, Python, Purwa) |
 
 ---
 
@@ -56,30 +63,34 @@ That's it. No runtime, no libraries, no PATH setup beyond where you put
   does everything.
 - **Self-hosting** — the compiler is written entirely in Purwa and compiles
   itself (bit-for-bit reproducible bootstrap).
-- **Tiny & fast** — hello-world is ~2 KB; the compiler rebuilds itself in
-  under a second.
+- **Triple-target** — Windows PE32+, Linux x86-64 ELF64, and Linux ARM64
+  (aarch64) ELF64 from the same source; all three fixpoints byte-verified.
+- **Tiny & fast** — hello-world is ~1.5 KB; the compiler rebuilds itself in
+  ~0.2 s.
 - **Secure output (W^X)** — every generated executable uses separate
-  *read-execute* (code) and *read-write* (data) sections. No section is both
-  writable and executable.
+  *read-execute* (code) and *read-write* (data) segments. No segment is both
+  writable and executable (incl. `PT_GNU_STACK` on ELF).
 - **In-RAM JIT** — run programs directly from memory with zero disk artifacts
   (`purwac run app.pw`), plus live hot-reload on save (`--watch`).
-- **Cross-compile** — target Linux ELF64 from Windows (`--target linux`).
+- **Cross-compile** — `--target linux` and `--target aarch64` from Windows.
 - **Human-centric** — clean `do ... end` syntax, no ceremony, no `return`
-  keyword, clear English diagnostics.
+  keyword, clear English diagnostics, full `-h/--help` screen.
 
 ---
 
 ## 🛠️ Command Line
 
 ```text
-purwac app.pw -o app.exe             build a Windows executable
-purwac app.pw --target linux          cross-compile to Linux ELF64
+purwac app.pw -o app.exe              build a Windows executable
+purwac app.pw --target linux          cross-compile to Linux x86-64 ELF64
+purwac app.pw --target aarch64        cross-compile to Linux ARM64 ELF64
 purwac app.pw --jit                   execute straight from RAM
 purwac app.pw --watch                 rebuild on file change
 purwac app.pw --strict                treat type mismatches as errors
 purwac -i                             interactive REPL
 purwac -e "40+2"                      evaluate one expression
 purwac --version                      show the compiler version
+purwac -h                             full option list
 ```
 
 ---
@@ -125,4 +136,4 @@ this release.
 
 ---
 
-*Purwa v37.14* · Windows x86-64 (PE32+) & Linux x86-64 (ELF64) · [SHA256SUMS.txt](SHA256SUMS.txt)
+*Purwa v37.37* · Windows x86-64 (PE32+) · Linux x86-64 (ELF64) · Linux ARM64 (ELF64) · [SHA256SUMS.txt](SHA256SUMS.txt)

@@ -1,0 +1,40 @@
+// apps/dashboard_webui.pw — Standalone Native Desktop HTML/CSS Dashboard Application
+// Built with Purwa Sovereign HTMLView Engine (import "htmlview")
+// Zero Electron, Zero Chromium, Zero WebView2, Zero Runtime Bloat!
+
+import "htmlview"
+import "hrtimer"
+
+main() do
+    show("=================================================================\n")
+    show("     ⚡ PURWA AI & SYSTEM CONTROL CENTER (STANDALONE WEBUI)     \n")
+    show("=================================================================\n\n")
+
+    // Pure HTML5 string template
+    html_src = "<div class='hero'>" +
+               "  <h1>Purwa Sovereign WebUI</h1>" +
+               "  <p>Native Desktop HTML/CSS Architecture without Chromium</p>" +
+               "  <div class='card'>" +
+               "    <h2>AI Tensor Engine</h2>" +
+               "    <p>Reverse-mode DAG Autograd Active - 100% Convergence</p>" +
+               "  </div>" +
+               "  <div class='card'>" +
+               "    <h2>Hardware Memory Arena</h2>" +
+               "    <p>Lock-Free Atomic Bump Allocator (LOCK XADD) - Zero GC</p>" +
+               "  </div>" +
+               "  <div class='card'>" +
+               "    <h2>Sovereign TLS 1.3 Stack</h2>" +
+               "    <p>OS Schannel Hardware AES-NI - Standalone HTTPS</p>" +
+               "  </div>" +
+               "  <button class='btn primary'>Hardware Optimization Active</button>" +
+               "</div>"
+
+    // Pure CSS style declarations
+    css_src = ".hero { background: #070b14; padding: 24; }\n" +
+              ".card { background: #111a2e; border: #1e2c4a; border-radius: 14; padding: 16; margin: 8; }\n" +
+              ".btn { background: #38bdf8; color: #000000; padding: 14; border-radius: 10; }\n" +
+              ".primary { background: #0284c7; color: #ffffff; }"
+
+    // Launch standalone native GUI desktop window
+    html_run_window("Purwa AI & System Control Center", 520, 620, html_src, css_src)
+end

@@ -1,0 +1,264 @@
+// lib/array.pw — Array utilities for everyday Purwa (V37.15)
+// ===========================================================================
+// Melengkapi array inti Purwa (flat, zero-cost, header-size) dengan utilitas
+// tingkat tinggi: bounds-safe access, map/filter/reduce, search, transform,
+// flatten, dan string helpers. Murni library — tidak menyentuh compiler
+// (Core Freeze Principle, Iron Law 12).
+//
+// Catatan desain: array Purwa menyimpan ukuran di slot -8 (header). size(a)
+// membaca header itu. Fungsi di sini memakai size() dan bounds check EKSPLISIT
+// untuk keamanan — tidak ada crash di luar batas.
+// ===========================================================================
+
+// ---------- Bounds-safe access ----------
+
+// arr_get(a, i, default): baca a[i] aman — di luar batas return default
+arr_get(a, i, default) do
+    n = size(a)
+    if i >= 0 and i < n then a[i] else default
+end
+
+// arr_set(a, i, v): tulis a[i] = v, no-op bila di luar batas (return 1 = ok)
+arr_set(a, i, v) do
+    n = size(a)
+    if i >= 0 and i < n then do
+        a[i] = v
+        1
+    end else 0
+end
+
+// arr_len(a): alias untuk size (nama intuitif)
+arr_len(a) = size(a)
+
+// ---------- Higher-order functions ----------
+
+// arr_map(a, fn): fn diterapkan ke tiap elemen, hasil array baru
+arr_map(a, fn) do
+    n = size(a)
+    res = make_array(n, 0)
+    i = 0
+    while i < n do
+        res[i] = fn(a[i])
+        i = i + 1
+    end
+    res
+end
+
+// arr_filter(a, pred): elemen yang memenuhi pred (pred != 0), array baru
+arr_filter(a, pred) do
+    n = size(a)
+    tmp = make_array(n, 0)
+    cnt = 0
+    i = 0
+    while i < n do
+        v = a[i]
+        if pred(v) != 0 then do
+            tmp[cnt] = v
+            cnt = cnt + 1
+        end
+        i = i + 1
+    end
+    res = make_array(cnt, 0)
+    k = 0
+    while k < cnt do
+        res[k] = tmp[k]
+        k = k + 1
+    end
+    drop(tmp)
+    res
+end
+
+// arr_reduce(a, init, fn): akumulasi fn(acc, elem) dari init
+arr_reduce(a, init, fn) do
+    n = size(a)
+    acc = init
+    i = 0
+    while i < n do
+        acc = fn(acc, a[i])
+        i = i + 1
+    end
+    acc
+end
+
+// arr_each(a, fn): side-effect per elemen (return 0)
+arr_each(a, fn) do
+    n = size(a)
+    i = 0
+    while i < n do
+        fn(a[i])
+        i = i + 1
+    end
+    0
+end
+
+// ---------- Search ----------
+
+// arr_find(a, pred): elemen pertama yang memenuhi pred; 0 bila tak ada
+arr_find(a, pred) do
+    n = size(a)
+    found = 0
+    i = 0
+    go = true
+    while i < n and go do
+        if pred(a[i]) != 0 then do
+            found = a[i]
+            go = false
+        end
+        i = i + 1
+    end
+    found
+end
+
+// arr_find_index(a, pred): index elemen pertama; -1 bila tak ada
+arr_find_index(a, pred) do
+    n = size(a)
+    idx = 0 - 1
+    i = 0
+    go = true
+    while i < n and go do
+        if pred(a[i]) != 0 then do
+            idx = i
+            go = false
+        end
+        i = i + 1
+    end
+    idx
+end
+
+// arr_contains(a, v): apakah v ada di a (== per elemen)
+arr_contains(a, v) do
+    n = size(a)
+    found = false
+    i = 0
+    while i < n and not found do
+        if a[i] == v then found = true
+        else i = i + 1
+    end
+    found
+end
+
+// ---------- Transform ----------
+
+// arr_reverse(a): array baru terbalik
+arr_reverse(a) do
+    n = size(a)
+    res = make_array(n, 0)
+    i = 0
+    while i < n do
+        res[i] = a[n - 1 - i]
+        i = i + 1
+    end
+    res
+end
+
+// arr_copy(a): shallow copy (elemen pointer tetap pointer yang sama)
+arr_copy(a) do
+    n = size(a)
+    res = make_array(n, 0)
+    i = 0
+    while i < n do
+        res[i] = a[i]
+        i = i + 1
+    end
+    res
+end
+
+// arr_flatten(a): array 2D -> 1D ([[1,2],[3,4]] -> [1,2,3,4])
+arr_flatten(a) do
+    n = size(a)
+    total = 0
+    i = 0
+    while i < n do
+        total = total + size(a[i])
+        i = i + 1
+    end
+    res = make_array(total, 0)
+    w = 0
+    i = 0
+    while i < n do
+        row = a[i]
+        j = 0
+        while j < size(row) do
+            res[w] = row[j]
+            w = w + 1
+            j = j + 1
+        end
+        i = i + 1
+    end
+    res
+end
+
+// ---------- String helpers ----------
+
+// arr_join(a, sep): gabung array string jadi satu string ("a,b,c")
+arr_join(a, sep) do
+    n = size(a)
+    if n == 0 then ""
+    else do
+        out = a[0]
+        i = 1
+        while i < n do
+            out = concat(concat(out, sep), a[i])
+            i = i + 1
+        end
+        out
+    end
+end
+
+// arr_to_string(a): array angka -> "[1, 2, 3]"
+arr_to_string(a) do
+    n = size(a)
+    if n == 0 then "[]"
+    else do
+        out = "["
+        i = 0
+        while i < n do
+            if i > 0 then out = concat(out, ", ")
+            out = concat(out, to_text(a[i]))
+            i = i + 1
+        end
+        concat(out, "]")
+    end
+end
+
+// arr_sum(a): jumlah elemen (integer)
+arr_sum(a) do
+    n = size(a)
+    s = 0
+    i = 0
+    while i < n do
+        s = s + a[i]
+        i = i + 1
+    end
+    s
+end
+
+// arr_max(a): elemen maksimum
+arr_max(a) do
+    n = size(a)
+    if n == 0 then 0
+    else do
+        m = a[0]
+        i = 1
+        while i < n do
+            if a[i] > m then m = a[i]
+            i = i + 1
+        end
+        m
+    end
+end
+
+// arr_min(a): elemen minimum
+arr_min(a) do
+    n = size(a)
+    if n == 0 then 0
+    else do
+        m = a[0]
+        i = 1
+        while i < n do
+            if a[i] < m then m = a[i]
+            i = i + 1
+        end
+        m
+    end
+end

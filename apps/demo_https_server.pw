@@ -1,56 +1,67 @@
 // apps/demo_https_server.pw — Standalone Native HTTPS Web Server in Pure Purwa
-// Pure Purwa, zero external dependencies (0-OpenSSL, 0-Nginx, 0-Cloudflare).
-// Listens on port 8443, serves encrypted web pages and JSON APIs over TLS.
+// Pure Purwa application code: no C glue, no Nginx, no Cloudflare.
+// TLS is provided by the platform's own engine through lib/tls.pw:
+//   * Linux  -> OpenSSL 3.x, reached through the dlopen/dlsym FFI builtins
+//   * Windows -> Schannel (secur32.dll), reached through LoadLibrary/GetProcAddress
+// Listens on 8443, serves one encrypted HTML page over TLS for a bounded demo run.
 
 import "tls"
 import "net"
 
+// Self-signed PEMs for the demo. On Linux, generate them with:
+//   openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/pw_key.pem \
+//     -out /tmp/pw_cert.pem -days 365 -subj "/CN=localhost"
+// Windows Schannel uses the machine credential store, so these are ignored there.
+const DEMO_CERT = "/tmp/pw_cert.pem"
+const DEMO_KEY = "/tmp/pw_key.pem"
+const DEMO_REQUESTS = 3
+
 main() do
+    // Purwa `cleanup` is emitted at the function epilogue unconditionally, so the
+    // request buffer is allocated here — before any early-return path exists.
+    buf = alloc(4096)
+    cleanup drop(buf)
+
     show("=================================================================\n")
     show("       PURWA SOVEREIGN STANDALONE HTTPS / TLS WEB SERVER        \n")
     show("=================================================================\n\n")
 
     port = 8443
-    show($"Initializing TLS 1.2/1.3 Engine on port {port}...\n")
-    
-    server = tls_server_create(port, "")
-    if server.server_fd < 0 do
-        show($"Error: Failed to bind HTTPS server on port {port}\n")
+    show($"Initializing TLS 1.2/1.3 engine on port {port}...\n")
+    if is_linux() then show("[HTTPS] Engine: OpenSSL 3.x via dlopen/dlsym FFI\n")
+    else show("[HTTPS] Engine: Schannel (secur32.dll) via LoadLibrary FFI\n")
+
+    server = tls_server_create(port, DEMO_CERT, DEMO_KEY)
+    if server.server_fd < 0 or not server.ctx.is_ready do
+        show($"Error: failed to start HTTPS server on port {port}\n")
+        show("        (on Linux, create the demo certificate and key first)\n")
         1
     else do
         show($"[HTTPS] Server listening on https://127.0.0.1:{port}/\n")
-        show($"[HTTPS] Open in your browser: https://localhost:{port}/\n")
-        show("[HTTPS] Press Ctrl+C to stop server.\n\n")
+        show($"[HTTPS] Try: curl -k https://localhost:{port}/\n\n")
 
-        // Non-blocking / 1 request demo mode or multi-request loop
         req_count = 0
-        while req_count < 3 do
+        while req_count < DEMO_REQUESTS do
             show($"[HTTPS] Waiting for secure client connection #{req_count + 1}...\n")
             client = tls_server_accept(server)
-
             if client.raw_fd >= 0 do
                 show("[HTTPS] Secure TLS connection established!\n")
-
-                buf = alloc(4096)
-                cleanup drop(buf)
-                n = tls_recv(client, buf, 4000)
-
-                if n > 0 do
-                    show($"[HTTPS] Received request:\n---\n{buf}---\n")
-
-                    html_body = "<!DOCTYPE html><html><head><title>Purwa Native HTTPS</title></head>" +
-                                "<body style='font-family:sans-serif;background:#0f172a;color:#f8fafc;padding:2rem;'>" +
-                                "<h1 style='color:#38bdf8;'>Purwa Native HTTPS Server 🚀🔒</h1>" +
-                                "<p>Encrypted using sovereign Purwa TLS engine — 0 OpenSSL, 0 Nginx, 0 Cloudflare!</p>" +
-                                "<div style='background:#1e293b;padding:1rem;border-radius:8px;'>" +
-                                $"<code>Status: 200 OK | Port: {port} | TLS Handshake: Active</code>" +
-                                "</div></body></html>"
-
-                    resp = https_response_ok(html_body, "text/html; charset=utf-8")
-                    tls_send(client, resp)
-                    show("[HTTPS] Sent encrypted HTTPS 200 OK response.\n")
+                n = tls_handshake(client, server.ctx)
+                if n do
+                    got = tls_recv(client, buf, 4096)
+                    if got > 0 do
+                        show("[HTTPS] Received request:\n---\n")
+                        show(buf)
+                        show("---\n")
+                        resp = https_response_ok(demo_page(port), "text/html; charset=utf-8")
+                        sent = tls_send(client, resp)
+                        show("[HTTPS] Sent encrypted HTTPS 200 OK response (")
+                        show_num(sent)
+                        show(" bytes)\n")
+                    end
+                else do
+                    show("[HTTPS] TLS handshake failed.\n")
                 end
-
                 tls_close(client)
                 req_count = req_count + 1
             end
@@ -59,4 +70,15 @@ main() do
         show("[HTTPS] Server completed demo cycles. Closing.\n")
         0
     end
+end
+
+demo_page(port: i64): string do
+    "<!DOCTYPE html><html><head><title>Purwa Native HTTPS</title></head>" +
+    "<body style='font-family:sans-serif;background:#0f172a;color:#f8fafc;padding:2rem;'>" +
+    "<h1 style='color:#38bdf8;'>Purwa Native HTTPS Server</h1>" +
+    "<p>Served by a self-hosted Purwa compiler and the platform TLS engine, " +
+    "reached through Purwa's own FFI builtins — no C glue, no Nginx, no Cloudflare.</p>" +
+    "<div style='background:#1e293b;padding:1rem;border-radius:8px;'>" +
+    $"Status: 200 OK | Port: {port} | TLS Handshake: Active" +
+    "</div></body></html>"
 end

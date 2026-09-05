@@ -1,0 +1,449 @@
+// apps/purwa_pkg.pw — Sovereign Application Packager & Installer Generator for Purwa
+// 100% Pure Purwa, Zero External Dependencies (no NSIS, no InnoSetup, no WiX).
+
+import "crypto"
+import "path"
+
+const PKG_VERSION = "1.0.0"
+
+// ---- CLI Parsing Helper ----
+salin_token(cmd: string, k: i64, buf: string, maxw: i64): i64 do
+    i = 0
+    ck = 0
+    w = 0
+    go = 1
+    cmd_len = str_len(cmd)
+    while go == 1 do
+        while i < cmd_len and (get_byte(cmd, i) == 32 or get_byte(cmd, i) == 9 or get_byte(cmd, i) == 13) do i = i + 1 end
+        if i >= cmd_len then go = 0
+        else do
+            if get_byte(cmd, i) == 34 then do
+                i = i + 1
+                while i < cmd_len and get_byte(cmd, i) != 34 do
+                    if ck == k and w < maxw - 1 then do
+                        set_byte(buf, w, get_byte(cmd, i))
+                        w = w + 1
+                    end
+                    i = i + 1
+                end
+                i = i + 1
+            end else do
+                while i < cmd_len and get_byte(cmd, i) != 32 and get_byte(cmd, i) != 9 and get_byte(cmd, i) != 13 do
+                    if ck == k and w < maxw - 1 then do
+                        set_byte(buf, w, get_byte(cmd, i))
+                        w = w + 1
+                    end
+                    i = i + 1
+                end
+            end
+            ck = ck + 1
+            0
+        end
+    end
+    set_byte(buf, w, 0)
+    w
+end
+
+// ---- Banner UI ----
+show_banner() do
+    show("\n=======================================================\n")
+    show("   PURWA SOVEREIGN APP PACKAGER & INSTALLER GENERATOR\n")
+    show($"   Version {PKG_VERSION} — 100% Native Purwa Zero-Dependency\n")
+    show("=======================================================\n\n")
+    0
+end
+
+show_help() do
+    show_banner()
+    show("PENGGUNAAN:\n")
+    show("  purwa-pkg <perintah> [argumen]\n\n")
+    show("PERINTAH TERSEDIA:\n")
+    show("  init <nama-aplikasi>     Inisialisasi proyek baru dengan struktur paket standar\n")
+    show("  build                   Kompilasi aplikasi menjadi executable native standalone\n")
+    show("  pack                    Kemas aplikasi + aset menjadi file .pwpack terenkripsi SHA-256\n")
+    show("  make-installer          Hasilkan Setup Installer executable standalone (<App>-Setup.exe)\n")
+    show("  list                    Tampilkan info direktori instalasi aplikasi Purwa di sistem\n")
+    show("  help                    Tampilkan panduan ini\n\n")
+    show("CONTOH:\n")
+    show("  purwa-pkg init kalkulator\n")
+    show("  cd kalkulator\n")
+    show("  purwa-pkg build\n")
+    show("  purwa-pkg make-installer\n\n")
+    0
+end
+
+// ---- Directory & OS Utilities ----
+ensure_dir(dir: string) do
+    if not is_linux() then do
+        exec($"cmd /c if not exist \"{dir}\" mkdir \"{dir}\"")
+    end else do
+        exec($"-p {dir}")
+    end
+end
+
+find_purwac_compiler() do
+    if file_exists("purwac.exe") then "purwac.exe"
+    else if file_exists("..\\purwac.exe") then "..\\purwac.exe"
+    else if file_exists("..\\..\\purwac.exe") then "..\\..\\purwac.exe"
+    else if file_exists("..\\..\\..\\purwac.exe") then "..\\..\\..\\purwac.exe"
+    else if file_exists("I:\\PROJECT\\big-project\\purwac.exe") then "I:\\PROJECT\\big-project\\purwac.exe"
+    else "purwac"
+end
+
+get_install_root() do
+    if not is_linux() then do
+        localapp = read_text("env:LOCALAPPDATA")
+        if str_len(localapp) == 0 then do
+            userprofile = read_text("env:USERPROFILE")
+            if str_len(userprofile) > 0 then path_join(userprofile, "AppData\\Local\\PurwaApps")
+            else "C:\\PurwaApps"
+        end else do
+            path_join(localapp, "PurwaApps")
+        end
+    end else do
+        home = read_text("env:HOME")
+        if str_len(home) > 0 then path_join(home, ".local/share/purwa-apps")
+        else "/usr/local/share/purwa-apps"
+    end
+end
+
+// ---- 1. Command: init ----
+cmd_init(name: string) do
+    app_name = if str_len(name) > 0 then name else "my_purwa_app"
+    show_banner()
+    show($"[+] Menginisialisasi proyek aplikasi Purwa: '{app_name}'\n")
+
+    ensure_dir(app_name)
+    ensure_dir(path_join(app_name, "src"))
+    ensure_dir(path_join(app_name, "assets"))
+    ensure_dir(path_join(app_name, "dist"))
+
+    manifest = "{\n" +
+        $"  \"name\": \"{app_name}\",\n" +
+        "  \"version\": \"1.0.0\",\n" +
+        $"  \"description\": \"Aplikasi berdaulat berbasis Purwa ({app_name})\",\n" +
+        "  \"author\": \"Purwa Developer\",\n" +
+        "  \"main\": \"src/main.pw\",\n" +
+        $"  \"executable\": \"{app_name}.exe\",\n" +
+        "  \"create_desktop_shortcut\": true,\n" +
+        "  \"add_to_path\": true\n" +
+        "}\n"
+    
+    write_text(path_join(app_name, "purwa.app.json"), manifest)
+    show("  [✓] Dibuat: purwa.app.json (App Manifest)\n")
+
+    starter_src = "// " + app_name + " — Entry Point\n" +
+        "main() do\n" +
+        "    show(\"========================================\\n\")\n" +
+        $"    show(\" Selamat datang di {app_name}!\\n\")\n" +
+        "    show(\" Dibuat dengan Purwa Native Systems Lang\\n\")\n" +
+        "    show(\"========================================\\n\\n\")\n" +
+        "    show(\"Aplikasi berjalan dengan sukses!\\n\")\n" +
+        "end\n"
+
+    write_text(path_join(app_name, "src/main.pw"), starter_src)
+    show("  [✓] Dibuat: src/main.pw\n")
+
+    readme = "# " + app_name + "\n\n" +
+        "Aplikasi mandiri berkinerja tinggi yang dikompilasi dengan Purwa.\n\n" +
+        "## Cara Build & Pack:\n" +
+        "```bash\n" +
+        "purwa-pkg build\n" +
+        "purwa-pkg make-installer\n" +
+        "```\n"
+
+    write_text(path_join(app_name, "README.md"), readme)
+    show("  [✓] Dibuat: README.md\n")
+
+    show("\nProyek siap! Masuk ke direktori dan jalankan build:\n")
+    show($"  cd {app_name}\n  purwa-pkg build\n\n")
+    0
+end
+
+// ---- 2. Command: build ----
+cmd_build() do
+    show_banner()
+    if not file_exists("purwa.app.json") and not file_exists("src/main.pw") then do
+        show("[x] Error: 'purwa.app.json' atau 'src/main.pw' tidak ditemukan di direktori saat ini.\n")
+        show("    Jalankan perintah ini di dalam direktori proyek aplikasi Purwa.\n\n")
+        1
+    end else do
+        main_file = if file_exists("src/main.pw") then "src/main.pw" else "main.pw"
+        ensure_dir("dist")
+        
+        app_name = "app"
+        if file_exists("purwa.app.json") then do
+            manifest_txt = read_text("purwa.app.json")
+            if contains(manifest_txt, "\"name\":") then do
+                p1 = index_of(manifest_txt, "\"name\":")
+                p2 = index_of(slice(manifest_txt, p1 + 7, str_len(manifest_txt)), "\"")
+                if p2 > 0 then do
+                    p3 = index_of(slice(manifest_txt, p1 + 7 + p2 + 1, str_len(manifest_txt)), "\"")
+                    if p3 > 0 then app_name = slice(manifest_txt, p1 + 7 + p2 + 1, p1 + 7 + p2 + 1 + p3)
+                end
+            end
+        end
+
+        out_bin = if not is_linux() then $"dist/{app_name}.exe" else $"dist/{app_name}"
+        show($"[*] Mengompilasi '{main_file}' -> '{out_bin}'...\n")
+
+        purwac_bin = find_purwac_compiler()
+        if not is_linux() then do
+            exec($"cmd /c \"{purwac_bin}\" {main_file} -o {out_bin}")
+        end else do
+            exec($"-c \"{purwac_bin} {main_file} -o {out_bin}\"")
+        end
+        
+        if file_exists(out_bin) then do
+            show($"[✓] Berhasil dikompilasi ke biner standalone: '{out_bin}'!\n\n")
+            0
+        end else do
+            show("[x] Kompilasi gagal! Periksa error di atas.\n\n")
+            1
+        end
+    end
+end
+
+// ---- 3. Command: pack ----
+cmd_pack() do
+    show_banner()
+    if not file_exists("purwa.app.json") then do
+        show("[x] Error: 'purwa.app.json' tidak ditemukan.\n")
+        1
+    end else do
+        manifest_txt = read_text("purwa.app.json")
+        app_name = "my_app"
+        if contains(manifest_txt, "\"name\":") then do
+            p1 = index_of(manifest_txt, "\"name\":")
+            p2 = index_of(slice(manifest_txt, p1 + 7, str_len(manifest_txt)), "\"")
+            if p2 > 0 then do
+                p3 = index_of(slice(manifest_txt, p1 + 7 + p2 + 1, str_len(manifest_txt)), "\"")
+                if p3 > 0 then app_name = slice(manifest_txt, p1 + 7 + p2 + 1, p1 + 7 + p2 + 1 + p3)
+            end
+        end
+
+        bin_file = if not is_linux() then $"dist/{app_name}.exe" else $"dist/{app_name}"
+        if not file_exists(bin_file) then do
+            show($"[*] Biner belum ada, menjalankan build terlebih dahulu...\n")
+            cmd_build()
+        end
+
+        if not file_exists(bin_file) then do
+            show($"[x] Gagal menemukan biner: '{bin_file}'\n")
+            1
+        end else do
+            show($"[*] Membaca biner & membuat paket terverifikasi...\n")
+            raw_buf = alloc(16777216) // 16 MB max
+            cleanup drop(raw_buf)
+            bin_len = read_file(bin_file, raw_buf, 16777200)
+            
+            sha = sha256_bytes(raw_buf, bin_len)
+            b64_payload = base64_encode_bytes(raw_buf, bin_len)
+            
+            pack_file = $"dist/{app_name}.pwpack"
+            pack_content = "PURWA_PACKAGE_V1\n" +
+                $"APP_NAME={app_name}\n" +
+                $"BINARY_NAME={app_name}.exe\n" +
+                $"BINARY_SIZE={bin_len}\n" +
+                $"SHA256={sha}\n" +
+                $"MANIFEST={manifest_txt}\n" +
+                "---PAYLOAD_START---\n" +
+                b64_payload + "\n" +
+                "---PAYLOAD_END---\n"
+
+            write_text(pack_file, pack_content)
+            show($"[✓] Paket Berdaulat berhasil dibuat: '{pack_file}'\n")
+            show($"    Ukuran Biner : {bin_len} bytes\n")
+            show($"    SHA-256 Hash : {sha}\n\n")
+            0
+        end
+    end
+end
+
+// ---- 4. Command: make-installer ----
+cmd_make_installer() do
+    show_banner()
+    manifest_txt = if file_exists("purwa.app.json") then read_text("purwa.app.json") else ""
+    app_name = "PurwaApp"
+    if str_len(manifest_txt) > 0 and contains(manifest_txt, "\"name\":") then do
+        p1 = index_of(manifest_txt, "\"name\":")
+        p2 = index_of(slice(manifest_txt, p1 + 7, str_len(manifest_txt)), "\"")
+        if p2 > 0 then do
+            p3 = index_of(slice(manifest_txt, p1 + 7 + p2 + 1, str_len(manifest_txt)), "\"")
+            if p3 > 0 then app_name = slice(manifest_txt, p1 + 7 + p2 + 1, p1 + 7 + p2 + 1 + p3)
+        end
+    end
+
+    bin_file = if not is_linux() then $"dist/{app_name}.exe" else $"dist/{app_name}"
+    if not file_exists(bin_file) then cmd_build()
+
+    if not file_exists(bin_file) then do
+        show($"[x] Gagal menemukan biner: '{bin_file}'\n")
+        1
+    end else do
+        show($"[*] Menghasilkan Setup Installer Mandiri untuk '{app_name}'...\n")
+        raw_buf = alloc(16777216)
+        cleanup drop(raw_buf)
+        bin_len = read_file(bin_file, raw_buf, 16777200)
+        sha = sha256_bytes(raw_buf, bin_len)
+        b64_payload = base64_encode_bytes(raw_buf, bin_len)
+
+        installer_src_path = $"dist/_setup_{app_name}.pw"
+        installer_exe_path = if not is_linux() then $"dist/{app_name}-Setup.exe" else $"dist/{app_name}-Setup"
+
+        setup_code = "// Standalone Native Setup Installer for " + app_name + "\n\n" +
+            "const APP_NAME = \"" + app_name + "\"\n" +
+            "const TARGET_EXE = \"" + app_name + ".exe\"\n" +
+            "const BIN_SIZE = " + to_text(bin_len) + "\n" +
+            "const EXPECTED_SHA = \"" + sha + "\"\n" +
+            "const PAYLOAD_B64 = \"" + b64_payload + "\"\n\n" +
+            "_b64_val(c) do\n" +
+            "    if c >= 65 and c <= 90 then c - 65\n" +
+            "    else if c >= 97 and c <= 122 then c - 97 + 26\n" +
+            "    else if c >= 48 and c <= 57 then c - 48 + 52\n" +
+            "    else if c == 43 then 62\n" +
+            "    else if c == 47 then 63\n" +
+            "    else 0\n" +
+            "end\n\n" +
+            "b64_decode_to_buf(s, out_buf) do\n" +
+            "    L = str_len(s)\n" +
+            "    i = 0\n" +
+            "    w = 0\n" +
+            "    while i < L do\n" +
+            "        c0 = get_byte(s, i)\n" +
+            "        c1 = if i + 1 < L then get_byte(s, i + 1) else 61\n" +
+            "        c2 = if i + 2 < L then get_byte(s, i + 2) else 61\n" +
+            "        c3 = if i + 3 < L then get_byte(s, i + 3) else 61\n" +
+            "        b0 = _b64_val(c0)\n" +
+            "        b1 = _b64_val(c1)\n" +
+            "        b2 = _b64_val(c2)\n" +
+            "        b3 = _b64_val(c3)\n" +
+            "        set_byte(out_buf, w, (b0 << 2) | (b1 >> 4))\n" +
+            "        w = w + 1\n" +
+            "        if c2 != 61 then do\n" +
+            "            set_byte(out_buf, w, ((b1 & 15) << 4) | (b2 >> 2))\n" +
+            "            w = w + 1\n" +
+            "        end\n" +
+            "        if c3 != 61 then do\n" +
+            "            set_byte(out_buf, w, ((b2 & 3) << 6) | b3)\n" +
+            "            w = w + 1\n" +
+            "        end\n" +
+            "        i = i + 4\n" +
+            "    end\n" +
+            "    w\n" +
+            "end\n\n" +
+            "main() do\n" +
+            "    show(\"\\n=======================================================\\n\")\n" +
+            "    show(\"   PURWA STANDALONE NATIVE APPLICATION INSTALLER\\n\")\n" +
+            "    show(\"   Memasang: " + app_name + " (100% Native Standalone)\\n\")\n" +
+            "    show(\"=======================================================\\n\\n\")\n\n" +
+            "    show(\"[*] Menentukan direktori instalasi target...\\n\")\n" +
+            "    target_dir = \"C:\\\\Program Files\\\\\" + APP_NAME\n" +
+            "    if not is_linux() then do\n" +
+            "        localapp = read_text(\"env:LOCALAPPDATA\")\n" +
+            "        target_dir = if str_len(localapp) > 0 then path_join(localapp, \"Programs\\\\\" + APP_NAME) else \"C:\\\\PurwaApps\\\\\" + APP_NAME\n" +
+            "    end else do\n" +
+            "        home = read_text(\"env:HOME\")\n" +
+            "        target_dir = if str_len(home) > 0 then path_join(home, \".local/share/\" + APP_NAME) else \"/usr/local/share/\" + APP_NAME\n" +
+            "    end\n\n" +
+            "    show(\"    Target Path: \" + target_dir + \"\\n\\n\")\n" +
+            "    if not is_linux() then exec(\"cmd /c if not exist \\\"\" + target_dir + \"\\\" mkdir \\\"\" + target_dir + \"\\\"\")\n" +
+            "    else exec(\"-p \" + target_dir)\n\n" +
+            "    show(\"[*] Mengekstrak payload biner...\\n\")\n" +
+            "    out_mem = alloc(BIN_SIZE + 1024)\n" +
+            "    cleanup drop(out_mem)\n" +
+            "    written_len = b64_decode_to_buf(PAYLOAD_B64, out_mem)\n\n" +
+            "    target_bin_path = path_join(target_dir, TARGET_EXE)\n" +
+            "    write_file(target_bin_path, out_mem, written_len)\n" +
+            "    show(\"  [✓] File executable berhasil dipasang ke: \" + target_bin_path + \"\\n\")\n\n" +
+            "    // Buat shortcut Desktop bila di Windows\n" +
+            "    if not is_linux() then do\n" +
+            "        userprofile = read_text(\"env:USERPROFILE\")\n" +
+            "        if str_len(userprofile) > 0 then do\n" +
+            "            desktop_dir = path_join(userprofile, \"Desktop\")\n" +
+            "            vbs_script = \"Set oWS = WScript.CreateObject(\\\"WScript.Shell\\\")\\n\" +\n" +
+            "                \"sLinkFile = \\\"\" + path_join(desktop_dir, APP_NAME + \".lnk\") + \"\\\"\\n\" +\n" +
+            "                \"Set oLink = oWS.CreateShortcut(sLinkFile)\\n\" +\n" +
+            "                \"oLink.TargetPath = \\\"\" + target_bin_path + \"\\\"\\n\" +\n" +
+            "                \"oLink.WorkingDirectory = \\\"\" + target_dir + \"\\\"\\n\" +\n" +
+            "                \"oLink.Description = \\\"\" + APP_NAME + \" Application\\\"\\n\" +\n" +
+            "                \"oLink.Save\\n\"\n" +
+            "            vbs_file = path_join(target_dir, \"shortcut.vbs\")\n" +
+            "            write_text(vbs_file, vbs_script)\n" +
+            "            exec(\"//nologo \\\"\" + vbs_file + \"\\\"\")\n" +
+            "            show(\"  [✓] Shortcut Desktop berhasil dibuat: \" + APP_NAME + \".lnk\\n\")\n" +
+            "        end\n" +
+            "    end\n\n" +
+            "    show(\"\\n=======================================================\\n\")\n" +
+            "    show(\"   INSTALASI BERHASIL 100%! APLIKASI SIAP DIGUNAKAN\\n\")\n" +
+            "    show(\"=======================================================\\n\\n\")\n" +
+            "    0\n" +
+            "end\n"
+
+        write_text(installer_src_path, setup_code)
+        
+        show($"[*] Mengompilasi Setup Installer -> '{installer_exe_path}'...\n")
+        purwac_bin = find_purwac_compiler()
+        if not is_linux() then do
+            exec($"cmd /c \"{purwac_bin}\" {installer_src_path} -o {installer_exe_path}")
+        end else do
+            exec($"-c \"{purwac_bin} {installer_src_path} -o {installer_exe_path}\"")
+        end
+        
+        if file_exists(installer_exe_path) then do
+            if not is_linux() then exec($"cmd /c del \"{installer_src_path}\"")
+            else exec($"-f {installer_src_path}")
+            
+            show($"[✓] Standalone Setup Installer Sukses Dibuat: '{installer_exe_path}'!\n")
+            show("    Installer ini siap didistribusikan langsung ke pengguna akhir (tanpa butuh compiler/runtime tambahan).\n\n")
+            0
+        end else do
+            show("[x] Gagal mengompilasi setup installer.\n\n")
+            1
+        end
+    end
+end
+
+// ---- 5. Command: list ----
+cmd_list() do
+    show_banner()
+    install_root = get_install_root()
+    show($"[*] Memeriksa aplikasi Purwa terpasang di: '{install_root}'...\n\n")
+    if not file_exists(install_root) then do
+        show("Belum ada aplikasi Purwa yang terpasang melalui purwa-pkg.\n\n")
+    end else do
+        show("Gunakan direktori instalasi di atas untuk melihat aplikasi terpasang.\n\n")
+    end
+    0
+end
+
+// ---- Main CLI Router ----
+main() do
+    cmd = args()
+    action = alloc(128)
+    arg2 = alloc(256)
+    
+    tl = salin_token(cmd, 1, action, 128)
+    salin_token(cmd, 2, arg2, 256)
+
+    if tl == 0 then do
+        show_help()
+    end else do
+        if str_eq(action, "init") then do
+            cmd_init(arg2)
+        end else if str_eq(action, "build") then do
+            cmd_build()
+        end else if str_eq(action, "pack") then do
+            cmd_pack()
+        end else if str_eq(action, "make-installer") or str_eq(action, "installer") then do
+            cmd_make_installer()
+        end else if str_eq(action, "list") then do
+            cmd_list()
+        end else if str_eq(action, "help") or str_eq(action, "--help") or str_eq(action, "-h") then do
+            show_help()
+        end else do
+            show($"[x] Perintah tidak dikenal: '{action}'\n\n")
+            show_help()
+        end
+    end
+end

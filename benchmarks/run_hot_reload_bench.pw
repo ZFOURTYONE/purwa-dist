@@ -39,13 +39,13 @@ main() = do
         // 1. Measure Recompile Time
         t0 = time_ms();
         compile_cmd = "purwac.exe " + tmp_pw + " -o " + tmp_exe;
-        c_rc = exec2("purwac.exe", compile_cmd);
+        c_rc = exec(compile_cmd);
         t1 = time_ms();
         
         if c_rc == 0 then do
             // 2. Measure Cold Process Spawn & Execution Time
             t2 = time_ms();
-            e_rc = exec2(tmp_exe, tmp_exe);
+            e_rc = exec(tmp_exe);
             t3 = time_ms();
             
             recompile_ms = t1 - t0;

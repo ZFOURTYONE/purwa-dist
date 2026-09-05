@@ -29,10 +29,11 @@ dir_init() do
 end
 
 // Ambil nama file dari WIN32_FIND_DATAA (offset 44 = cFileName)
+// BL-040 (v37.35): buffer mentah FFI — pakai dir_raw_copy, bukan slice.
 dir_name_raw() do
     L = 0
     while L < 260 and get_byte(g_dir_find_data, 44 + L) != 0 do L = L + 1 end
-    if L > 0 then slice(g_dir_find_data, 44, 44 + L) else ""
+    if L > 0 then dir_raw_copy(g_dir_find_data, 44, L) else ""
 end
 
 // Hitung posisi offset di buf untuk file ke-k (0-indexed)
@@ -68,11 +69,24 @@ dir_list(path, buf, max) do
 end
 
 // --- cabang Linux ---
+// BL-040 (v37.35): slice() kini clamp q ke _str_len(s) (string sejati).
+// Buffer getdents adalah RAW (NUL bisa muncul sebelum off+L) — salin manual.
+dir_raw_copy(src, off, len) do
+    buf = alloc(len + 1)
+    i = 0
+    while i < len do
+        set_byte(buf, i, get_byte(src, off + i))
+        i = i + 1
+    end
+    set_byte(buf, len, 0)
+    buf
+end
+
 // Ambil nama entri dari offset string dalam scratch.
 dir_linux_name(off) do
     L = 0
     while L < 256 and get_byte(g_dir_scratch, off + L) != 0 do L = L + 1 end
-    if L > 0 then slice(g_dir_scratch, off, off + L) else ""
+    if L > 0 then dir_raw_copy(g_dir_scratch, off, L) else ""
 end
 
 dir_linux_list(path, buf, max) do

@@ -1,0 +1,154 @@
+// apps/demo_flutter.pw — Purwa Flutter-like Declarative UI Showcase
+import "flutter"
+
+// Action IDs
+const ACT_INC        = 1
+const ACT_DEC        = 2
+const ACT_RESET      = 3
+const ACT_TURBO      = 4
+const ACT_FAB        = 5
+const ACT_SETTINGS   = 6
+const ACT_SEARCH     = 7
+const ACT_SLIDER     = 8
+const ACT_NOTIF      = 9
+
+global counter = 0
+global is_turbo = true
+global is_notif = true
+global volume = 75
+
+main() do
+    app = flutter_app("Purwa Flutter UI Studio", 440, 680)
+    if app.win == 0 do
+        show("Requires desktop GUI environment\n")
+        1
+    else do
+        show("Purwa Flutter Engine running! Press ESC or [X] to exit.\n")
+        flutter_show_snackbar(app, "Welcome to Purwa Flutter!")
+
+        while flutter_running(app) do
+            // ----------------------------------------------------
+            // Declarative Flutter Widget Tree
+            // ----------------------------------------------------
+            root = Scaffold(
+                AppBar("Purwa Flutter Studio", [
+                    IconColored(ICON_SETTINGS, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B),
+                    IconColored(ICON_SEARCH, FL_MUTED_R, FL_MUTED_G, FL_MUTED_B)
+                ]),
+                Column([
+                    // 1. Hero Card Container
+                    Container(
+                        Column([
+                            Row([
+                                IconColored(ICON_STAR, FL_WARNING_R, FL_WARNING_G, FL_WARNING_B),
+                                SizedBox(8, 0),
+                                TextStyled("DASHBOARD OVERVIEW", 1, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B)
+                            ]),
+                            SizedBox(0, 10),
+                            TextStyled(flutter_fmt_int(app, "Counter: ", counter, ""), 2, FL_TEXT_R, FL_TEXT_G, FL_TEXT_B),
+                            SizedBox(0, 8),
+                            LinearProgressIndicator(counter % 100),
+                            SizedBox(0, 8),
+                            TextStyled(
+                                if is_turbo then "Engine: TURBO ACCELERATED (Active)"
+                                else "Engine: Standard Power Saver",
+                                1,
+                                if is_turbo then FL_SUCCESS_R else FL_MUTED_R,
+                                if is_turbo then FL_SUCCESS_G else FL_MUTED_G,
+                                if is_turbo then FL_SUCCESS_B else FL_MUTED_B
+                            )
+                        ]),
+                        14, FL_CARD_R, FL_CARD_G, FL_CARD_B, 6
+                    ),
+                    SizedBox(0, 14),
+
+                    // 2. Flexbox Row of Buttons (Auto-expands equally)
+                    Row([
+                        Expanded(ElevatedButton("+ Increment", ACT_INC), 1),
+                        SizedBox(10, 0),
+                        Expanded(OutlinedButton("- Decrement", ACT_DEC), 1)
+                    ]),
+                    SizedBox(0, 10),
+
+                    Row([
+                        Expanded(ElevatedButton("Boost (+10)", ACT_FAB), 1),
+                        SizedBox(10, 0),
+                        Expanded(OutlinedButton("Reset Zero", ACT_RESET), 1)
+                    ]),
+                    SizedBox(0, 16),
+
+                    // 3. Settings Card with ListTiles
+                    Card(
+                        Column([
+                            ListTile(
+                                IconColored(ICON_PLAY, FL_ACCENT_R, FL_ACCENT_G, FL_ACCENT_B),
+                                "Turbo Mode Engine",
+                                "Enable hardware acceleration",
+                                Switch(is_turbo, ACT_TURBO),
+                                ACT_TURBO
+                            ),
+                            SizedBox(0, 6),
+                            ListTile(
+                                IconColored(ICON_INFO, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B),
+                                "System Notifications",
+                                "Push real-time alerts",
+                                Checkbox(is_notif, "", ACT_NOTIF),
+                                ACT_NOTIF
+                            )
+                        ])
+                    ),
+                    SizedBox(0, 14),
+
+                    // 4. Volume Slider Track
+                    Container(
+                        Column([
+                            Row([
+                                TextStyled("AUDIO OUTPUT GAIN", 1, FL_MUTED_R, FL_MUTED_G, FL_MUTED_B),
+                                SizedBox(120, 0),
+                                TextStyled(flutter_fmt_int(app, " ", volume, "%"), 1, FL_PRIMARY_R, FL_PRIMARY_G, FL_PRIMARY_B)
+                            ]),
+                            SizedBox(0, 6),
+                            Slider(volume, 0, 100, ACT_SLIDER)
+                        ]),
+                        12, FL_CARD_R, FL_CARD_G, FL_CARD_B, 6
+                    ),
+                    SizedBox(0, 14),
+
+                    // 5. iOS Cupertino Style Button
+                    CupertinoButton("Show SnackBar Toast Alert", ACT_SETTINGS)
+                ]),
+                FloatingActionButton(IconColored(ICON_ADD, 255, 255, 255), ACT_FAB)
+            )
+
+            // Render and process reactive events
+            action = flutter_render(app, root)
+
+            if action == ACT_INC do
+                counter += 1
+            else if action == ACT_DEC do
+                counter -= 1
+            else if action == ACT_RESET do
+                counter = 0
+                flutter_show_snackbar(app, "Counter has been reset to 0.")
+            else if action == ACT_FAB do
+                counter += 10
+                flutter_show_snackbar(app, "Boosted counter by +10!")
+            else if action == ACT_TURBO do
+                is_turbo = not is_turbo
+                flutter_show_snackbar(app, if is_turbo then "Turbo Engine Enabled" else "Turbo Engine Disabled")
+            else if action == ACT_NOTIF do
+                is_notif = not is_notif
+                flutter_show_snackbar(app, if is_notif then "Notifications ON" else "Notifications OFF")
+            else if action == ACT_SETTINGS do
+                flutter_show_snackbar(app, "Purwa Flutter: Material & Cupertino Ready!")
+            else if action == ACT_SLIDER do
+                volume = flutter_slider_val(app)
+            end
+
+            sleep(16)
+        end
+
+        flutter_close(app)
+        0
+    end
+end

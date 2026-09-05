@@ -1,0 +1,99 @@
+// purhex — lightweight hex dump
+// Usage: purhex <file>
+// Output: per line: <8-hex-offset>: <16 bytes as 2-hex>  |<ascii gutter>|
+// Non-printable bytes are shown as '.', missing bytes as spaces.
+
+// Human-centric: parsing CLI (nameeq/salin_token) diambil dari lib/cli.pw.
+
+import "cli"
+
+// ---- Hex helpers ----
+
+hexc(d) do
+    if d < 10 then 48 + d else 55 + d
+end
+
+format_hex(buf, v, digits) do
+    w = v
+    i = digits - 1
+    while i >= 0 do
+        set_byte(buf, i, hexc(w & 15))
+        w = w >> 4
+        i = i - 1
+    end
+    set_byte(buf, digits, 0)
+    0
+end
+
+// ---- Main ----
+main() do
+    cmd = args()
+
+    tbuf = alloc(4096)
+    fbuf = alloc(4194304 + 16)
+    hbuf = alloc(8)
+    obuf = alloc(16)
+    gutter = alloc(32)
+    cleanup drop(tbuf)
+    cleanup drop(fbuf)
+    cleanup drop(hbuf)
+    cleanup drop(obuf)
+    cleanup drop(gutter)
+
+    tl = salin_token(cmd, 1, tbuf, 4096)
+    if tl == 0 do
+        show("usage: purhex <file>\n")
+        0
+    else do
+        n = read_file(tbuf, fbuf, 4194304)
+        if n == 0 do
+            show("purhex: cannot read '")
+            show(tbuf)
+            show("'\n")
+            0
+        else do
+            set_byte(fbuf, n, 0)
+            offset = 0
+            while offset < n do
+                format_hex(obuf, offset, 8)
+                show(obuf)
+                show(": ")
+
+                i = 0
+                while i < 16 do
+                    if offset + i < n do
+                        b = get_byte(fbuf, offset + i)
+                        format_hex(hbuf, b, 2)
+                        show(hbuf)
+                        show(" ")
+                    else do
+                        show("   ")
+                    end
+                    i = i + 1
+                end
+
+                show(" |")
+                j = 0
+                while j < 16 do
+                    if offset + j < n do
+                        c = get_byte(fbuf, offset + j)
+                        if c >= 32 and c <= 126 do
+                            set_byte(gutter, j, c)
+                        else do
+                            set_byte(gutter, j, 46)
+                        end
+                    else do
+                        set_byte(gutter, j, 32)
+                    end
+                    j = j + 1
+                end
+                set_byte(gutter, 16, 0)
+                show(gutter)
+                show("|\n")
+
+                offset = offset + 16
+            end
+            0
+        end
+    end
+end

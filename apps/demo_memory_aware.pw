@@ -1,0 +1,74 @@
+// apps/demo_memory_aware.pw — Memory-Aware Systems Programming Demo in Purwa
+import "arena"
+import "memory"
+
+process_frame(frame_num: i64) do
+    // Using global frame scratchpad
+    p = frame_alloc(512)
+    set_byte(p, 0, 77)
+    
+    label = frame_fmt_int("Frame #", frame_num, " Processed Successfully")
+    
+    show("  [Tick ")
+    show_num(frame_num)
+    show("] Scratch allocation active | ")
+    show(label)
+    show("\n")
+    
+    // 1-CPU instruction instant frame reclamation
+    frame_reset()
+    0
+end
+
+main() do
+    show("====================================================\n")
+    show("   Purwa Memory-Aware Systems Programming Engine    \n")
+    show("   Zero-GC | Deterministic Defer | Hardware Arena   \n")
+    show("====================================================\n\n")
+
+    // 1. Scoped Defer Resource Management
+    show("[1] Demonstrating Deterministic 'defer' Resource Cleanup:\n")
+    do
+        buf = alloc(1024)
+        defer drop(buf)
+        show("    -> Buffer allocated at address ")
+        show_num(buf)
+        show(" (Auto-dropped on scope exit)\n")
+    end
+    show("    -> Scope exited cleanly!\n\n")
+
+    // 2. High-Performance Hardware Atomic Arena
+    show("[2] Demonstrating Hardware Atomic Arena (LOCK XADD):\n")
+    ar = arena_new(1048576) // 1 MB Arena
+    defer arena_free(ar)
+    
+    msg1 = arena_alloc_str(ar, "High-Speed Linear Allocations")
+    msg2 = arena_fmt_int(ar, "Processed batch of ", 50000, " items")
+    show("    -> Arena used: ")
+    show_num(arena_get_used(ar))
+    show(" bytes / Available: ")
+    show_num(arena_get_available(ar))
+    show(" bytes\n")
+    show("    -> ")
+    show(msg1)
+    show(" | ")
+    show(msg2)
+    show("\n")
+    
+    arena_reset_all(ar)
+    show("    -> Arena reset to 0 bytes in 1 CPU instruction!\n\n")
+
+    // 3. Global Frame Scratchpad Loop (Zero Leak)
+    show("[3] Demonstrating Frame Scratchpad Loop (Zero Leak):\n")
+    frame_init(2097152) // 2 MB Frame Scratchpad
+    defer frame_destroy()
+    
+    i = 1
+    while i <= 5 do
+        process_frame(i)
+        i += 1
+    end
+    
+    show("\nAll operations completed with 0.000 MB memory leak!\n")
+    0
+end

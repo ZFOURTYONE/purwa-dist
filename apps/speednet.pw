@@ -1,0 +1,380 @@
+// apps/speednet.pw — Purwa Internet Speed Test & Ping Tool
+//
+// Contoh "human-centric": logika aplikasi saja — semua helper tingkat
+// rendah (timer presisi, parsing CLI, format tampilan, byte I/O) diambil
+// dari library. Lihat lib/cli.pw, lib/hrtimer.pw, lib/net.pw, lib/bytes.pw.
+//
+// Aturan v37: statement-if `if c do ... else do ... end` (satu end) tidak
+// boleh bersarang di dalam blok lain (pd_items berhenti di TK_ELSE).
+// Solusi: pakai VALUE-if `if c then a else b` untuk nested conditional,
+// atau ekstrak ke fungsi terpisah.
+//
+// Usage: speednet [options]
+//   --host HOST         target server (default: speed.cloudflare.com)
+//   --port PORT         target port (default: 80)
+//   --pings N           number of pings (default: 4)
+//   --size MB           download size in MB (default: 5)
+//   --timeout MS        connect/recv timeout in ms (default: 3000)
+//   --ping-only         only run ping test
+//   --download-only     only run download test
+//   --json              machine-readable JSON output
+
+import "net"
+import "bytes"
+import "hrtimer"
+import "cli"
+
+// ===========================================================================
+// Ping: TCP connect RTT via hrtimer (mikrodetik)
+// ===========================================================================
+ping_one(host, port) do
+    t0 = hrt_us()
+    fd = net_connect(host, port)
+    t1 = hrt_us()
+    if fd < 0 then 0 - 1
+    else do
+        net_close(fd)
+        t1 - t0
+    end
+end
+
+// Jalankan N ping, kumpulkan statistik.
+// return via parameter global agar ringan (tanpa tuple).
+global g_min = 0
+global g_max = 0
+global g_avg = 0
+global g_ok = 0
+global g_fails = 0
+global g_jitter = 0
+ping_run(host, port, n) do
+    g_min = 999999999
+    g_max = 0
+    sum = 0
+    g_fails = 0
+    prev = 0
+    jsum = 0
+    jn = 0
+    i = 0
+    while i < n do
+        rtt = ping_one(host, port)
+        if rtt < 0 then g_fails = g_fails + 1
+        else do
+            if rtt < g_min then g_min = rtt
+            if rtt > g_max then g_max = rtt
+            sum = sum + rtt
+            if prev > 0 do
+                d = if rtt > prev then rtt - prev else prev - rtt
+                jsum = jsum + d
+                jn = jn + 1
+            end
+            prev = rtt
+        end
+        i = i + 1
+    end
+    g_ok = n - g_fails
+    g_avg = if g_ok > 0 then sum / g_ok
+    g_jitter = if jn > 0 then jsum / jn
+    0
+end
+
+// Tampilkan hasil ping satu target (human atau JSON).
+ping_show(host, port, label, n, json_mode, is_last) do
+    if json_mode == 0 then do
+        show("  ")
+        show(label)
+        show(" (")
+        show(host)
+        show(":")
+        show_num(port)
+        show(")\n")
+        show("    ")
+        show_num(g_ok)
+        show("/")
+        show_num(n)
+        show(" ok, ")
+        show_num(g_fails)
+        show(" failed\n")
+        if g_ok > 0 do
+            show("    min=")
+            show_us_as_ms(g_min)
+            show(" ms  avg=")
+            show_us_as_ms(g_avg)
+            show(" ms  max=")
+            show_us_as_ms(g_max)
+            show(" ms  jitter=")
+            show_us_as_ms(g_jitter)
+            show(" ms\n")
+        end
+    end else do
+        show("{\"target\":\"")
+        show(label)
+        show("\",\"host\":\"")
+        show(host)
+        show("\",\"port\":")
+        show_num(port)
+        show(",\"ok\":")
+        show_num(g_ok)
+        show(",\"fails\":")
+        show_num(g_fails)
+        if g_ok > 0 do
+            show(",\"min_us\":")
+            show_num(g_min)
+            show(",\"avg_us\":")
+            show_num(g_avg)
+            show(",\"max_us\":")
+            show_num(g_max)
+            show(",\"jitter_us\":")
+            show_num(g_jitter)
+        end
+        if not is_last then show("},\n") else show("}")
+    end
+    0
+end
+
+// ===========================================================================
+// Download: HTTP GET, ukur throughput
+// ===========================================================================
+find_hdr_end(buf, n) do
+    i = 0
+    found = 0 - 1
+    while i + 3 < n and found < 0 do
+        if get_byte(buf, i) == 13 and get_byte(buf, i + 1) == 10 and
+           get_byte(buf, i + 2) == 13 and get_byte(buf, i + 3) == 10 then found = i + 4
+        else i = i + 1
+    end
+    found
+end
+
+calc_mbps(bytes, us) do
+    if us == 0 then 0
+    else bytes * 8000 / us
+end
+
+// ===========================================================================
+// Main
+// ===========================================================================
+main() do
+    cmd = args()
+    host = "speed.cloudflare.com"
+    port = 80
+    pings = 4
+    dl_size = 5000000
+    timeout_ms = 3000
+    do_ping = 1
+    do_download = 1
+    json_mode = 0
+    show_help = 0
+
+    // ---- parse arguments ----
+    arg_buf = alloc(1024)
+    i = 1
+    done = false
+    while not done do
+        L = salin_token(cmd, i, arg_buf, 1024)
+        if L == 0 then done = true
+        else do
+            if nameeq(arg_buf, "--help") or nameeq(arg_buf, "-h") then do
+                show("speednet — Purwa Internet Speed Test\n")
+                show("Usage: speednet [options]\n")
+                show("  --host HOST      target server (default: speed.cloudflare.com)\n")
+                show("  --port PORT      target port (default: 80)\n")
+                show("  --pings N        number of pings (default: 4)\n")
+                show("  --size MB        download size in MB (default: 5)\n")
+                show("  --timeout MS     connect/recv timeout (default: 3000)\n")
+                show("  --ping-only      only run ping test\n")
+                show("  --download-only  only run download test\n")
+                show("  --json           machine-readable JSON output\n")
+                show_help = 1
+                0
+            end else if nameeq(arg_buf, "--host") then do
+                i = i + 1
+                salin_token(cmd, i, arg_buf, 1024)
+                host = alloc(str_len(arg_buf) + 1)
+                mem_copy(host, arg_buf, str_len(arg_buf) + 1)
+            end else if nameeq(arg_buf, "--port") then do
+                i = i + 1
+                salin_token(cmd, i, arg_buf, 1024)
+                port = parse_int(arg_buf)
+            end else if nameeq(arg_buf, "--pings") then do
+                i = i + 1
+                salin_token(cmd, i, arg_buf, 1024)
+                pings = parse_int(arg_buf)
+            end else if nameeq(arg_buf, "--size") then do
+                i = i + 1
+                salin_token(cmd, i, arg_buf, 1024)
+                dl_size = parse_int(arg_buf) * 1000000
+            end else if nameeq(arg_buf, "--timeout") then do
+                i = i + 1
+                salin_token(cmd, i, arg_buf, 1024)
+                timeout_ms = parse_int(arg_buf)
+            end else if nameeq(arg_buf, "--ping-only") then do
+                do_download = 0
+            end else if nameeq(arg_buf, "--download-only") then do
+                do_ping = 0
+            end else if nameeq(arg_buf, "--json") then do
+                json_mode = 1
+            end
+            i = i + 1
+        end
+    end
+
+    // ---- init ----
+    if hrt_init() == 0 then do
+        show("speednet: error: timer init failed\n")
+        1
+    end else do
+        net_init()
+
+        if show_help == 0 then do
+
+        // ---- Ping test ----
+        if do_ping == 1 then do
+            if json_mode == 0 then do
+                show("=== Ping Test (TCP Connect RTT) ===\n")
+                show("4 targets x ")
+                show_num(pings)
+                show(" pings, timeout ")
+                show_num(timeout_ms)
+                show(" ms\n---\n")
+            end else do
+                show("{\"ping\":[\n")
+            end
+
+            ping_run("1.1.1.1", 443, pings)
+            ping_show("1.1.1.1", 443, "Cloudflare DNS", pings, json_mode, 0)
+            ping_run("1.0.0.1", 443, pings)
+            ping_show("1.0.0.1", 443, "Cloudflare 1.0.0.1", pings, json_mode, 0)
+            ping_run("9.9.9.9", 443, pings)
+            ping_show("9.9.9.9", 443, "Quad9", pings, json_mode, 0)
+            ping_run("208.67.222.222", 53, pings)
+            ping_show("208.67.222.222", 53, "OpenDNS", pings, json_mode, 1)
+
+            if json_mode == 0 then do
+                show("---\n")
+            end else do
+                show("]")
+                if do_download == 0 then show("}\n") else show("")
+            end
+        end
+
+        // ---- Download test ----
+        if do_download == 1 then do
+            if json_mode == 0 then do
+                show("=== Download Speed Test ===\n")
+                show("Server: ")
+                show(host)
+                show(":")
+                show_num(port)
+                show("\nRequest: ")
+                show_num_comma(dl_size)
+                show(" bytes\n---\n")
+            end else do
+                0
+            end
+
+            // Build HTTP GET request
+            req = alloc(4096)
+            req_len = 0
+            mem_copy(req, "GET /__down?bytes=", 18)
+            req_len = 18
+            sz = alloc(32)
+            mem_set(sz, 0, 32)
+            tmp = dl_size
+            d = 0
+            while tmp > 0 do
+                set_byte(sz, d, 48 + (tmp % 10))
+                tmp = tmp / 10
+                d = d + 1
+            end
+            j = d - 1
+            while j >= 0 do
+                set_byte(req, req_len, get_byte(sz, j))
+                req_len = req_len + 1
+                j = j - 1
+            end
+            drop(sz)
+            mem_copy(req + req_len, " HTTP/1.1\r\nHost: ", 17)
+            req_len = req_len + 17
+            hL = str_len(host)
+            mem_copy(req + req_len, host, hL)
+            req_len = req_len + hL
+            mem_copy(req + req_len, "\r\nConnection: close\r\n\r\n", 23)
+            req_len = req_len + 23
+
+            // Connect
+            t_start = hrt_us()
+            fd = net_connect(host, port)
+            if fd < 0 then do
+                show("speednet: error: cannot connect to ")
+                show(host)
+                show(":")
+                show_num(port)
+                show("\n")
+            end else do
+                net_set_timeout(fd, timeout_ms)
+                net_send(fd, req, req_len)
+                drop(req)
+
+                // Receive loop
+                buf = alloc(65536)
+                total = 0
+                hdr_past = 0
+                t_recv_start = hrt_us()
+                done = false
+                while not done do
+                    n = net_recv(fd, buf, 65536)
+                    if n > 0 then do
+                        if hdr_past == 0 then do
+                            he = find_hdr_end(buf, n)
+                            if he >= 0 do
+                                hdr_past = 1
+                                total = n - he
+                            end
+                        end else do
+                            total = total + n
+                        end
+                        if total >= dl_size then done = true
+                    end else do
+                        done = true
+                    end
+                end
+
+                t_recv_end = hrt_us()
+                net_close(fd)
+                drop(buf)
+
+                dt_us = t_recv_end - t_recv_start
+                mbps = calc_mbps(total, dt_us)
+
+                if json_mode == 0 do
+                    show("Downloaded: ")
+                    show_num_comma(total)
+                    show(" bytes in ")
+                    show_us_as_ms(dt_us)
+                    show(" ms\nSpeed: ")
+                    show_mbps(mbps)
+                    show(" Mbps  (")
+                    show_mbps(mbps / 8)
+                    show(" MB/s)\n")
+                else do
+                    if do_ping == 1 then show(",\n") else show("{\n")
+                    show("\"download\":{\"host\":\"")
+                    show(host)
+                    show("\",\"port\":")
+                    show_num(port)
+                    show(",\"bytes\":")
+                    show_num(total)
+                    show(",\"time_us\":")
+                    show_num(dt_us)
+                    show(",\"mbps_x1000\":")
+                    show_num(mbps)
+                    show("}")
+                end
+            end
+        end
+
+        if json_mode == 1 and do_download == 1 then show("}\n") else show("")
+        end
+        0
+    end
+end

@@ -1,0 +1,65 @@
+// ===========================================================================
+// apps/demo_crypto.pw — Sovereign Pure Cryptography Showcase Demo
+// ===========================================================================
+// Demonstrates SHA-256, HMAC-SHA256, MD5, Base64, Hex, CRC-32, and UUID v4
+// ===========================================================================
+
+import "../lib/crypto.pw"
+
+main() do
+    show("===============================================================\n")
+    show("  PURWA SOVEREIGN PURE CRYPTOGRAPHY ENGINE\n")
+    show("  100% Native Machine Code | Zero External C/C++ Libraries\n")
+    show("===============================================================\n\n")
+
+    // 1. SHA-256
+    text = "purwa-sovereign-systems-language"
+    hash256 = sha256(text)
+    show($"[1] SHA-256 (FIPS 180-4):\n")
+    show($"    Input : \"{text}\"\n")
+    show($"    Digest: {hash256}\n\n")
+
+    // 2. HMAC-SHA256 API Signature
+    secret_key = "sk_live_purwa_998877"
+    api_payload = '{"event":"payment_success","amount":500000,"currency":"IDR"}'
+    signature = hmac_sha256(secret_key, api_payload)
+    show($"[2] HMAC-SHA256 (RFC 2104 API Signature):\n")
+    show($"    Payload  : {api_payload}\n")
+    show($"    Secret   : {secret_key}\n")
+    show($"    Signature: {signature}\n\n")
+
+    // 3. MD5
+    hash_md5 = md5("admin:realm:password")
+    show($"[3] MD5 (RFC 1321):\n")
+    show($"    Digest: {hash_md5}\n\n")
+
+    // 4. Base64
+    msg = "Purwa delivers sovereign binaries with 0 dependencies!"
+    encoded = base64_encode(msg)
+    decoded = base64_decode(encoded)
+    show($"[4] Base64 (RFC 4648):\n")
+    show($"    Original: {msg}\n")
+    show($"    Encoded : {encoded}\n")
+    show($"    Decoded : {decoded}\n\n")
+
+    // 5. CRC-32 & FNV-1a Checksums
+    checksum = crc32("packet_payload_header")
+    fnv_val = fnv1a("router_cache_key")
+    chk_str = to_text(checksum)
+    fnv_str = to_text(fnv_val)
+    show($"[5] Ultra-Fast Data Integrity Checksums:\n")
+    show($"    CRC-32 (IEEE 802.3): {chk_str}\n")
+    show($"    FNV-1a Hash        : {fnv_str}\n\n")
+
+    // 6. UUID v4
+    uuid1 = crypto_uuid_v4()
+    uuid2 = crypto_uuid_v4()
+    show($"[6] Cryptographic UUID v4 (RFC 4122):\n")
+    show($"    UUID #1: {uuid1}\n")
+    show($"    UUID #2: {uuid2}\n\n")
+
+    show("===============================================================\n")
+    show("  ALL CRYPTOGRAPHIC OPERATIONS EXECUTED WITH PERFECTION!\n")
+    show("===============================================================\n")
+    0
+end

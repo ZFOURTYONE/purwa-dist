@@ -14,7 +14,7 @@ run_bench(title, src_file) do
     src_path = "tools/benchmarks/" + src_file + ".pw"
     
     t0 = time_ms()
-    c_rc = exec2("purwac.exe", "purwac.exe " + src_path + " -o " + exe_file)
+    c_rc = exec("purwac.exe " + src_path + " -o " + exe_file)
     t1 = time_ms()
     
     if c_rc != 0 do
@@ -24,7 +24,7 @@ run_bench(title, src_file) do
         0
     else do
         t2 = time_ms()
-        e_rc = exec2(exe_file, exe_file)
+        e_rc = exec(exe_file)
         t3 = time_ms()
         
         show("   [Compile Time] : ")

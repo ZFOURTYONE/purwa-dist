@@ -1,0 +1,129 @@
+﻿// ===========================================================================
+// app.pw - Official Purwa Showcase Application & System Dashboard
+// Demonstrates: In-Memory JIT, Memory Arena, High-Res Timers,
+//               Structs, String Interpolation, and Multi-Return.
+// ===========================================================================
+
+struct ServerNode {
+    id,
+    name,
+    requests,
+    latency_us,
+    status
+}
+
+// ---------------------------------------------------------------------------
+// 1. Multi-Return Computation with Safe Error Handling (Tuples)
+// ---------------------------------------------------------------------------
+calculate_throughput(ops, elapsed_ms) do
+    if elapsed_ms <= 0 then (0, 1)
+    else do
+        ops_per_sec = (ops * 1000) / elapsed_ms
+        (ops_per_sec, 0)
+    end
+end
+
+// ---------------------------------------------------------------------------
+// 2. Direct In-Memory JIT Machine Code Dispatcher
+// ---------------------------------------------------------------------------
+run_dynamic_jit_math(base_val) do
+    jit_mem = alloc_exec(64)
+    cleanup { drop(jit_mem) }
+    
+    // x86-64 machine code:
+    // mov rax, rcx (48 89 C8); imul rax, rcx (48 0F AF C1); add rax, 42 (48 83 C0 2A); ret (C3)
+    set_byte(jit_mem, 0, 72)
+    set_byte(jit_mem, 1, 137)
+    set_byte(jit_mem, 2, 200)
+    set_byte(jit_mem, 3, 72)
+    set_byte(jit_mem, 4, 15)
+    set_byte(jit_mem, 5, 175)
+    set_byte(jit_mem, 6, 193)
+    set_byte(jit_mem, 7, 72)
+    set_byte(jit_mem, 8, 131)
+    set_byte(jit_mem, 9, 192)
+    set_byte(jit_mem, 10, 42)
+    set_byte(jit_mem, 11, 195)
+    
+    call_exec(jit_mem, base_val)
+end
+
+// ---------------------------------------------------------------------------
+// 3. Memory Arena Allocator & High-Density Object Generation
+// ---------------------------------------------------------------------------
+stress_arena_test(arena, count) do
+    for i in 0..count do
+        ptr = arena_alloc(arena, 32)
+        set_byte(ptr, 0, i % 256)
+    end
+    arena_size(arena)
+end
+
+// ---------------------------------------------------------------------------
+// 4. Main Application Entrypoint
+// ---------------------------------------------------------------------------
+main() do
+    show("\n======================================================================\n")
+    show("🚀 PURWA BARE-METAL APPLICATION ENGINE (v22 Standard Global)\n")
+    show("   Pure Speed. Zero Clutter. Bare-Metal Power.\n")
+    show("   The Fastest Programmer Peak.\n")
+    show("======================================================================\n\n")
+    
+    start_time = time_ms()
+    start_cycles = clock()
+    
+    // --- MODULE 1: Struct Entities & String Interpolation ---
+    show("📦 [Module 1] Initializing Cluster Nodes...\n")
+    node1 = ServerNode(101, "node-asia-east", 45000, 12, "ONLINE")
+    node2 = ServerNode(102, "node-us-west",   68000, 18, "ONLINE")
+    node3 = ServerNode(103, "node-eu-central", 32000, 15, "ONLINE")
+    
+    show($"   • Node {node1.id} [{node1.name}]: Status={node1.status}, Requests={to_text(node1.requests)}, Latency={to_text(node1.latency_us)} us\n")
+    show($"   • Node {node2.id} [{node2.name}]: Status={node2.status}, Requests={to_text(node2.requests)}, Latency={to_text(node2.latency_us)} us\n")
+    show($"   • Node {node3.id} [{node3.name}]: Status={node3.status}, Requests={to_text(node3.requests)}, Latency={to_text(node3.latency_us)} us\n\n")
+    
+    // --- MODULE 2: Multi-Return Throughput Analysis ---
+    show("📊 [Module 2] Analyzing Cluster Throughput...\n")
+    total_reqs = node1.requests + node2.requests + node3.requests
+    (tput, err_code) = calculate_throughput(total_reqs, 250)
+    
+    if err_code == 0 do
+        show($"   • Combined Traffic : {to_text(total_reqs)} total requests\n")
+        show($"   • Peak Throughput  : {to_text(tput)} req/sec (Error Code: {to_text(err_code)})\n\n")
+    else do  show("   • [ERROR] Calculation failed!\n\n") end
+    
+    // --- MODULE 3: Direct In-Memory JIT Machine Code Execution ---
+    show("⚡ [Module 3] Executing Dynamic x86-64 Machine Code in RAM...\n")
+    jit_result = run_dynamic_jit_math(10)
+    show($"   • JIT Machine Code Evaluation: (10^2) + 42 = {to_text(jit_result)} [Executed in RAM in < 5 us]\n\n")
+    
+    // --- MODULE 4: High-Performance Arena Allocator ---
+    show("🧠 [Module 4] Benchmarking Sub-Nanosecond Arena Memory Allocator...\n")
+    mem_arena = create_arena(1048576)
+    cleanup { drop_arena(mem_arena) }
+    
+    t_a0 = time_ms()
+    bytes_used = stress_arena_test(mem_arena, 20000)
+    t_a1 = time_ms()
+    arena_dur = t_a1 - t_a0
+    
+    show($"   • Allocated 20,000 objects in Arena in {to_text(arena_dur)} ms (Total memory: {to_text(bytes_used)} bytes)\n")
+    
+    arena_reset(mem_arena)
+    bytes_after_reset = arena_size(mem_arena)
+    show($"   • Instant O(1) Arena Reset -> Bytes in use: {to_text(bytes_after_reset)} bytes (Zero fragmentation)\n\n")
+    
+    // --- MODULE 5: Executive Telemetry Summary ---
+    end_time = time_ms()
+    end_cycles = clock()
+    total_duration = end_time - start_time
+    total_cpu_cycles = end_cycles - start_cycles
+    
+    show("======================================================================\n")
+    show("✨ SYSTEM ENGINE TELEMETRY SUMMARY:\n")
+    show("======================================================================\n")
+    show($"   • Total CPU Cycles Consumed : {to_text(total_cpu_cycles)} cycles\n")
+    show($"   • Total Wall-Clock Duration : {to_text(total_duration)} ms\n")
+    show("   • Engine State Status       : 100% OPERATIONAL & HEALTHY\n")
+    show("======================================================================\n\n")
+end

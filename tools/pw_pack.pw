@@ -32,7 +32,7 @@ write_text_file(filepath: string, content: string): bool do
 end
 
 ensure_dir(dirpath: string) do
-    exec2("cmd.exe", $"cmd /c if not exist {dirpath} mkdir {dirpath}")
+    exec($"cmd /c if not exist {dirpath} mkdir {dirpath}")
 end
 
 extract_pkg_name(spec: string): string do
@@ -120,7 +120,7 @@ cmd_add(spec: string) do
             else do
                 show($"[pw-pack] Direct HTTPS fetch returned status or empty. Trying curl fallback...\n")
                 target_path = $"plugins/{pkg_name}"
-                exec2("curl.exe", $"curl.exe -sSL {spec} -o {target_path}")
+                exec($"curl.exe -sSL {spec} -o {target_path}")
                 show($"[pw-pack] Installed {target_path}\n")
             end
         else do
@@ -131,9 +131,9 @@ cmd_add(spec: string) do
             show($"[pw-pack] Cloning git repository {git_url} -> {target_dir} (shallow clone)...\n")
             
             // Remove existing target folder if any
-            exec2("cmd.exe", $"cmd /c if exist {target_dir} rmdir /s /q {target_dir}")
+            exec($"cmd /c if exist {target_dir} rmdir /s /q {target_dir}")
             
-            rc = exec2("git.exe", $"git.exe clone --depth 1 {git_url} {target_dir}")
+            rc = exec($"git.exe clone --depth 1 {git_url} {target_dir}")
             if rc == 0 do
                 show($"[pw-pack] Successfully installed [{pkg_name}] into {target_dir}\n")
             else do
@@ -191,8 +191,8 @@ cmd_remove(pkg_name: string) do
         dir_target = $"plugins/{pkg_name}"
         file_target = $"plugins/{pkg_name}.pw"
 
-        exec2("cmd.exe", $"cmd /c if exist {dir_target} rmdir /s /q {dir_target}")
-        exec2("cmd.exe", $"cmd /c if exist {file_target} del /f /q {file_target}")
+        exec($"cmd /c if exist {dir_target} rmdir /s /q {dir_target}")
+        exec($"cmd /c if exist {file_target} del /f /q {file_target}")
 
         show($"[pw-pack] Removed [{pkg_name}] from plugins/\n")
         0
@@ -213,7 +213,7 @@ cmd_update() do
         if not contains(fname, ".") do
             pkg_path = $"plugins/{fname}"
             show($"[pw-pack] Pulling latest changes for {fname}...\n")
-            exec2("git.exe", $"git.exe -C {pkg_path} pull --ff-only")
+            exec($"git.exe -C {pkg_path} pull --ff-only")
             updated = updated + 1
         end
         i = i + 1

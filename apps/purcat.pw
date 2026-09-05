@@ -1,0 +1,115 @@
+// purcat — Lightweight CLI utility
+// Usage: purcat <file>       -> lines words chars file
+//        purcat -l <file>    -> lines only
+//        purcat -w <file>    -> words only
+//        purcat -c <file>    -> chars only
+//
+// Human-centric: parsing CLI (nameeq/salin_token) diambil dari lib/cli.pw.
+
+import "cli"
+
+// ---- Shared state for wc ----
+global wc_l = 0
+global wc_w = 0
+global wc_c = 0
+
+wc_count(buf, n) do
+    wc_l = 1
+    wc_w = 0
+    wc_c = n
+    in_word = 0
+    i = 0
+    while i < n do
+        ch = get_byte(buf, i)
+        if ch == 10 do
+            wc_l = wc_l + 1
+        end
+        is_sp = false
+        if ch == 32 do is_sp = true end
+        if ch == 9 do is_sp = true end
+        if ch == 10 do is_sp = true end
+        if ch == 13 do is_sp = true end
+        if is_sp do
+            if in_word == 1 do
+                wc_w = wc_w + 1
+            end
+            in_word = 0
+        else do
+            in_word = 1
+        end
+        i = i + 1
+    end
+    if in_word == 1 do
+        wc_w = wc_w + 1
+    end
+    0
+end
+
+// ---- Main ----
+main() do
+    cmd = args()
+    tbuf = alloc(4096)
+    fbuf = alloc(4194304)
+    tl = salin_token(cmd, 1, tbuf, 4096)
+
+    if tl == 0 do
+        show("purcat - lightweight file utility\n")
+        show("Usage: purcat <file>       lines words chars file\n")
+        show("       purcat -l <file>    lines only\n")
+        show("       purcat -w <file>    words only\n")
+        show("       purcat -c <file>    chars only\n")
+    end
+
+    mode = 0
+    if tl > 0 do
+        if nameeq(tbuf, "-l") do mode = 1 end
+        if nameeq(tbuf, "-w") do mode = 2 end
+        if nameeq(tbuf, "-c") do mode = 3 end
+
+        if mode > 0 do
+            tl = salin_token(cmd, 2, tbuf, 4096)
+        end
+
+        if tl == 0 do
+            show("purcat: missing file argument\n")
+        end
+
+        if tl > 0 do
+            n = read_file(tbuf, fbuf, 4194304)
+            if n == 0 do
+                show("purcat: cannot read '")
+                show(tbuf)
+                show("'\n")
+            end
+            if n > 0 do
+                wc_count(fbuf, n)
+                if mode == 0 do
+                    show_num(wc_l)
+                    show(" ")
+                    show_num(wc_w)
+                    show(" ")
+                    show_num(wc_c)
+                    show(" ")
+                    show(tbuf)
+                    show("\n")
+                end
+                if mode == 1 do
+                    show_num(wc_l)
+                    show("\n")
+                end
+                if mode == 2 do
+                    show_num(wc_w)
+                    show("\n")
+                end
+                if mode == 3 do
+                    show_num(wc_c)
+                    show("\n")
+                end
+            end
+        end
+    end
+
+    drop(fbuf)
+    drop(tbuf)
+    0
+end
