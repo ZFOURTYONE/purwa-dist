@@ -31,7 +31,7 @@ ping_one(host, port) do
     t0 = hrt_us()
     fd = net_connect(host, port)
     t1 = hrt_us()
-    if fd < 0 then 0 - 1
+    if fd < 0 do 0 - 1
     else do
         net_close(fd)
         t1 - t0
@@ -57,13 +57,13 @@ ping_run(host, port, n) do
     i = 0
     while i < n do
         rtt = ping_one(host, port)
-        if rtt < 0 then g_fails = g_fails + 1
+        if rtt < 0 do g_fails = g_fails + 1
         else do
-            if rtt < g_min then g_min = rtt
-            if rtt > g_max then g_max = rtt
+            if rtt < g_min do g_min = rtt end
+            if rtt > g_max do g_max = rtt end
             sum = sum + rtt
             if prev > 0 do
-                d = if rtt > prev then rtt - prev else prev - rtt
+                d = if rtt > prev do rtt - prev else prev - rtt end
                 jsum = jsum + d
                 jn = jn + 1
             end
@@ -72,14 +72,14 @@ ping_run(host, port, n) do
         i = i + 1
     end
     g_ok = n - g_fails
-    g_avg = if g_ok > 0 then sum / g_ok
-    g_jitter = if jn > 0 then jsum / jn
+    g_avg = if g_ok > 0 do sum / g_ok end
+    g_jitter = if jn > 0 do jsum / jn end
     0
 end
 
 // Tampilkan hasil ping satu target (human atau JSON).
 ping_show(host, port, label, n, json_mode, is_last) do
-    if json_mode == 0 then do
+    if json_mode == 0 do
         show("  ")
         show(label)
         show(" (")
@@ -105,7 +105,7 @@ ping_show(host, port, label, n, json_mode, is_last) do
             show_us_as_ms(g_jitter)
             show(" ms\n")
         end
-    end else do
+    else do
         show("{\"target\":\"")
         show(label)
         show("\",\"host\":\"")
@@ -126,7 +126,7 @@ ping_show(host, port, label, n, json_mode, is_last) do
             show(",\"jitter_us\":")
             show_num(g_jitter)
         end
-        if not is_last then show("},\n") else show("}")
+        if not is_last do show("},\n") else show("}") end
     end
     0
 end
@@ -139,15 +139,15 @@ find_hdr_end(buf, n) do
     found = 0 - 1
     while i + 3 < n and found < 0 do
         if get_byte(buf, i) == 13 and get_byte(buf, i + 1) == 10 and
-           get_byte(buf, i + 2) == 13 and get_byte(buf, i + 3) == 10 then found = i + 4
-        else i = i + 1
+           get_byte(buf, i + 2) == 13 and get_byte(buf, i + 3) == 10 do found = i + 4
+        else i = i + 1 end
     end
     found
 end
 
 calc_mbps(bytes, us) do
-    if us == 0 then 0
-    else bytes * 8000 / us
+    if us == 0 do 0
+    else bytes * 8000 / us end
 end
 
 // ===========================================================================
@@ -171,9 +171,9 @@ main() do
     done = false
     while not done do
         L = salin_token(cmd, i, arg_buf, 1024)
-        if L == 0 then done = true
+        if L == 0 do done = true
         else do
-            if nameeq(arg_buf, "--help") or nameeq(arg_buf, "-h") then do
+            if nameeq(arg_buf, "--help") or nameeq(arg_buf, "-h") do
                 show("speednet — Purwa Internet Speed Test\n")
                 show("Usage: speednet [options]\n")
                 show("  --host HOST      target server (default: speed.cloudflare.com)\n")
@@ -186,32 +186,32 @@ main() do
                 show("  --json           machine-readable JSON output\n")
                 show_help = 1
                 0
-            end else if nameeq(arg_buf, "--host") then do
+            else if nameeq(arg_buf, "--host") do
                 i = i + 1
                 salin_token(cmd, i, arg_buf, 1024)
                 host = alloc(str_len(arg_buf) + 1)
                 mem_copy(host, arg_buf, str_len(arg_buf) + 1)
-            end else if nameeq(arg_buf, "--port") then do
+            else if nameeq(arg_buf, "--port") do
                 i = i + 1
                 salin_token(cmd, i, arg_buf, 1024)
                 port = parse_int(arg_buf)
-            end else if nameeq(arg_buf, "--pings") then do
+            else if nameeq(arg_buf, "--pings") do
                 i = i + 1
                 salin_token(cmd, i, arg_buf, 1024)
                 pings = parse_int(arg_buf)
-            end else if nameeq(arg_buf, "--size") then do
+            else if nameeq(arg_buf, "--size") do
                 i = i + 1
                 salin_token(cmd, i, arg_buf, 1024)
                 dl_size = parse_int(arg_buf) * 1000000
-            end else if nameeq(arg_buf, "--timeout") then do
+            else if nameeq(arg_buf, "--timeout") do
                 i = i + 1
                 salin_token(cmd, i, arg_buf, 1024)
                 timeout_ms = parse_int(arg_buf)
-            end else if nameeq(arg_buf, "--ping-only") then do
+            else if nameeq(arg_buf, "--ping-only") do
                 do_download = 0
-            end else if nameeq(arg_buf, "--download-only") then do
+            else if nameeq(arg_buf, "--download-only") do
                 do_ping = 0
-            end else if nameeq(arg_buf, "--json") then do
+            else if nameeq(arg_buf, "--json") do
                 json_mode = 1
             end
             i = i + 1
@@ -219,24 +219,24 @@ main() do
     end
 
     // ---- init ----
-    if hrt_init() == 0 then do
+    if hrt_init() == 0 do
         show("speednet: error: timer init failed\n")
         1
-    end else do
+    else do
         net_init()
 
-        if show_help == 0 then do
+        if show_help == 0 do
 
         // ---- Ping test ----
-        if do_ping == 1 then do
-            if json_mode == 0 then do
+        if do_ping == 1 do
+            if json_mode == 0 do
                 show("=== Ping Test (TCP Connect RTT) ===\n")
                 show("4 targets x ")
                 show_num(pings)
                 show(" pings, timeout ")
                 show_num(timeout_ms)
                 show(" ms\n---\n")
-            end else do
+            else do
                 show("{\"ping\":[\n")
             end
 
@@ -249,17 +249,17 @@ main() do
             ping_run("208.67.222.222", 53, pings)
             ping_show("208.67.222.222", 53, "OpenDNS", pings, json_mode, 1)
 
-            if json_mode == 0 then do
+            if json_mode == 0 do
                 show("---\n")
-            end else do
+            else do
                 show("]")
-                if do_download == 0 then show("}\n") else show("")
+                if do_download == 0 do show("}\n") else show("") end
             end
         end
 
         // ---- Download test ----
-        if do_download == 1 then do
-            if json_mode == 0 then do
+        if do_download == 1 do
+            if json_mode == 0 do
                 show("=== Download Speed Test ===\n")
                 show("Server: ")
                 show(host)
@@ -268,7 +268,7 @@ main() do
                 show("\nRequest: ")
                 show_num_comma(dl_size)
                 show(" bytes\n---\n")
-            end else do
+            else do
                 0
             end
 
@@ -304,13 +304,13 @@ main() do
             // Connect
             t_start = hrt_us()
             fd = net_connect(host, port)
-            if fd < 0 then do
+            if fd < 0 do
                 show("speednet: error: cannot connect to ")
                 show(host)
                 show(":")
                 show_num(port)
                 show("\n")
-            end else do
+            else do
                 net_set_timeout(fd, timeout_ms)
                 net_send(fd, req, req_len)
                 drop(req)
@@ -323,18 +323,18 @@ main() do
                 done = false
                 while not done do
                     n = net_recv(fd, buf, 65536)
-                    if n > 0 then do
-                        if hdr_past == 0 then do
+                    if n > 0 do
+                        if hdr_past == 0 do
                             he = find_hdr_end(buf, n)
                             if he >= 0 do
                                 hdr_past = 1
                                 total = n - he
                             end
-                        end else do
+                        else do
                             total = total + n
                         end
-                        if total >= dl_size then done = true
-                    end else do
+                        if total >= dl_size do done = true end
+                    else do
                         done = true
                     end
                 end
@@ -357,7 +357,7 @@ main() do
                     show_mbps(mbps / 8)
                     show(" MB/s)\n")
                 else do
-                    if do_ping == 1 then show(",\n") else show("{\n")
+                    if do_ping == 1 do show(",\n") else show("{\n") end
                     show("\"download\":{\"host\":\"")
                     show(host)
                     show("\",\"port\":")
@@ -373,7 +373,7 @@ main() do
             end
         end
 
-        if json_mode == 1 and do_download == 1 then show("}\n") else show("")
+        if json_mode == 1 and do_download == 1 do show("}\n") else show("") end
         end
         0
     end

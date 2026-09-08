@@ -56,8 +56,8 @@ const SEC_I_COMPLETE_NEEDED     = 590611
 const SEC_I_COMPLETE_AND_CONTINUE = 590612
 
 tls_init(): bool do
-    if is_linux() then do
-        if SEC_DLL != 0 then true
+    if is_linux() do
+        if SEC_DLL != 0 do true
         else do
             SEC_DLL = load_dll("libssl.so.3")
             if SEC_DLL != 0 do
@@ -78,10 +78,10 @@ tls_init(): bool do
                 L_SSL_CTX_CHK_KEY = get_fn(SEC_DLL, "SSL_CTX_check_private_key")
                 L_SSL_CTX_SET_VERIFY = get_fn(SEC_DLL, "SSL_CTX_set_verify")
                 L_SSL_SHUTDOWN = get_fn(SEC_DLL, "SSL_shutdown")
-                if L_SSL_CTX_NEW != 0 and L_SSL_NEW != 0 and L_SSL_SET_FD != 0 and L_SSL_ACCEPT != 0 and L_SSL_CONNECT != 0 and L_SSL_READ != 0 and L_SSL_WRITE != 0 and L_SSL_FREE != 0 and L_SSL_CTX_FREE != 0 and L_TLS_SERVER_METHOD != 0 and L_TLS_CLIENT_METHOD != 0 then true else false
+                if L_SSL_CTX_NEW != 0 and L_SSL_NEW != 0 and L_SSL_SET_FD != 0 and L_SSL_ACCEPT != 0 and L_SSL_CONNECT != 0 and L_SSL_READ != 0 and L_SSL_WRITE != 0 and L_SSL_FREE != 0 and L_SSL_CTX_FREE != 0 and L_TLS_SERVER_METHOD != 0 and L_TLS_CLIENT_METHOD != 0 do true else false end
             end
         end
-    end else do
+    else do
         if SEC_DLL != 0 do
             true
         else do
@@ -182,12 +182,12 @@ end
 
 tls_create_server_context(cert_file: string, key_file: string): TlsContext do
     tls_init()
-    if is_linux() then do
-        if cert_file == "" or key_file == "" then TlsContext(true, 0, 0, false)
+    if is_linux() do
+        if cert_file == "" or key_file == "" do TlsContext(true, 0, 0, false)
         else do
             method = call_dll(L_TLS_SERVER_METHOD)
             ctx = call_dll(L_SSL_CTX_NEW, method)
-            if ctx == 0 then TlsContext(true, 0, 0, false)
+            if ctx == 0 do TlsContext(true, 0, 0, false)
             else do
                 r1 = call_dll(L_SSL_CTX_USE_CERT, ctx, cert_file)
                 r2 = call_dll(L_SSL_CTX_USE_KEY, ctx, key_file, SSL_FILETYPE_PEM)
@@ -195,29 +195,29 @@ tls_create_server_context(cert_file: string, key_file: string): TlsContext do
                 if r1 == 1 and r2 == 1 do
                     r3 = call_dll(L_SSL_CTX_CHK_KEY, ctx)
                 end
-                if r1 == 1 and r2 == 1 and r3 == 1 then TlsContext(true, ctx, 0, true)
+                if r1 == 1 and r2 == 1 and r3 == 1 do TlsContext(true, ctx, 0, true)
                 else do
                     call_dll(L_SSL_CTX_FREE, ctx)
                     TlsContext(true, 0, 0, false)
                 end
             end
         end
-    end else do
+    else do
         tls_schannel_cred_in()
     end
 end
 
 tls_create_client_context(): TlsContext do
     tls_init()
-    if is_linux() then do
+    if is_linux() do
         method = call_dll(L_TLS_CLIENT_METHOD)
         ctx = call_dll(L_SSL_CTX_NEW, method)
-        if ctx == 0 then TlsContext(false, 0, 0, false)
+        if ctx == 0 do TlsContext(false, 0, 0, false)
         else do
             call_dll(L_SSL_CTX_SET_VERIFY, ctx, 0, 0)
             TlsContext(false, ctx, 0, true)
         end
-    end else do
+    else do
         tls_schannel_cred_out()
     end
 end
@@ -247,7 +247,7 @@ tls_handshake(sock: TlsSocket, ctx: TlsContext): bool do
             false
         else do
             call_dll(L_SSL_SET_FD, ssl, sock.raw_fd)
-            r = if ctx.is_server then call_dll(L_SSL_ACCEPT, ssl) else call_dll(L_SSL_CONNECT, ssl)
+            r = if ctx.is_server do call_dll(L_SSL_ACCEPT, ssl) else call_dll(L_SSL_CONNECT, ssl) end
             if r == 1 do
                 sock.ctx_lo = ssl
                 sock.is_handshake_done = true
@@ -311,7 +311,7 @@ end
 
 https_response_ok(body: string, content_type: string): string do
     L = str_len(body)
-    ct = if str_len(content_type) > 0 then content_type else "text/html; charset=utf-8"
+    ct = if str_len(content_type) > 0 do content_type else "text/html; charset=utf-8" end
     $"HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {L}\r\nStrict-Transport-Security: max-age=31536000; includeSubDomains\r\nConnection: close\r\n\r\n{body}"
 end
 

@@ -10,24 +10,24 @@ struct Arena {
 
 // Create a new memory arena with specified capacity in bytes
 arena_new(capacity_bytes: i64): Arena do
-    cap = if capacity_bytes <= 0 then 1048576 else capacity_bytes // Default 1 MB
+    cap = if capacity_bytes <= 0 do 1048576 else capacity_bytes end // Default 1 MB
     h = create_arena(cap)
     Arena(h, cap)
 end
 
 // Allocate raw aligned memory buffer from the arena
 arena_alloc_raw(a: Arena, size_bytes: i64): i64 do
-    if a.handle == 0 then 0
-    else arena_alloc(a.handle, size_bytes)
+    if a.handle == 0 do 0
+    else arena_alloc(a.handle, size_bytes) end
 end
 
 // Allocate a string copy into the arena
 arena_alloc_str(a: Arena, s: string): string do
-    if a.handle == 0 or _str_len(s) == 0 then ""
+    if a.handle == 0 or _str_len(s) == 0 do ""
     else do
         L = _str_len(s)
         buf = arena_alloc(a.handle, L + 1)
-        if buf == 0 then ""
+        if buf == 0 do ""
         else do
             i = 0
             while i < L do
@@ -42,12 +42,12 @@ end
 
 // Allocate a formatted integer string into the arena
 arena_fmt_int(a: Arena, prefix: string, n: i64, suffix: string): string do
-    if a.handle == 0 then ""
+    if a.handle == 0 do ""
     else do
         lp = _str_len(prefix)
         ls = _str_len(suffix)
         buf = arena_alloc(a.handle, lp + ls + 32)
-        if buf == 0 then ""
+        if buf == 0 do ""
         else do
             i = 0
             while i < lp do
@@ -55,7 +55,7 @@ arena_fmt_int(a: Arena, prefix: string, n: i64, suffix: string): string do
                 i += 1
             end
             
-            v = if n < 0 then 0 - n else n
+            v = if n < 0 do 0 - n else n end
             if n < 0 do
                 set_byte(buf, i, 45) // '-'
                 i += 1
@@ -101,14 +101,14 @@ end
 
 // Get current bytes allocated in the arena
 arena_get_used(a: Arena): i64 do
-    if a.handle == 0 then 0
-    else arena_size(a.handle)
+    if a.handle == 0 do 0
+    else arena_size(a.handle) end
 end
 
 // Get remaining available capacity in bytes
 arena_get_available(a: Arena): i64 do
-    if a.handle == 0 then 0
-    else a.capacity - arena_size(a.handle)
+    if a.handle == 0 do 0
+    else a.capacity - arena_size(a.handle) end
 end
 
 // Free the arena back to the operating system

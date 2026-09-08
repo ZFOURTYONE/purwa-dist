@@ -85,12 +85,12 @@ tensor_randn(rows: i64, cols: i64, seed_in: i64, scale: f64, req_grad: bool): Te
     t = tensor_new(rows, cols, req_grad)
     n = rows * cols
     seed = seed_in
-    if seed == 0 then seed = 12345 else 0
+    if seed == 0 do seed = 12345 else 0 end
     i = 0
     td = t.data
     while i < n do
         seed = (seed * 1103515245 + 12345) % 2147483647
-        if seed < 0 then seed = 0 - seed else 0
+        if seed < 0 do seed = 0 - seed else 0 end
         // map to [-1.0, 1.0]
         norm = fsub(fdiv(to_float(seed % 10000), 5000.0), 1.0)
         td[i] = fmul(norm, scale)
@@ -140,7 +140,7 @@ end
 
 // Element-wise addition with broadcasting support (e.g. [M, N] + [1, N])
 tensor_add(a: Tensor, b: Tensor): Tensor do
-    req = if a.requires_grad or b.requires_grad then true else false
+    req = if a.requires_grad or b.requires_grad do true else false end
     r = a.rows
     c = a.cols
     out = tensor_new(r, c, req)
@@ -152,14 +152,14 @@ tensor_add(a: Tensor, b: Tensor): Tensor do
     bd = b.data
     od = out.data
 
-    is_b_broadcast_row = if b.rows == 1 and b.cols == c then true else false
+    is_b_broadcast_row = if b.rows == 1 and b.cols == c do true else false end
 
     i = 0
     while i < r do
         j = 0
         while j < c do
             idx = i * c + j
-            b_idx = if is_b_broadcast_row then j else (if b.rows == r and b.cols == c then idx else 0)
+            b_idx = if is_b_broadcast_row do j else (if b.rows == r and b.cols == c do idx else 0 end) end
             va: f64 = ad[idx]
             vb: f64 = bd[b_idx]
             od[idx] = fadd(va, vb)
@@ -172,7 +172,7 @@ end
 
 // Element-wise subtraction (a - b)
 tensor_sub(a: Tensor, b: Tensor): Tensor do
-    req = if a.requires_grad or b.requires_grad then true else false
+    req = if a.requires_grad or b.requires_grad do true else false end
     r = a.rows
     c = a.cols
     out = tensor_new(r, c, req)
@@ -197,7 +197,7 @@ end
 
 // Hadamard element-wise multiplication (a * b)
 tensor_mul(a: Tensor, b: Tensor): Tensor do
-    req = if a.requires_grad or b.requires_grad then true else false
+    req = if a.requires_grad or b.requires_grad do true else false end
     r = a.rows
     c = a.cols
     out = tensor_new(r, c, req)
@@ -222,7 +222,7 @@ end
 
 // Element-wise division (a / b)
 tensor_div(a: Tensor, b: Tensor): Tensor do
-    req = if a.requires_grad or b.requires_grad then true else false
+    req = if a.requires_grad or b.requires_grad do true else false end
     r = a.rows
     c = a.cols
     out = tensor_new(r, c, req)
@@ -269,7 +269,7 @@ tensor_matmul(a: Tensor, b: Tensor): Tensor do
     k = a.cols
     n = b.cols
 
-    req = if a.requires_grad or b.requires_grad then true else false
+    req = if a.requires_grad or b.requires_grad do true else false end
     out = tensor_new(m, n, req)
     out.op = OP_MATMUL
     out.prev_a = a
@@ -337,7 +337,7 @@ tensor_relu(a: Tensor): Tensor do
     i = 0
     while i < n do
         va: f64 = ad[i]
-        od[i] = if fgt(va, 0.0) then va else 0.0
+        od[i] = if fgt(va, 0.0) do va else 0.0 end
         i = i + 1
     end
     out

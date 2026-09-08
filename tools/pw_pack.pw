@@ -51,7 +51,7 @@ extract_pkg_name(spec: string): string do
         i = i + 1
     end
 
-    raw_name = if last_slash >= 0 then slice(spec, last_slash + 1, L) else spec
+    raw_name = if last_slash >= 0 do slice(spec, last_slash + 1, L) else spec end
     
     // Strip trailing ".git"
     rn_len = str_len(raw_name)
@@ -65,7 +65,7 @@ end
 // ---- Core Package Manager Commands ----
 
 cmd_init(name_arg: string) do
-    pkg_name = if str_len(name_arg) > 0 then name_arg else "my-purwa-app"
+    pkg_name = if str_len(name_arg) > 0 do name_arg else "my-purwa-app" end
     show($"Initializing new Purwa package [{pkg_name}]...\n")
 
     manifest = "{\n" +
@@ -102,8 +102,8 @@ cmd_add(spec: string) do
         pkg_name = extract_pkg_name(spec)
         show($"[pw-pack] Resolving package: {spec}\n")
 
-        is_raw_pw = if contains(spec, ".pw") or contains(spec, "raw.github") then true else false
-        is_full_url = if contains(spec, "http://") or contains(spec, "https://") or contains(spec, "git@") then true else false
+        is_raw_pw = if contains(spec, ".pw") or contains(spec, "raw.github") do true else false end
+        is_full_url = if contains(spec, "http://") or contains(spec, "https://") or contains(spec, "git@") do true else false end
 
         if is_raw_pw do
             // Direct single-file HTTPS download using native Purwa https_get
@@ -125,7 +125,7 @@ cmd_add(spec: string) do
             end
         else do
             // Git repository shallow clone
-            git_url = if is_full_url then spec else $"https://github.com/{spec}.git"
+            git_url = if is_full_url do spec else $"https://github.com/{spec}.git" end
             target_dir = $"plugins/{pkg_name}"
             
             show($"[pw-pack] Cloning git repository {git_url} -> {target_dir} (shallow clone)...\n")
@@ -172,7 +172,7 @@ cmd_list() do
             fname = entry_ptr
             
             // Check if directory or file
-            is_dir = if contains(fname, ".") then "Module (.pw)" else "Git Package"
+            is_dir = if contains(fname, ".") do "Module (.pw)" else "Git Package" end
             show($"  {fname}             | {is_dir} | plugins/{fname}\n")
             i = i + 1
         end
@@ -229,7 +229,7 @@ cmd_bundle(entry_path: string, out_path_arg: string) do
         show("Usage: pw-pack bundle <entry.pw> [-o <out.pw>]\n")
         1
     else do
-        out_path = if str_len(out_path_arg) > 0 then out_path_arg else "bundle.pw"
+        out_path = if str_len(out_path_arg) > 0 do out_path_arg else "bundle.pw" end
         show($"[pw-pack] Bundling {entry_path} -> {out_path}...\n")
 
         src = read_text_file(entry_path)

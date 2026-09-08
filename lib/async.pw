@@ -55,7 +55,7 @@ async_set_timeout(loop, delay_ticks, cb, ud) do
     idx = 0 - 1
     i = 0
     while i < t_cnt and idx < 0 do
-        if t_acts[i] == 0 then idx = i
+        if t_acts[i] == 0 do idx = i end
         i += 1
     end
     
@@ -69,7 +69,7 @@ async_set_timeout(loop, delay_ticks, cb, ud) do
         target_idx = 0 - 1
     end
                  
-    if target_idx < 0 then 0 - 1
+    if target_idx < 0 do 0 - 1
     else do
         tid = loop.next_timer_id
         loop.next_timer_id = tid + 1
@@ -98,7 +98,7 @@ async_set_interval(loop, interval_ticks, cb, ud) do
     idx = 0 - 1
     i = 0
     while i < t_cnt and idx < 0 do
-        if t_acts[i] == 0 then idx = i
+        if t_acts[i] == 0 do idx = i end
         i += 1
     end
     
@@ -112,7 +112,7 @@ async_set_interval(loop, interval_ticks, cb, ud) do
         target_idx = 0 - 1
     end
                  
-    if target_idx < 0 then 0 - 1
+    if target_idx < 0 do 0 - 1
     else do
         tid = loop.next_timer_id
         loop.next_timer_id = tid + 1
@@ -158,7 +158,7 @@ async_add_fd(loop, fd, events, cb, ud) do
     idx = 0 - 1
     i = 0
     while i < s_cnt and idx < 0 do
-        if s_acts[i] == 0 then idx = i
+        if s_acts[i] == 0 do idx = i end
         i += 1
     end
     
@@ -172,7 +172,7 @@ async_add_fd(loop, fd, events, cb, ud) do
         target_idx = 0 - 1
     end
                  
-    if target_idx < 0 then 0 - 1
+    if target_idx < 0 do 0 - 1
     else do
         s_fds  = loop.sock_fds
         s_evts = loop.sock_events
@@ -226,7 +226,7 @@ async_run_once(loop) do
                 ud = t_uds[i]
                 
                 // Panggil callback function pointer
-                if cb != 0 then cb(ud)
+                if cb != 0 do cb(ud) end
                 
                 // Evaluasi apakah single-shot atau interval
                 rpt = t_rpts[i]
@@ -248,7 +248,7 @@ async_run_once(loop) do
     s_cnt  = loop.sock_count
     j = 0
     while j < s_cnt do
-        if s_acts[j] == 1 then pending += 1
+        if s_acts[j] == 1 do pending += 1 end
         j += 1
     end
     

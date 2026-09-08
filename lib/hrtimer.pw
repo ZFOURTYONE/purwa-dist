@@ -24,28 +24,28 @@ hrt_raw() do
 end
 
 hrt_init() do
-    if g_hrt_k32 == 0 then do
+    if g_hrt_k32 == 0 do
         g_hrt_k32 = load_dll("kernel32.dll")
-        if g_hrt_k32 != 0 then do
+        if g_hrt_k32 != 0 do
             g_hrt_qpc = get_fn(g_hrt_k32, "QueryPerformanceCounter")
             g_hrt_qpf = get_fn(g_hrt_k32, "QueryPerformanceFrequency")
             fbuf = alloc(8)
             call_dll(g_hrt_qpf, fbuf)
             g_hrt_freq = read_u64(fbuf, 0)
             drop(fbuf)
-            if g_hrt_freq == 0 then 0
+            if g_hrt_freq == 0 do 0
             else do
                 g_hrt_base = hrt_raw()
                 1
             end
         end
-    end else 1
+    else 1 end
 end
 
 // Mikrodetik sejak hrt_init (atau sejak g_hrt_base ditetapkan).
 hrt_us() do
-    if g_hrt_freq == 0 then 0
-    else (hrt_raw() - g_hrt_base) * 1000000 / g_hrt_freq
+    if g_hrt_freq == 0 do 0
+    else (hrt_raw() - g_hrt_base) * 1000000 / g_hrt_freq end
 end
 
 // Milidetik sejak hrt_init.

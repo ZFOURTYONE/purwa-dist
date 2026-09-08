@@ -20,7 +20,7 @@ main() do
         v = loop_sum(n)
         t1 = hrt_us()
         dt = t1 - t0
-        if dt < best then best = dt
+        if dt < best do best = dt end
         r = r + 1
     end
     show("v=")

@@ -1,10 +1,10 @@
 // Recursive Fibonacci 38 (Deep stack frame & branch prediction)
 fib(n) do
-    if n <= 1 then n
-    else fib(n - 1) + fib(n - 2)
+    if n <= 1 do n
+    else fib(n - 1) + fib(n - 2) end
 end
 
 main() do
     res = fib(38) // 39,088,169
-    if res == 39088169 then 0 else 1
+    if res == 39088169 do 0 else 1 end
 end

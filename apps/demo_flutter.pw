@@ -50,12 +50,12 @@ main() do
                             LinearProgressIndicator(counter % 100),
                             SizedBox(0, 8),
                             TextStyled(
-                                if is_turbo then "Engine: TURBO ACCELERATED (Active)"
-                                else "Engine: Standard Power Saver",
+                                if is_turbo do "Engine: TURBO ACCELERATED (Active)"
+                                else "Engine: Standard Power Saver" end,
                                 1,
-                                if is_turbo then FL_SUCCESS_R else FL_MUTED_R,
-                                if is_turbo then FL_SUCCESS_G else FL_MUTED_G,
-                                if is_turbo then FL_SUCCESS_B else FL_MUTED_B
+                                if is_turbo do FL_SUCCESS_R else FL_MUTED_R end,
+                                if is_turbo do FL_SUCCESS_G else FL_MUTED_G end,
+                                if is_turbo do FL_SUCCESS_B else FL_MUTED_B end
                             )
                         ]),
                         14, FL_CARD_R, FL_CARD_G, FL_CARD_B, 6
@@ -135,10 +135,10 @@ main() do
                 flutter_show_snackbar(app, "Boosted counter by +10!")
             else if action == ACT_TURBO do
                 is_turbo = not is_turbo
-                flutter_show_snackbar(app, if is_turbo then "Turbo Engine Enabled" else "Turbo Engine Disabled")
+                flutter_show_snackbar(app, if is_turbo do "Turbo Engine Enabled" else "Turbo Engine Disabled" end)
             else if action == ACT_NOTIF do
                 is_notif = not is_notif
-                flutter_show_snackbar(app, if is_notif then "Notifications ON" else "Notifications OFF")
+                flutter_show_snackbar(app, if is_notif do "Notifications ON" else "Notifications OFF" end)
             else if action == ACT_SETTINGS do
                 flutter_show_snackbar(app, "Purwa Flutter: Material & Cupertino Ready!")
             else if action == ACT_SLIDER do

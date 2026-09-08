@@ -130,17 +130,17 @@ const GUI_MUTED_B = 184
 // 3. ClearType Text & Font Helper Functions
 // ------------------------------------------------------------
 gui_text_width(s: string, sc: i64): i64 do
-    if sc >= 2 then _str_len(s) * 11
-    else if sc == 1 then _str_len(s) * 8
-    else _str_len(s) * 6
+    if sc >= 2 do _str_len(s) * 11
+    else if sc == 1 do _str_len(s) * 8
+    else _str_len(s) * 6 end
 end
 
 gui_draw_text(win: GuiWindow, s: string, px: i64, py: i64, sc: i64, r: i64, g: i64, b: i64) do
     if win != 0 and win.mem_dc != 0 do
-        fnt = if sc == 2 then win.hfont_title
-              else if sc == 3 then win.hfont_sub
-              else if sc == 0 then win.hfont_small
-              else win.hfont_body
+        fnt = if sc == 2 do win.hfont_title
+              else if sc == 3 do win.hfont_sub
+              else if sc == 0 do win.hfont_small
+              else win.hfont_body end
         
         call_dll(win.fn_select_obj, win.mem_dc, fnt)
         call_dll(win.fn_set_bkmode, win.mem_dc, 1) // TRANSPARENT
@@ -160,7 +160,7 @@ gui_fmt_int(app: GuiApp, prefix: string, n: i64, suffix: string): string do
         i += 1
     end
     
-    v = if n < 0 then 0 - n else n
+    v = if n < 0 do 0 - n else n end
     if n < 0 do
         set_byte(buf, i, 45)
         i += 1
@@ -238,7 +238,7 @@ gui_read_i32(buf, offset) do
     b2 = get_byte(buf, offset + 2)
     b3 = get_byte(buf, offset + 3)
     val = b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216)
-    if val > 2147483647 then val - 4294967296 else val
+    if val > 2147483647 do val - 4294967296 else val end
 end
 
 gui_open_window(title: string, width: i64, height: i64): GuiWindow do
@@ -385,8 +385,8 @@ gui_poll_events(win: GuiWindow) do
             b3 = get_byte(win.msg_buf, 27)
             lx = b0 + b1 * 256
             ly = b2 + b3 * 256
-            if lx > 32767 then lx -= 65536
-            if ly > 32767 then ly -= 65536
+            if lx > 32767 do lx -= 65536 end
+            if ly > 32767 do ly -= 65536 end
             win.click_x = lx
             win.click_y = ly
             win.click_cnt += 1
@@ -421,12 +421,12 @@ end
 
 gui_mouse_down(win: GuiWindow) do
     k = call_dll(win.fn_asynckey, 1)
-    if k != 0 then true else false
+    if k != 0 do true else false end
 end
 
 gui_key_esc(win: GuiWindow) do
     k = call_dll(win.fn_asynckey, 27)
-    if k != 0 then true else false
+    if k != 0 do true else false end
 end
 
 gui_is_open(win: GuiWindow) do
@@ -482,10 +482,10 @@ gui_app(title: string, width: i64, height: i64): GuiApp do
 end
 
 gui_running(app: GuiApp): bool do
-    if app.win == 0 then false
-    else if gui_is_open(app.win) == 0 then false
-    else if gui_key_esc(app.win) then false
-    else true
+    if app.win == 0 do false
+    else if gui_is_open(app.win) == 0 do false
+    else if gui_key_esc(app.win) do false
+    else true end
 end
 
 gui_frame_begin(app: GuiApp) do
@@ -603,9 +603,9 @@ gui_button_custom(app: GuiApp, label: string, bg_r: i64, bg_g: i64, bg_b: i64, h
     
     mx = app.mouse_x
     my = app.mouse_y
-    is_hover = if mx >= x and mx < x + w and my >= y and my < y + h then true else false
-    is_pressed = if is_hover and app.mouse_down then true else false
-    is_clicked = if app.clicked == 1 and app.last_click_x >= x and app.last_click_x < x + w and app.last_click_y >= y and app.last_click_y < y + h then true else false
+    is_hover = if mx >= x and mx < x + w and my >= y and my < y + h do true else false end
+    is_pressed = if is_hover and app.mouse_down do true else false end
+    is_clicked = if app.clicked == 1 and app.last_click_x >= x and app.last_click_x < x + w and app.last_click_y >= y and app.last_click_y < y + h do true else false end
     
     if is_pressed do
         canvas_draw_rect(app.canvas, x, y, w, h, bg_r / 2, bg_g / 2, bg_b / 2, 255, 1)
@@ -654,15 +654,15 @@ gui_checkbox(app: GuiApp, label: string, is_checked: bool): bool do
     
     mx = app.mouse_x
     my = app.mouse_y
-    is_hover = if mx >= x and mx < x + w and my >= y and my < y + h then true else false
-    is_clicked = if app.clicked == 1 and app.last_click_x >= x and app.last_click_x < x + w and app.last_click_y >= y and app.last_click_y < y + h then true else false
+    is_hover = if mx >= x and mx < x + w and my >= y and my < y + h do true else false end
+    is_clicked = if app.clicked == 1 and app.last_click_x >= x and app.last_click_x < x + w and app.last_click_y >= y and app.last_click_y < y + h do true else false end
     
-    new_state = if is_clicked then not is_checked else is_checked
+    new_state = if is_clicked do not is_checked else is_checked end
     
     canvas_draw_rect(app.canvas, x, by, box_sz, box_sz, GUI_CARD_R, GUI_CARD_G, GUI_CARD_B, 255, 1)
-    border_r = if is_hover then GUI_PRIMARY_R else GUI_CARD_BORDER_R
-    border_g = if is_hover then GUI_PRIMARY_G else GUI_CARD_BORDER_G
-    border_b = if is_hover then GUI_PRIMARY_B else GUI_CARD_BORDER_B
+    border_r = if is_hover do GUI_PRIMARY_R else GUI_CARD_BORDER_R end
+    border_g = if is_hover do GUI_PRIMARY_G else GUI_CARD_BORDER_G end
+    border_b = if is_hover do GUI_PRIMARY_B else GUI_CARD_BORDER_B end
     canvas_draw_rect(app.canvas, x, by, box_sz, box_sz, border_r, border_g, border_b, 255, 0)
     
     if new_state do
@@ -681,8 +681,8 @@ gui_slider(app: GuiApp, label: string, val: i64, min_v: i64, max_v: i64): i64 do
     w = app.widget_w
     h = app.widget_h
     
-    range = if max_v - min_v <= 0 then 1 else max_v - min_v
-    cur_val = if val < min_v then min_v else if val > max_v then max_v else val
+    range = if max_v - min_v <= 0 do 1 else max_v - min_v end
+    cur_val = if val < min_v do min_v else if val > max_v do max_v else val end
     
     val_str = gui_fmt_int(app, " ", cur_val, "")
     
@@ -726,7 +726,7 @@ gui_progress_bar(app: GuiApp, pct: i64) do
     canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_R, GUI_CARD_G, GUI_CARD_B, 255, 1)
     canvas_draw_rect(app.canvas, x, y, w, h, GUI_CARD_BORDER_R, GUI_CARD_BORDER_G, GUI_CARD_BORDER_B, 255, 0)
     
-    valid_pct = if pct < 0 then 0 else if pct > 100 then 100 else pct
+    valid_pct = if pct < 0 do 0 else if pct > 100 do 100 else pct end
     fill_w = ((w - 4) * valid_pct) / 100
     if fill_w > 0 do
         canvas_draw_rect(app.canvas, x + 2, y + 2, fill_w, h - 4, GUI_SUCCESS_R, GUI_SUCCESS_G, GUI_SUCCESS_B, 255, 1)
@@ -763,7 +763,7 @@ end
 
 gui_row_begin(app: GuiApp, cols: i64) do
     app.row_active = 1
-    app.row_cols = if cols < 1 then 1 else cols
+    app.row_cols = if cols < 1 do 1 else cols end
     app.row_idx = 0
     app.row_y = app.cur_y
     app.row_h = 0
@@ -798,9 +798,9 @@ end
 // ------------------------------------------------------------
 gui_panel(c: Canvas, x, y, w, h, r, g, b) do
     canvas_draw_rect(c, x, y, w, h, r, g, b, 255, 1)
-    br = if r + 30 > 255 then 255 else r + 30
-    bg = if g + 30 > 255 then 255 else g + 30
-    bb = if b + 30 > 255 then 255 else b + 30
+    br = if r + 30 > 255 do 255 else r + 30 end
+    bg = if g + 30 > 255 do 255 else g + 30 end
+    bb = if b + 30 > 255 do 255 else b + 30 end
     canvas_draw_rect(c, x, y, w, h, br, bg, bb, 255, 0)
     0
 end

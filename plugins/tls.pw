@@ -230,7 +230,7 @@ end
 
 https_response_ok(body: string, content_type: string): string do
     L = str_len(body)
-    ct = if str_len(content_type) > 0 then content_type else "text/html; charset=utf-8"
+    ct = if str_len(content_type) > 0 do content_type else "text/html; charset=utf-8" end
     $"HTTP/1.1 200 OK\r\nContent-Type: {ct}\r\nContent-Length: {L}\r\nStrict-Transport-Security: max-age=31536000; includeSubDomains\r\nConnection: close\r\n\r\n{body}"
 end
 

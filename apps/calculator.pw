@@ -186,7 +186,7 @@ round_rect(c: Canvas, x, y, w, h, rad, fr, fg, fb) do
         dx = 0
         span = 0 - 1
         while dx < rad do
-            if dx * dx + dy * dy <= rad * rad then span = dx
+            if dx * dx + dy * dy <= rad * rad do span = dx end
             dx += 1
         end
         if span >= 0 do
@@ -209,7 +209,7 @@ round_btn(c: Canvas, x, y, w, h, br_r, br_g, br_b, fi_r, fi_g, fi_b) do
 end
 
 hit(mx, my, x, y, w, h) do
-    if mx >= x and mx < x + w and my >= y and my < y + h then true else false
+    if mx >= x and mx < x + w and my >= y and my < y + h do true else false end
 end
 
 // ---------------- calculator state (fixed-point, scale 1000) -------
@@ -248,7 +248,7 @@ ent_push(ch, is_digit) do
     if g_el < 22 do
         g_ent[g_el] = ch
         g_el += 1
-        if is_digit then g_nd += 1
+        if is_digit do g_nd += 1 end
     end
     0
 end
@@ -256,7 +256,7 @@ end
 ent_backspace() do
     if g_el > 0 do
         last = g_ent[g_el - 1]
-        if last >= 48 and last <= 57 then g_nd -= 1
+        if last >= 48 and last <= 57 do g_nd -= 1 end
         g_el -= 1
     end
     0
@@ -267,7 +267,7 @@ count_digits() do
     i = 0
     while i < g_el do
         ch = g_ent[i]
-        if ch >= 48 and ch <= 57 then n += 1
+        if ch >= 48 and ch <= 57 do n += 1 end
         i += 1
     end
     n
@@ -388,7 +388,7 @@ hist_append_code(code) do
 end
 
 current_value() do
-    if g_el > 0 then entry_to_fx() else g_acc
+    if g_el > 0 do entry_to_fx() else g_acc end
 end
 
 // core arithmetic; raises g_error instead of crashing
@@ -403,8 +403,8 @@ apply_op(a, op, b) do
         // keeps every split term inside i64 range
         ia = a / SCALE_S
         ib = b / SCALE_S
-        aa = if ia < 0 then 0 - ia else ia
-        ab = if ib < 0 then 0 - ib else ib
+        aa = if ia < 0 do 0 - ia else ia end
+        ab = if ib < 0 do 0 - ib else ib end
         if aa * ab > 9000000000000 do
             g_error = 1
             r = 0
@@ -428,17 +428,17 @@ apply_op(a, op, b) do
 end
 
 press_digit(d) do
-    if g_error == 1 then init_state()
+    if g_error == 1 do init_state() end
     if g_fresh == 1 do
         ent_clear()
         g_fresh = 0
     end
-    if g_nd < 9 then ent_push(48 + d, 1)
+    if g_nd < 9 do ent_push(48 + d, 1) end
     0
 end
 
 press_dot() do
-    if g_error == 1 then init_state()
+    if g_error == 1 do init_state() end
     if g_fresh == 1 do
         ent_clear()
         g_fresh = 0
@@ -446,18 +446,18 @@ press_dot() do
     has_dot = false
     i = 0
     while i < g_el do
-        if g_ent[i] == 46 then has_dot = true
+        if g_ent[i] == 46 do has_dot = true end
         i += 1
     end
     if not has_dot do
-        if g_el == 0 then ent_push(48, 1)
+        if g_el == 0 do ent_push(48, 1) end
         ent_push(46, 0)
     end
     0
 end
 
 press_pm() do
-    if g_error == 0 and g_el == 0 and g_acc != 0 then entry_from_acc()
+    if g_error == 0 and g_el == 0 and g_acc != 0 do entry_from_acc() end
     if g_error == 0 and g_el > 0 do
         if g_ent[0] == 45 do
             k = 1
@@ -529,9 +529,9 @@ press_op(op) do
             g_fresh = 1
             ent_clear()
             opc = 43
-            if op == 2 then opc = 45
-            if op == 3 then opc = 42
-            if op == 4 then opc = 47
+            if op == 2 do opc = 45 end
+            if op == 3 do opc = 42 end
+            if op == 4 do opc = 47 end
             set_hist_acc()
             hist_append_code(opc)
         end
@@ -545,9 +545,9 @@ press_eq() do
         if g_fresh == 0 do
             set_hist_acc()
             opc = 43
-            if g_op == 2 then opc = 45
-            if g_op == 3 then opc = 42
-            if g_op == 4 then opc = 47
+            if g_op == 2 do opc = 45 end
+            if g_op == 3 do opc = 42 end
+            if g_op == 4 do opc = 47 end
             hist_append_code(opc)
             hist_append_value(cur)
             hist_append_code(61)
@@ -591,17 +591,17 @@ cell_label(row, col) do
     end
     if row == 4 do
         v = 61
-        if col == 0 then v = 48
-        if col == 2 then v = 46
+        if col == 0 do v = 48 end
+        if col == 2 do v = 46 end
     end
     v
 end
 
 cell_style(row, col) do
     s = 0
-    if row == 0 then s = 1
-    if col == 3 then s = 2
-    if row == 4 and col == 3 then s = 3
+    if row == 0 do s = 1 end
+    if col == 3 do s = 2 end
+    if row == 4 and col == 3 do s = 3 end
     s
 end
 
@@ -612,13 +612,13 @@ cell_action(row, col) do
     if row == 0 do
         a = match col do 0 => 23 1 => 21 2 => 22 _ => 34 end
     end
-    if row == 1 and col == 3 then a = 33
-    if row == 2 and col == 3 then a = 32
-    if row == 3 and col == 3 then a = 31
+    if row == 1 and col == 3 do a = 33 end
+    if row == 2 and col == 3 do a = 32 end
+    if row == 3 and col == 3 do a = 31 end
     if row == 4 do
         a = 40
-        if col == 0 then a = 1
-        if col == 2 then a = 20
+        if col == 0 do a = 1 end
+        if col == 2 do a = 20 end
     end
     a
 end
@@ -646,7 +646,7 @@ end
 
 draw_button(c: Canvas, x, y, bw, code, style, mx, my, down) do
     hov = hit(mx, my, x, y, bw, BH)
-    held = if hov == 1 and down == 1 then true else false
+    held = if hov == 1 and down == 1 do true else false end
     fi_r = COL_DIGIT_FILL_R
     fi_g = COL_DIGIT_FILL_G
     fi_b = COL_DIGIT_FILL_B
@@ -743,7 +743,7 @@ render_all(c: Canvas, mx, my, down) do
             vlen = fx_to_chars(g_acc, g_tmp)
         end
         dim = 6
-        if vlen > 10 then dim = 5
+        if vlen > 10 do dim = 5 end
         draw_text_right(c, g_tmp, vlen, W - M, 138 - 7 * dim, dim, COL_TXT_R, COL_TXT_G, COL_TXT_B)
     end
 
@@ -757,8 +757,8 @@ render_all(c: Canvas, mx, my, down) do
         while col < 4 do
             skip = 0
             bw = BW
-            if row == 4 and col == 1 then skip = 1
-            if row == 4 and col == 0 then bw = 2 * BW + GAP
+            if row == 4 and col == 1 do skip = 1 end
+            if row == 4 and col == 0 do bw = 2 * BW + GAP end
             if skip == 0 do
                 draw_button(c, cell_x(col), cell_y(row), bw, cell_label(row, col), cell_style(row, col), mx, my, down)
             end
@@ -777,8 +777,8 @@ click_at(x, y) do
         while col < 4 and not done do
             skip = 0
             bw = BW
-            if row == 4 and col == 1 then skip = 1
-            if row == 4 and col == 0 then bw = 2 * BW + GAP
+            if row == 4 and col == 1 do skip = 1 end
+            if row == 4 and col == 0 do bw = 2 * BW + GAP end
             if skip == 0 do
                 if hit(x, y, cell_x(col), cell_y(row), bw, BH) == 1 do
                     do_action(cell_action(row, col))
@@ -806,10 +806,10 @@ run_selftest() do
     fails = 0
 
     t = fx_to_chars(1234500, g_tmp)
-    if expect(1, t == 6) == 0 then fails += 1
-    if expect(2, g_tmp[4] == 46 and g_tmp[5] == 53) == 0 then fails += 1
+    if expect(1, t == 6) == 0 do fails += 1 end
+    if expect(2, g_tmp[4] == 46 and g_tmp[5] == 53) == 0 do fails += 1 end
     t = fx_to_chars(0 - 500, g_tmp)
-    if expect(3, t == 4 and g_tmp[0] == 45 and g_tmp[3] == 53) == 0 then fails += 1
+    if expect(3, t == 4 and g_tmp[0] == 45 and g_tmp[3] == 53) == 0 do fails += 1 end
 
     g_el = 0
     ent_push(49, 1)
@@ -817,7 +817,7 @@ run_selftest() do
     ent_push(46, 0)
     ent_push(51, 1)
     ent_push(52, 1)
-    if expect(4, entry_to_fx() == 12340) == 0 then fails += 1
+    if expect(4, entry_to_fx() == 12340) == 0 do fails += 1 end
 
     // the float trap 0.1 + 0.2 solved exactly by fixed-point
     g_el = 0
@@ -830,33 +830,33 @@ run_selftest() do
     ent_push(46, 0)
     ent_push(50, 1)
     b = entry_to_fx()
-    if expect(5, a + b == 300) == 0 then fails += 1
+    if expect(5, a + b == 300) == 0 do fails += 1 end
     t = fx_to_chars(a + b, g_tmp)
-    if expect(6, t == 3 and g_tmp[0] == 48 and g_tmp[1] == 46 and g_tmp[2] == 51) == 0 then fails += 1
+    if expect(6, t == 3 and g_tmp[0] == 48 and g_tmp[1] == 46 and g_tmp[2] == 51) == 0 do fails += 1 end
 
-    if expect(7, apply_op(1500, 3, 2000) == 3000) == 0 then fails += 1
-    if expect(8, apply_op(7000, 4, 2000) == 3500) == 0 then fails += 1
+    if expect(7, apply_op(1500, 3, 2000) == 3000) == 0 do fails += 1 end
+    if expect(8, apply_op(7000, 4, 2000) == 3500) == 0 do fails += 1 end
 
     g_error = 0
     r0 = apply_op(7000, 4, 0)
-    if expect(9, g_error == 1 and r0 == 0) == 0 then fails += 1
+    if expect(9, g_error == 1 and r0 == 0) == 0 do fails += 1 end
     g_error = 0
 
     big = 999999999 * SCALE_S
     ro = apply_op(big, 3, big)
-    if expect(10, g_error == 1) == 0 then fails += 1
+    if expect(10, g_error == 1) == 0 do fails += 1 end
     g_error = 0
 
     g_el = 0
     ent_push(53, 1)
     ent_push(48, 1)
     press_pct()
-    if expect(11, entry_to_fx() == 500) == 0 then fails += 1
+    if expect(11, entry_to_fx() == 500) == 0 do fails += 1 end
 
     press_pm()
-    if expect(12, g_ent[0] == 45) == 0 then fails += 1
+    if expect(12, g_ent[0] == 45) == 0 do fails += 1 end
     press_pm()
-    if expect(13, g_ent[0] != 45) == 0 then fails += 1
+    if expect(13, g_ent[0] != 45) == 0 do fails += 1 end
 
     init_state()
     press_digit(1)
@@ -866,7 +866,7 @@ run_selftest() do
     press_op(3)
     press_digit(3)
     press_eq()
-    if expect(14, g_error == 0 and g_acc == 57000) == 0 then fails += 1
+    if expect(14, g_error == 0 and g_acc == 57000) == 0 do fails += 1 end
 
     init_state()
     d = 0
@@ -874,13 +874,13 @@ run_selftest() do
         press_digit(9)
         d += 1
     end
-    if expect(15, g_nd == 9) == 0 then fails += 1
+    if expect(15, g_nd == 9) == 0 do fails += 1 end
 
     init_state()
     press_digit(5)
     press_op(1)
     press_digit(3)
-    if expect(16, entry_to_fx() == 3000) == 0 then fails += 1
+    if expect(16, entry_to_fx() == 3000) == 0 do fails += 1 end
 
     fails
 end
@@ -893,10 +893,10 @@ find_pattern(hay, pat, plen) do
         ok = true
         j = 0
         while j < plen do
-            if get_byte(hay, i + j) != get_byte(pat, j) then ok = false
+            if get_byte(hay, i + j) != get_byte(pat, j) do ok = false end
             j += 1
         end
-        if ok then found = true
+        if ok do found = true end
         i += 1
     end
     found
@@ -911,8 +911,8 @@ run_gui() do
     frame = 0
     running = true
     while running do
-        if not gui_is_open(win) then running = false
-        if gui_key_esc(win) != 0 then running = false
+        if not gui_is_open(win) do running = false end
+        if gui_key_esc(win) != 0 do running = false end
         if running do
             gui_poll_events(win)
             // single source of truth for clicks: message queue only.
@@ -928,10 +928,10 @@ run_gui() do
             if g_shot == 1 do
                 // deterministic render dump: synthetic 7 x 8 = script
                 frame += 1
-                if frame == 5 then click_at(55, 275)
-                if frame == 15 then click_at(325, 275)
-                if frame == 25 then click_at(145, 275)
-                if frame == 35 then click_at(325, 485)
+                if frame == 5 do click_at(55, 275) end
+                if frame == 15 do click_at(325, 275) end
+                if frame == 25 do click_at(145, 275) end
+                if frame == 35 do click_at(325, 485) end
             end
             render_all(cv, mx, my, down)
             gui_blit_canvas(win, cv)
@@ -961,7 +961,7 @@ main() do
     cmdline = args()
     rc = 0
     g_shot = 0
-    if find_pattern(cmdline, "-shot", 5) == 1 then g_shot = 1
+    if find_pattern(cmdline, "-shot", 5) == 1 do g_shot = 1 end
     if find_pattern(cmdline, "-selftest", 9) == 1 do
         // binary is GUI-subsystem (no console): attach one only when stdout
         // is not already valid (e.g. redirected pipe from CI keeps working)

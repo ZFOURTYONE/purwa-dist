@@ -11,7 +11,7 @@ const MATH_SQRT2  = 1.4142135623730951
 
 // Nilai absolut floating-point
 math_abs(x) do
-    if flt(x, 0.0) then fneg(x) else x
+    if flt(x, 0.0) do fneg(x) else x end
 end
 
 // Konversi derajat ke radian
@@ -26,12 +26,12 @@ end
 
 // Nilai maksimum antara dua float
 math_max(a, b) do
-    if fgt(a, b) then a else b
+    if fgt(a, b) do a else b end
 end
 
 // Nilai minimum antara dua float
 math_min(a, b) do
-    if flt(a, b) then a else b
+    if flt(a, b) do a else b end
 end
 
 // Pembatasan nilai dalam rentang [min_val, max_val]
@@ -43,14 +43,14 @@ end
 math_floor(x) do
     i = to_int(x)
     fi = to_float(i)
-    if flt(x, 0.0) and fgt(fi, x) then fsub(fi, 1.0) else fi
+    if flt(x, 0.0) and fgt(fi, x) do fsub(fi, 1.0) else fi end
 end
 
 // Pembulatan ke atas (ceil)
 math_ceil(x) do
     i = to_int(x)
     fi = to_float(i)
-    if fgt(x, 0.0) and flt(fi, x) then fadd(fi, 1.0) else fi
+    if fgt(x, 0.0) and flt(fi, x) do fadd(fi, 1.0) else fi end
 end
 
 // Pembulatan ke integer terdekat (round)
@@ -117,7 +117,7 @@ end
 // Tangen: sin(x) / cos(x)
 math_tan(x) do
     c = math_cos(x)
-    if feq(c, 0.0) then 0.0 else fdiv(math_sin(x), c)
+    if feq(c, 0.0) do 0.0 else fdiv(math_sin(x), c) end
 end
 
 // Arkus tangen (atan) untuk [-1, 1] via Taylor, dan range reduction untuk |x| > 1

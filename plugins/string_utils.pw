@@ -6,7 +6,7 @@
 
 // Ulangi string sebanyak n kali
 str_repeat(s: string, n: i64): string do
-    if n <= 0 then ""
+    if n <= 0 do ""
     else do
         total_len = str_len(s) * n
         buf = alloc(total_len + 1)
@@ -30,7 +30,7 @@ end
 // Padding kiri: tambah karakter sampai panjang target
 str_pad_left(s: string, target_len: i64, pad_char: string): string do
     cur_len = str_len(s)
-    if cur_len >= target_len then s
+    if cur_len >= target_len do s
     else do
         padding = str_repeat(pad_char, target_len - cur_len)
         concat(padding, s)
@@ -40,7 +40,7 @@ end
 // Padding kanan: tambah karakter sampai panjang target
 str_pad_right(s: string, target_len: i64, pad_char: string): string do
     cur_len = str_len(s)
-    if cur_len >= target_len then s
+    if cur_len >= target_len do s
     else do
         padding = str_repeat(pad_char, target_len - cur_len)
         concat(s, padding)
@@ -51,14 +51,14 @@ end
 str_starts_with(s: string, prefix: string): i64 do
     s_len = str_len(s)
     p_len = str_len(prefix)
-    if p_len > s_len then 0
+    if p_len > s_len do 0
     else do
         sub = slice(s, 0, p_len)
         i = 0
         ok = true
         while i < p_len and ok do
-            if get_byte(sub, i) != get_byte(prefix, i) then ok = false
-            else i = i + 1
+            if get_byte(sub, i) != get_byte(prefix, i) do ok = false
+            else i = i + 1 end
         end
         ok
     end
@@ -68,14 +68,14 @@ end
 str_ends_with(s: string, suffix: string): i64 do
     s_len = str_len(s)
     sf_len = str_len(suffix)
-    if sf_len > s_len then 0
+    if sf_len > s_len do 0
     else do
         sub = slice(s, s_len - sf_len, s_len)
         i = 0
         ok = true
         while i < sf_len and ok do
-            if get_byte(sub, i) != get_byte(suffix, i) then ok = false
-            else i = i + 1
+            if get_byte(sub, i) != get_byte(suffix, i) do ok = false
+            else i = i + 1 end
         end
         ok
     end
@@ -98,7 +98,7 @@ end
 str_count(s: string, sub: string): i64 do
     s_len = str_len(s)
     sub_len = str_len(sub)
-    if sub_len == 0 or sub_len > s_len then 0
+    if sub_len == 0 or sub_len > s_len do 0
     else do
         count = 0
         i = 0
@@ -106,13 +106,13 @@ str_count(s: string, sub: string): i64 do
             j = 0
             ok = true
             while j < sub_len and ok do
-                if get_byte(s, i + j) != get_byte(sub, j) then ok = false
-                else j = j + 1
+                if get_byte(s, i + j) != get_byte(sub, j) do ok = false
+                else j = j + 1 end
             end
-            if ok then do
+            if ok do
                 count = count + 1
                 i = i + sub_len
-            end else do
+            else do
                 i = i + 1
             end
         end

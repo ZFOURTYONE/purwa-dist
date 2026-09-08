@@ -26,9 +26,9 @@ struct Mfb {
 
 mfb_open(judul, w, h): Mfb do
     win = gui_open_window(judul, w, h)
-    if win == 0 then do
+    if win == 0 do
         0
-    end else do
+    else do
         c = canvas_create(w, h)
         Mfb(win, c, w, h)
     end
@@ -42,11 +42,11 @@ mfb_update(m: Mfb) do
 end
 
 mfb_should_close(m: Mfb) do
-    if not gui_is_open(m.win) then do
+    if not gui_is_open(m.win) do
         1
-    end else if gui_key_esc(m.win) != 0 then do
+    else if gui_key_esc(m.win) != 0 do
         1
-    end else do
+    else do
         0
     end
 end

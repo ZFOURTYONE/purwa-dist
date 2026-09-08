@@ -9,5 +9,5 @@ main() do
     for j in 0..n do
         total += arr[j]
     end
-    if total > 0 then 0 else 1
+    if total > 0 do 0 else 1 end
 end

@@ -8,5 +8,5 @@ main() do
         total_len += size_of(s)
         i += 1
     end
-    if total_len > 0 then 0 else 1
+    if total_len > 0 do 0 else 1 end
 end

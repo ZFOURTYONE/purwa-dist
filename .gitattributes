@@ -1,0 +1,11 @@
+# Normalize line endings so the shipped SHA256SUMS.txt matches a fresh clone
+# on every platform (Purwa's lexer is not newline-sensitive; LF is canonical).
+* text=auto eol=lf
+
+# Never touch binary artifacts (content-sniffing would catch these anyway).
+*.exe binary
+*.vsix binary
+purwac-linux binary
+purwac-arm64 binary
+purwa-fmt-linux binary
+purwa-lsp-linux binary

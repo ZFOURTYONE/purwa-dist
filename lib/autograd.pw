@@ -88,7 +88,7 @@ tensor_backward(loss: Tensor) do
             if b != 0 do
                 if b.requires_grad do
                     bg = b.grad
-                    is_b_broadcast_row = if b.rows == 1 and b.cols == node.cols then true else false
+                    is_b_broadcast_row = if b.rows == 1 and b.cols == node.cols do true else false end
                     if is_b_broadcast_row do
                         // Accumulate column-wise across all rows
                         r = node.rows
@@ -284,7 +284,7 @@ tensor_backward(loss: Tensor) do
                         vad: f64 = ad[k]
                         vg: f64 = nd_grad[k]
                         vag: f64 = ag[k]
-                        grad_contrib = if fgt(vad, 0.0) then vg else 0.0
+                        grad_contrib = if fgt(vad, 0.0) do vg else 0.0 end
                         ag[k] = fadd(vag, grad_contrib)
                         k = k + 1
                     end

@@ -1,7 +1,7 @@
 // bench.pw — Standard benchmark suite
 fib(n) do
-    if n < 2 then n
-    else fib(n - 1) + fib(n - 2)
+    if n < 2 do n
+    else fib(n - 1) + fib(n - 2) end
 end
 
 loop_sum(n) do
@@ -13,8 +13,8 @@ loop_sum(n) do
 end
 
 tco(n, acc) do
-    if n == 0 then acc
-    else tco(n - 1, acc + 1)
+    if n == 0 do acc
+    else tco(n - 1, acc + 1) end
 end
 
 main() do

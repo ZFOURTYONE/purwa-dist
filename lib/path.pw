@@ -4,12 +4,12 @@
 
 // Karakter pemisah direktori sistem ("\" di Windows, "/" di Linux)
 path_sep() do
-    if is_linux() then "/" else "\\"
+    if is_linux() do "/" else "\\" end
 end
 
 // Cek apakah kode byte adalah pemisah direktori ('/' = 47, '\' = 92)
 path_is_sep(c) do
-    if c == 47 or c == 92 then true else false
+    if c == 47 or c == 92 do true else false end
 end
 
 // Cek apakah path bersifat absolut
@@ -182,7 +182,7 @@ path_normalize(p, target_sep) do
             c = get_byte(p, i)
             if path_is_sep(c) do
                 // Hindari duplikasi pemisah berurutan
-                prev_is_sep = if w > 0 then get_byte(buf, w - 1) == tsep_code else false
+                prev_is_sep = if w > 0 do get_byte(buf, w - 1) == tsep_code else false end
                 if not prev_is_sep do
                     set_byte(buf, w, tsep_code)
                     w = w + 1

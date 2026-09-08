@@ -57,7 +57,7 @@ kv_strdup(p) do
 end
 
 kv_k32() do
-    if K32 == 0 then K32 = load_dll("kernel32.dll")
+    if K32 == 0 do K32 = load_dll("kernel32.dll") end
     K32
 end
 
@@ -69,37 +69,37 @@ end
 
 // mode: 0 = baca-saja existing, 1 = tulis baca create, 2 = tulis baca existing
 kv_h_open(path, mode) do
-    if is_linux() then do
-        flags = if mode == 1 then 66 else if mode == 2 then 2 else 0
+    if is_linux() do
+        flags = if mode == 1 do 66 else if mode == 2 do 2 else 0 end
         syscall(257, 0 - 100, path, flags, 420)        // 420 = 0644
-    end else do
+    else do
         k32 = kv_k32()
-        if k32 == 0 then 0 - 1
-        else if mode == 0 then
+        if k32 == 0 do 0 - 1
+        else if mode == 0 do
             call_dll(get_fn(k32, "CreateFileA"),
                      path, 2147483648, 7, 0, 3, 128, 0)   // READ | share-all
-        else if mode == 1 then
+        else if mode == 1 do
             call_dll(get_fn(k32, "CreateFileA"),
                      path, 3221225472, 0, 0, 4, 128, 0)   // OPEN_ALWAYS
         else
             call_dll(get_fn(k32, "CreateFileA"),
-                     path, 3221225472, 0, 0, 3, 128, 0)   // OPEN_EXISTING
+                     path, 3221225472, 0, 0, 3, 128, 0) end   // OPEN_EXISTING
     end
 end
 
 kv_h_ok(h) do
-    if is_linux() then h >= 0
-    else if h == 0 then false else h != 0 - 1
+    if is_linux() do h >= 0
+    else if h == 0 do false else h != 0 - 1 end
 end
 
 kv_h_size(h) do
-    if is_linux() then syscall(8, h, 0, 2)             // lseek END
-    else call_dll(get_fn(kv_k32(), "GetFileSize"), h, 0)
+    if is_linux() do syscall(8, h, 0, 2)             // lseek END
+    else call_dll(get_fn(kv_k32(), "GetFileSize"), h, 0) end
 end
 
 // baca len byte dari offset off; return jumlah terbaca
 kv_h_read(h, off, buf, len) do
-    if is_linux() then syscall(17, h, buf, len, off)   // pread64
+    if is_linux() do syscall(17, h, buf, len, off)   // pread64
     else do
         k32 = kv_k32()
         br = alloc(8)
@@ -114,7 +114,7 @@ end
 
 // tulis len byte di offset off; return true/false
 kv_h_write_at(h, off, buf, len) do
-    if is_linux() then syscall(18, h, buf, len, off) >= len   // pwrite64
+    if is_linux() do syscall(18, h, buf, len, off) >= len   // pwrite64
     else do
         k32 = kv_k32()
         br = alloc(8)
@@ -122,28 +122,28 @@ kv_h_write_at(h, off, buf, len) do
         call_dll(get_fn(k32, "SetFilePointer"), h, off, 0, 0)
         ok = call_dll(get_fn(k32, "WriteFile"), h, buf, len, br, 0)
         drop(br)
-        if ok then true else false
+        if ok do true else false end
     end
 end
 
 // tulis di ekor berkas; return true/false
 kv_h_append(h, buf, len) do
-    if is_linux() then do
+    if is_linux() do
         syscall(8, h, 0, 2)                            // lseek END
         syscall(1, h, buf, len) >= len                 // write
-    end else do
+    else do
         k32 = kv_k32()
         br = alloc(8)
         mem_set(br, 0, 8)
         call_dll(get_fn(k32, "SetFilePointer"), h, 0, 0, 2)   // FILE_END
         ok = call_dll(get_fn(k32, "WriteFile"), h, buf, len, br, 0)
         drop(br)
-        if ok then true else false
+        if ok do true else false end
     end
 end
 
 kv_h_truncate(h, len) do
-    if is_linux() then syscall(77, h, len)             // ftruncate
+    if is_linux() do syscall(77, h, len)             // ftruncate
     else do
         k32 = kv_k32()
         call_dll(get_fn(k32, "SetFilePointer"), h, len, 0, 0)
@@ -153,13 +153,13 @@ end
 
 kv_h_flush(h) do
     // guard: jangan pernah fsync/close fd standar (0/1/2)
-    if is_linux() then if h >= 3 then syscall(74, h) else 0   // fsync
-    else call_dll(get_fn(kv_k32(), "FlushFileBuffers"), h)
+    if is_linux() do if h >= 3 do syscall(74, h) else 0 end   // fsync
+    else call_dll(get_fn(kv_k32(), "FlushFileBuffers"), h) end
 end
 
 kv_h_close(h) do
-    if is_linux() then if h >= 3 then syscall(3, h) else 0    // close
-    else call_dll(get_fn(kv_k32(), "CloseHandle"), h)
+    if is_linux() do if h >= 3 do syscall(3, h) else 0 end    // close
+    else call_dll(get_fn(kv_k32(), "CloseHandle"), h) end
 end
 
 // ---------- CRC32 IEEE ----------
@@ -172,9 +172,9 @@ kv_crc32(p, n) do
         crc = (crc ^ get_byte(p, i)) & 4294967295
         j = 0
         while j < 8 do
-            if (crc & 1) == 1 then do
+            if (crc & 1) == 1 do
                 crc = ((crc >> 1) ^ 3988292384) & 4294967295
-            end else do
+            else do
                 crc = (crc >> 1) & 4294967295
             end
             j = j + 1
@@ -227,19 +227,19 @@ end
 // buffer diganti, semua pointer terindeks WAJIB direlokasi dengan delta,
 // lalu buffer lama boleh di-drop (pencegah use-after-free).
 kv_mem_reserve(need) do
-    if need > K_MEMCAP then do
-        nc = if K_MEMCAP == 0 then 65536 else K_MEMCAP * 2
+    if need > K_MEMCAP do
+        nc = if K_MEMCAP == 0 do 65536 else K_MEMCAP * 2 end
         while nc < need do nc = nc * 2 end
         old = K_MEM
         nm = alloc(nc)
         mem_set(nm, 0, nc)
-        if K_MEMSZ > 0 then mem_copy(nm, old, K_MEMSZ)
-        if old != 0 then do
+        if K_MEMSZ > 0 do mem_copy(nm, old, K_MEMSZ) end
+        if old != 0 do
             delta = nm - old
             ti = 0
             while ti < K_TCAP do
                 kp = b64_at(K_TKEY, ti)
-                if kp != 0 then set_b64_at(K_TKEY, ti, kp + delta)
+                if kp != 0 do set_b64_at(K_TKEY, ti, kp + delta) end
                 ti = ti + 1
             end
             drop(old)
@@ -278,7 +278,7 @@ kv_t_rehash(ncap) do
     i = 0
     while i < ocur do
         kp = b64_at(okey, i)
-        if kp != 0 then do
+        if kp != 0 do
             kv_t_insert_raw(kp, b64_at(okl, i), b64_at(ovo, i),
                             b64_at(ovl, i), b64_at(od, i))
         end
@@ -293,12 +293,12 @@ kv_t_rehash(ncap) do
 end
 
 kv_key_eq(a, alen, bp, blen) do
-    if alen != blen then 0
+    if alen != blen do 0
     else do
         same = 1
         i = 0
         while i < alen do
-            if get_byte(a, i) != get_byte(bp, i) then do same = 0; i = alen end else i = i + 1
+            if get_byte(a, i) != get_byte(bp, i) do same = 0; i = alen else i = i + 1 end
         end
         same
     end
@@ -306,7 +306,7 @@ end
 
 // sisip TANPA cek duplikat (rehash & jalur internal)
 kv_t_insert_raw(kp, kl, vo, vl, dd) do
-    if K_TUSED * 10 >= K_TCAP * 7 then kv_t_rehash(K_TCAP * 2)
+    if K_TUSED * 10 >= K_TCAP * 7 do kv_t_rehash(K_TCAP * 2) end
     mask = K_TCAP - 1
     i = kv_hash(kp, kl) & mask
     while b64_at(K_TKEY, i) != 0 do i = (i + 1) & mask end
@@ -321,7 +321,7 @@ end
 
 // cari slot utk kunci (hidup/matik dicocokkan); -1 bila absen
 kv_find_slot(kp, klen) do
-    if K_TCAP == 0 then 0 - 1
+    if K_TCAP == 0 do 0 - 1
     else do
         mask = K_TCAP - 1
         i = kv_hash(kp, klen) & mask
@@ -329,9 +329,9 @@ kv_find_slot(kp, klen) do
         step = 0
         while step < K_TCAP and found < 0 do
             kptr = b64_at(K_TKEY, i)
-            if kptr == 0 then step = K_TCAP
+            if kptr == 0 do step = K_TCAP
             else do
-                if kv_key_eq(kptr, b64_at(K_TKLEN, i), kp, klen) then found = i
+                if kv_key_eq(kptr, b64_at(K_TKLEN, i), kp, klen) do found = i
                 else do
                     i = (i + 1) & mask
                     step = step + 1
@@ -345,7 +345,7 @@ end
 // ---------- tulis fisik ----------
 kv_append(rec, total) do
     ok = kv_h_append(K_HFILE, rec, total)
-    if ok then do
+    if ok do
         kv_mem_reserve(K_MEMSZ + total)
         mem_copy(K_MEM + K_MEMSZ, rec, total)
         K_MEMSZ = K_MEMSZ + total
@@ -366,18 +366,18 @@ end
 // Buka/buat database (singleton). Hasil: 1 sukses, 0 gagal.
 kv_open(path) do
     h = kv_h_open(path, 1)
-    if not kv_h_ok(h) then 0
+    if not kv_h_ok(h) do 0
     else do
         K_HFILE = h
         // duplikasi DULU: pemanggil sah memoperkan K_PATH itu sendiri
         // (kasus kv_compact) - drop lama hanya setelah salinan siap
         tmp_path = kv_strdup(path)
-        if K_PATH != 0 then drop(K_PATH)
+        if K_PATH != 0 do drop(K_PATH) end
         K_PATH = tmp_path
         K_COUNT = 0
         kv_t_alloc(1024)
         size = kv_h_size(h)
-        if size > 0 and size <= 33554432 then do
+        if size > 0 and size <= 33554432 do
             // Baca langsung ke buffer ber-headroom (pow2) supaya append
             // berikutnya tak langsung memicu realloc pasca-open.
             kv_mem_reserve(size)
@@ -391,37 +391,37 @@ kv_open(path) do
             valid_end = 0
             go = 1
             while go == 1 do
-                if off + KV_HDR > size then go = 0
+                if off + KV_HDR > size do go = 0
                 else do
                     tag = get_byte(buf, off)
                     kl = kv_u32le(buf, off + 1)
                     vl = kv_u32le(buf, off + 5)
                     total = KV_HDR + kl + vl + 4
                     if (tag != KV_TAG_PUT and tag != KV_TAG_DEL) or
-                       off + total > size then go = 0
+                       off + total > size do go = 0
                     else do
                         cr = kv_u32le(buf, off + total - 4)
                         act = kv_crc32(buf + off, total - 4)
-                        if act != cr then go = 0
+                        if act != cr do go = 0
                         else do
                             kptr = buf + off + KV_HDR
                             slot = kv_find_slot(kptr, kl)
-                            if slot >= 0 then do
+                            if slot >= 0 do
                                 was_dead = b64_at(K_TDEAD, slot)
                                 set_b64_at(K_TVOFF, slot, off + KV_HDR + kl)
                                 set_b64_at(K_TVLEN, slot, vl)
-                                if tag == KV_TAG_DEL then do
+                                if tag == KV_TAG_DEL do
                                     set_b64_at(K_TDEAD, slot, 1)
-                                    if was_dead == 0 then K_COUNT = K_COUNT - 1
-                                end else do
+                                    if was_dead == 0 do K_COUNT = K_COUNT - 1 end
+                                else do
                                     set_b64_at(K_TDEAD, slot, 0)
-                                    if was_dead == 1 then K_COUNT = K_COUNT + 1
+                                    if was_dead == 1 do K_COUNT = K_COUNT + 1 end
                                 end
-                            end else do
-                                nd = if tag == KV_TAG_DEL then true else false
+                            else do
+                                nd = if tag == KV_TAG_DEL do true else false end
                                 kv_t_insert_raw(kptr, kl,
                                         off + KV_HDR + kl, vl, nd)
-                                if nd == 0 then K_COUNT = K_COUNT + 1
+                                if nd == 0 do K_COUNT = K_COUNT + 1 end
                             end
                             off = off + total
                             valid_end = off
@@ -431,7 +431,7 @@ kv_open(path) do
             end
             K_MEMSZ = valid_end
             // pangkas ekor fisik rusak agar append tak tersangkut sampah
-            if valid_end < size then kv_h_truncate(h, valid_end)
+            if valid_end < size do kv_h_truncate(h, valid_end) end
         end
         1
     end
@@ -455,16 +455,16 @@ kv_put(key, klen, val, vlen) do
     kv_write_tail(rec, total, kv_crc32(rec, total - 4))
     ok = kv_append(rec, total)
     drop(rec)
-    if ok then do
+    if ok do
         base = K_MEMSZ - total
         slot = kv_find_slot(key, klen)
-        if slot >= 0 then do
+        if slot >= 0 do
             was_dead = b64_at(K_TDEAD, slot)
             set_b64_at(K_TVOFF, slot, base + KV_HDR + klen)
             set_b64_at(K_TVLEN, slot, vlen)
             set_b64_at(K_TDEAD, slot, 0)
-            if was_dead == 1 then K_COUNT = K_COUNT + 1
-        end else do
+            if was_dead == 1 do K_COUNT = K_COUNT + 1 end
+        else do
             kv_t_insert_raw(K_MEM + base + KV_HDR, klen,
                             base + KV_HDR + klen, vlen, 0)
             K_COUNT = K_COUNT + 1
@@ -476,12 +476,12 @@ end
 // ambil nilai; panjang / -1 tak ada / -2 kapasitas kurang
 kv_get(key, klen, out, cap) do
     slot = kv_find_slot(key, klen)
-    if slot < 0 then 0 - 1
+    if slot < 0 do 0 - 1
     else do
-        if b64_at(K_TDEAD, slot) == 1 then 0 - 1
+        if b64_at(K_TDEAD, slot) == 1 do 0 - 1
         else do
             vl = b64_at(K_TVLEN, slot)
-            if vl > cap then 0 - 2
+            if vl > cap do 0 - 2
             else do
                 mem_copy(out, K_MEM + b64_at(K_TVOFF, slot), vl)
                 vl
@@ -493,9 +493,9 @@ end
 // hapus (tombstone); 1 terhapus / 0 absen
 kv_del(key, klen) do
     slot = kv_find_slot(key, klen)
-    if slot < 0 then 0
+    if slot < 0 do 0
     else do
-        if b64_at(K_TDEAD, slot) == 1 then 0
+        if b64_at(K_TDEAD, slot) == 1 do 0
         else do
             total = KV_HDR + klen + 4
             rec = alloc(total)
@@ -512,7 +512,7 @@ kv_del(key, klen) do
             kv_write_tail(rec, total, kv_crc32(rec, total - 4))
             ok = kv_append(rec, total)
             drop(rec)
-            if ok then do
+            if ok do
                 set_b64_at(K_TDEAD, slot, 1)
                 K_COUNT = K_COUNT - 1
                 1
@@ -530,7 +530,7 @@ kv_count() = K_COUNT
 // rekaman yang baru ditulis (verifikasi mandiri).
 // Hasil: 1 sukses / 0 (tak ada sesi terbuka atau gagal muat-ulang).
 kv_compact() do
-    if K_HFILE == 0 then 0
+    if K_HFILE == 0 do 0
     else do
         path = K_PATH
         // pass 1: ukuran citra ramping
@@ -538,7 +538,7 @@ kv_compact() do
         i = 0
         while i < K_TCAP do
             kp = b64_at(K_TKEY, i)
-            if kp != 0 and b64_at(K_TDEAD, i) == 0 then do
+            if kp != 0 and b64_at(K_TDEAD, i) == 0 do
                 need = need + KV_HDR + b64_at(K_TKLEN, i) +
                        b64_at(K_TVLEN, i) + 4
             end
@@ -551,7 +551,7 @@ kv_compact() do
         i = 0
         while i < K_TCAP do
             kp = b64_at(K_TKEY, i)
-            if kp != 0 and b64_at(K_TDEAD, i) == 0 then do
+            if kp != 0 and b64_at(K_TDEAD, i) == 0 do
                 kl = b64_at(K_TKLEN, i)
                 vo = b64_at(K_TVOFF, i)
                 vl = b64_at(K_TVLEN, i)
@@ -567,8 +567,8 @@ kv_compact() do
                 set_byte(b, 7, (vl >> 16) & 255)
                 set_byte(b, 8, (vl >> 24) & 255)
                 mem_copy(nb_ + total + KV_HDR, kp, kl)
-                if vl > 0 then
-                    mem_copy(nb_ + total + KV_HDR + kl, K_MEM + vo, vl)
+                if vl > 0 do
+                    mem_copy(nb_ + total + KV_HDR + kl, K_MEM + vo, vl) end
                 kv_write_tail(nb_ + total, recsz,
                               kv_crc32(nb_ + total, recsz - 4))
                 total = total + recsz
@@ -579,7 +579,7 @@ kv_compact() do
         kv_sync()
         kv_h_close(K_HFILE)
         K_HFILE = 0
-        if K_MEM != 0 then drop(K_MEM)
+        if K_MEM != 0 do drop(K_MEM) end
         K_MEM = 0
         K_MEMSZ = 0
         K_MEMCAP = 0
@@ -598,12 +598,12 @@ end
 kv_close() do
     kv_h_flush(K_HFILE)
     kv_h_close(K_HFILE)
-    if K_MEM != 0 then drop(K_MEM)
-    if K_TKEY != 0 then drop(K_TKEY)
-    if K_TKLEN != 0 then drop(K_TKLEN)
-    if K_TVOFF != 0 then drop(K_TVOFF)
-    if K_TVLEN != 0 then drop(K_TVLEN)
-    if K_TDEAD != 0 then drop(K_TDEAD)
+    if K_MEM != 0 do drop(K_MEM) end
+    if K_TKEY != 0 do drop(K_TKEY) end
+    if K_TKLEN != 0 do drop(K_TKLEN) end
+    if K_TVOFF != 0 do drop(K_TVOFF) end
+    if K_TVLEN != 0 do drop(K_TVLEN) end
+    if K_TDEAD != 0 do drop(K_TDEAD) end
     K_HFILE = 0
     K_MEM = 0
     K_MEMSZ = 0
@@ -616,15 +616,15 @@ kv_close() do
     K_TDEAD = 0
     K_TCAP = 0
     K_TUSED = 0
-    if K_PATH != 0 then drop(K_PATH)
+    if K_PATH != 0 do drop(K_PATH) end
     K_PATH = 0
     0
 end
 
 // ---- dukungan pengujian integritas ----
 kv_mkdir(path) do
-    if is_linux() then syscall(258, 0 - 100, path, 493)   // mkdirat 0755
-    else call_dll(get_fn(kv_k32(), "CreateDirectoryA"), path, 0)
+    if is_linux() do syscall(258, 0 - 100, path, 493)   // mkdirat 0755
+    else call_dll(get_fn(kv_k32(), "CreateDirectoryA"), path, 0) end
     0
 end
 
@@ -632,7 +632,7 @@ end
 // Handle DITUTUP selalu (lihat ledger BL-006: read_file inti bocor).
 kv_file_size(path) do
     h = kv_h_open(path, 0)
-    if not kv_h_ok(h) then 0 - 1
+    if not kv_h_ok(h) do 0 - 1
     else do
         v = kv_h_size(h)
         kv_h_close(h)
@@ -644,7 +644,7 @@ end
 // pemeriksaan crc menolak korupsi.
 kv_debug_flip_byte(path, idx) do
     h = kv_h_open(path, 2)
-    if not kv_h_ok(h) then 0
+    if not kv_h_ok(h) do 0
     else do
         ob = alloc(1)
         set_byte(ob, 0, 0)
@@ -653,6 +653,6 @@ kv_debug_flip_byte(path, idx) do
         ok = kv_h_write_at(h, idx, ob, 1)
         kv_h_close(h)
         drop(ob)
-        if ok then true else false
+        if ok do true else false end
     end
 end

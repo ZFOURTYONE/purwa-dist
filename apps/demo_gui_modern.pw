@@ -53,7 +53,7 @@ main() do
             volume = gui_slider(app, "Output Gain Level", volume, 0, 100)
 
             gui_spacer(app, 6)
-            status_text = if turbo_mode then "ENGINE: TURBO ACTIVE" else "ENGINE: STANDBY"
+            status_text = if turbo_mode do "ENGINE: TURBO ACTIVE" else "ENGINE: STANDBY" end
             gui_badge(app, status_text, 16, 185, 129)
 
             gui_frame_end(app)

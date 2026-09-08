@@ -3,7 +3,7 @@ sieve(n) do
     p = 2
     count = 0
     while p * p <= n do
-        if primes[p] == 1 then do
+        if primes[p] == 1 do
             i = p * p
             while i <= n do
                 primes[i] = 0
@@ -14,7 +14,7 @@ sieve(n) do
     end
     j = 2
     while j <= n do
-        if primes[j] == 1 then count = count + 1
+        if primes[j] == 1 do count = count + 1 end
         j = j + 1
     end
     drop(primes)

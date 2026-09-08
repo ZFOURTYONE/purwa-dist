@@ -191,7 +191,7 @@ end
 
 pui_glyph(code) do
     c = code
-    if c >= 97 and c <= 122 then c = c - 32
+    if c >= 97 and c <= 122 do c = c - 32 end
     if c < 32 or c > 95 do c = 63 end
     PUI_FONT[c - 32]
 end
@@ -209,7 +209,7 @@ pui_draw_text(c: Canvas, s, x, y, sc, r, g, b) do
             baris_px = gl[dy]
             dx = 0
             while dx < 5 do
-                if baris_px % (pw2(4 - dx) * 2) >= pw2(4 - dx) then do
+                if baris_px % (pw2(4 - dx) * 2) >= pw2(4 - dx) do
                     cy = y + dy * sc
                     ex = 0
                     while ex < sc do
@@ -242,7 +242,7 @@ pw2(n) do
 end
 
 pui_isqrt(n) do
-    if n < 2 then n
+    if n < 2 do n
     else do
         x = n
         y = (x + 1) / 2
@@ -261,10 +261,10 @@ pui_round_rect(c: Canvas, x, y, w, h, rad, r, g, b) do
     dy = 0
     while dy < h do
         inset = 0
-        if dy < rd then do
+        if dy < rd do
             dyy = rd - dy
             inset = rd - pui_isqrt(rd * rd - dyy * dyy)
-        end else if dy >= h - rd then do
+        else if dy >= h - rd do
             dyy = dy - (h - rd - 1)
             inset = rd - pui_isqrt(rd * rd - dyy * dyy)
         end
@@ -280,10 +280,10 @@ const GAP = 8
 
 pui_measure(node, w) do
     j = node[N_KIND]
-    if j == J_TEXT then node[N_SC] * 8
-    else if j == J_SPACER then node[N_MINH]
-    else if j == J_BUTTON then node[N_MINH]
-    else if j == J_COLUMN then do
+    if j == J_TEXT do node[N_SC] * 8
+    else if j == J_SPACER do node[N_MINH]
+    else if j == J_BUTTON do node[N_MINH]
+    else if j == J_COLUMN do
         // kolom polos tanpa padding: total children + gap saja (konsisten dgn place)
         tot = 0
         i = 0
@@ -295,8 +295,7 @@ pui_measure(node, w) do
         hasil = tot
         if tot < node[N_MINH] do hasil = node[N_MINH] end
         hasil
-    end
-    else if j == J_ROW then do
+    else if j == J_ROW do
         mh = 0
         i = 0
         while i < node[N_NA] do
@@ -305,8 +304,7 @@ pui_measure(node, w) do
             i += 1
         end
         tot2 = mh + PAD * 2
-        if tot2 < node[N_MINH] then node[N_MINH] else tot2
-    end
+        if tot2 < node[N_MINH] do node[N_MINH] else tot2 end
     else do
         // kotak: seperti kolom
         totk = PAD * 2
@@ -317,7 +315,7 @@ pui_measure(node, w) do
             if i < na - 1 do totk = totk + GAP end
             i += 1
         end
-        if totk < node[N_MINH] then node[N_MINH] else totk
+        if totk < node[N_MINH] do node[N_MINH] else totk end
     end
 end
 
@@ -340,7 +338,7 @@ pui_hits_init() do
 end
 
 pui_hit_add(id, x, y, w, h) do
-    if HIT_N < HIT_MAX then do
+    if HIT_N < HIT_MAX do
         HIT_ID[HIT_N] = id
         HIT_X[HIT_N] = x
         HIT_Y[HIT_N] = y
@@ -355,41 +353,39 @@ end
 pui_place(c: Canvas, node, x, y, w, mx, my) do
     j = node[N_KIND]
     h = pui_measure(node, w)
-    if j == J_TEXT then do
+    if j == J_TEXT do
         tw = pui_text_width(node[N_TEXT], node[N_SC])
         tx = x
-        if node[N_ALIGN] == 1 then tx = x + (w - tw) / 2
-        else if node[N_ALIGN] == 2 then tx = x + w - tw
+        if node[N_ALIGN] == 1 do tx = x + (w - tw) / 2
+        else if node[N_ALIGN] == 2 do tx = x + w - tw end
         pui_draw_text(c, node[N_TEXT], tx, y + (h - node[N_SC] * 8) / 2, node[N_SC],
                       PUI_T[T_TEXT], PUI_T[T_TEXT + 1], PUI_T[T_TEXT + 2])
-    end
-    else if j == J_BUTTON then do
-        hover = if mx >= x and mx < x + w and my >= y and my < y + h then true else false
+    else if j == J_BUTTON do
+        hover = if mx >= x and mx < x + w and my >= y and my < y + h do true else false end
         // warna kustom (mis. merah utk action destruktif) mengalahkan tema
-        kustom = if node[N_R] != 0 or node[N_G] != 0 or node[N_B] != 0 then true else false
+        kustom = if node[N_R] != 0 or node[N_G] != 0 or node[N_B] != 0 do true else false end
         br = PUI_T[T_ACCENT]
         bg = PUI_T[T_ACCENT + 1]
         bb = PUI_T[T_ACCENT + 2]
-        if kustom == 1 then do
+        if kustom == 1 do
             br = node[N_R]
             bg = node[N_G]
             bb = node[N_B]
         end
-        if hover == 1 and kustom == 0 then do
+        if hover == 1 and kustom == 0 do
             br = PUI_T[T_ACCENT_DN]
             bg = PUI_T[T_ACCENT_DN + 1]
             bb = PUI_T[T_ACCENT_DN + 2]
         end
         pui_round_rect(c, x, y, w, h, 8, br, bg, bb)
-        if hover == 1 then canvas_draw_rect(c, x, y, w, h, 255, 255, 255, 255, 0)
+        if hover == 1 do canvas_draw_rect(c, x, y, w, h, 255, 255, 255, 255, 0) end
         tw = pui_text_width(node[N_TEXT], 2)
         pui_draw_text(c, node[N_TEXT], x + (w - tw) / 2, y + (h - 16) / 2, 2,
                       PUI_T[T_TXT_ON_ACC], PUI_T[T_TXT_ON_ACC + 1], PUI_T[T_TXT_ON_ACC + 2])
         pui_hit_add(node[N_ACTION], x, y, w, h)
-    end
-    else if j == J_ROW then do
+    else if j == J_ROW do
         n = node[N_NA]
-        if n > 0 then do
+        if n > 0 do
             iw = (w - PAD * 2 - GAP * (n - 1)) / n
             cx = x + PAD
             mh = h - PAD * 2
@@ -403,8 +399,7 @@ pui_place(c: Canvas, node, x, y, w, mx, my) do
                 i += 1
             end
         end
-    end
-    else if j == J_BOX then do
+    else if j == J_BOX do
         pui_round_rect(c, x, y, w, h, 10, node[N_R], node[N_G], node[N_B])
         cy = y + PAD
         n = node[N_NA]
@@ -415,8 +410,7 @@ pui_place(c: Canvas, node, x, y, w, mx, my) do
             cy = cy + pui_measure(an, w - PAD * 2) + GAP
             i += 1
         end
-    end
-    else if j == J_COLUMN then do
+    else if j == J_COLUMN do
         cy = y
         n = node[N_NA]
         i = 0
@@ -441,7 +435,7 @@ pui_frame(c: Canvas, root, sw, sh, mx, my, cx, cy) do
     ketemu = 0
     i = HIT_N - 1
     while i >= 0 and ketemu == 0 do
-        if cx >= HIT_X[i] and cx < HIT_X[i] + HIT_W[i] and cy >= HIT_Y[i] and cy < HIT_Y[i] + HIT_H[i] then do
+        if cx >= HIT_X[i] and cx < HIT_X[i] + HIT_W[i] and cy >= HIT_Y[i] and cy < HIT_Y[i] + HIT_H[i] do
             ketemu = HIT_ID[i]
         end
         i -= 1
@@ -455,26 +449,26 @@ pui_run(title, sw, sh, initial_state, build_fn, event_fn) do
     pui_init_font()
     pui_hits_init()
     win = gui_open_window(title, sw, sh)
-    if win == 0 then 0
+    if win == 0 do 0
     else do
         c = canvas_create(sw, sh)
         state = initial_state
         jalan = 1
         while jalan == 1 do
-            if not gui_is_open(win) then jalan = 0
-            else if gui_key_esc(win) != 0 then jalan = 0
+            if not gui_is_open(win) do jalan = 0
+            else if gui_key_esc(win) != 0 do jalan = 0
             else do
                 gui_poll_events(win)
                 cx = 0 - 1
                 cy = 0 - 1
-                if gui_click_pending(win) > 0 then do
+                if gui_click_pending(win) > 0 do
                     (cx, cy) = gui_pop_click(win)
                 end
                 mx = gui_mouse_x(win)
                 my = gui_mouse_y(win)
                 root = build_fn(state)
                 id = pui_frame(c, root, sw, sh, mx, my, cx, cy)
-                if id > 0 then state = event_fn(state, id)
+                if id > 0 do state = event_fn(state, id) end
                 gui_blit_canvas(win, c)
             end
         end
@@ -510,10 +504,10 @@ pui_has_flag(cmd, pat) do
         j = 0
         sama = 1
         while j < pn and sama == 1 do
-            if get_byte(cmd, i + j) != get_byte(pat, j) then sama = 0
+            if get_byte(cmd, i + j) != get_byte(pat, j) do sama = 0 end
             j += 1
         end
-        if sama == 1 then ketemu = 1
+        if sama == 1 do ketemu = 1 end
         i += 1
     end
     ketemu
@@ -524,7 +518,7 @@ pui_count_color(buf, n, r, g, b) do
     cnt = 0
     i = 0
     while i + 3 < n do
-        if get_byte(buf, i) == b and get_byte(buf, i + 1) == g and get_byte(buf, i + 2) == r then cnt += 1
+        if get_byte(buf, i) == b and get_byte(buf, i + 1) == g and get_byte(buf, i + 2) == r do cnt += 1 end
         i += 4
     end
     cnt
@@ -535,20 +529,20 @@ pui_standard_test(root, sw, sh, buf, n) do
     fails = 0
 
     // 1. pojok kiri atas = warna latar tema (byte B,G,R)
-    if get_byte(buf, 0) != PUI_T[T_BG + 2] or get_byte(buf, 1) != PUI_T[T_BG + 1] or get_byte(buf, 2) != PUI_T[T_BG] then do
+    if get_byte(buf, 0) != PUI_T[T_BG + 2] or get_byte(buf, 1) != PUI_T[T_BG + 1] or get_byte(buf, 2) != PUI_T[T_BG] do
         fails = fails + 1
         show("uji gagal: pojok bukan warna latar\n")
     end
 
     // 2. ada tinta teks putih (elemen label tergambar)
-    if pui_count_color(buf, n, PUI_T[T_TEXT], PUI_T[T_TEXT + 1], PUI_T[T_TEXT + 2]) == 0 then do
+    if pui_count_color(buf, n, PUI_T[T_TEXT], PUI_T[T_TEXT + 1], PUI_T[T_TEXT + 2]) == 0 do
         fails = fails + 1
         show("uji gagal: tidak ada tinta teks\n")
     end
 
     // 3. layout muat di jendela
     th = pui_measure(root, sw)
-    if th > sh then do
+    if th > sh do
         fails = fails + 1
         show("uji gagal: layout meluber (tinggi=")
         show_num(th)
@@ -560,16 +554,16 @@ pui_standard_test(root, sw, sh, buf, n) do
     ambang = (sw * sh) / 200
     i = 0
     while i + 3 < n and beda <= ambang do
-        if get_byte(buf, i) != PUI_T[T_BG + 2] or get_byte(buf, i + 1) != PUI_T[T_BG + 1] or get_byte(buf, i + 2) != PUI_T[T_BG] then beda += 1
+        if get_byte(buf, i) != PUI_T[T_BG + 2] or get_byte(buf, i + 1) != PUI_T[T_BG + 1] or get_byte(buf, i + 2) != PUI_T[T_BG] do beda += 1 end
         i += 4
     end
-    if beda <= ambang then do
+    if beda <= ambang do
         fails = fails + 1
         show("uji gagal: kanvas nyaris kosong\n")
     end
 
     // 5. tombol terdaftar di tabel hit bila ada (konsistensi internal)
-    if HIT_N > HIT_MAX then do
+    if HIT_N > HIT_MAX do
         fails = fails + 1
         show("uji gagal: tabel hit meluber\n")
     end
@@ -580,7 +574,7 @@ end
 // pinto tunggal aplikasi: deteksi --selftest, jalankan uji atau GUI
 pui_start(title, sw, sh, initial_state, build_fn, event_fn) do
     cmdline = args()
-    if pui_has_flag(cmdline, "-selftest") then do
+    if pui_has_flag(cmdline, "-selftest") do
         pui_init_theme()
         pui_init_font()
         pui_hits_init()
@@ -596,7 +590,7 @@ pui_start(title, sw, sh, initial_state, build_fn, event_fn) do
         canvas_save_bmp(c, "selftest.bmp")
         canvas_destroy(c)
         fails
-    end else do
+    else do
         pui_run(title, sw, sh, initial_state, build_fn, event_fn)
         0
     end

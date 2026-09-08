@@ -1,6 +1,6 @@
 tco(n, acc) do
-    if n == 0 then acc
-    else tco(n - 1, acc + 1)
+    if n == 0 do acc
+    else tco(n - 1, acc + 1) end
 end
 
 main() do

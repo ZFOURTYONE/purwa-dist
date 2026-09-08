@@ -33,7 +33,7 @@ end
 vec_push(v, x) do
     cap = v[0]
     n = v[1]
-    if n == cap then do
+    if n == cap do
         ncap = cap * 2
         nd = make_array(ncap, 0)
         i = 0
@@ -55,7 +55,7 @@ end
 vec_pop(v) do
     // tanpa cek kosong: pasangkan dengan vec_len(v) > 0 dari penelepon
     n = v[1]
-    if n == 0 then 0
+    if n == 0 do 0
     else do
         d = v[2]
         x = d[n - 1]
@@ -86,7 +86,7 @@ end
 
 stack_peek(s) do
     n = s[1]
-    if n == 0 then 0
+    if n == 0 do 0
     else do
         d = s[2]
         d[n - 1]
@@ -118,12 +118,12 @@ queue_enqueue(q, x) do
 end
 
 queue_dequeue(q) do
-    if queue_len(q) == 0 then 0
+    if queue_len(q) == 0 do 0
     else do
         d = q[2]
         x = d[q[3]]
         q[3] = q[3] + 1
-        if q[3] == q[1] then do
+        if q[3] == q[1] do
             q[3] = 0
             q[1] = 0
         end

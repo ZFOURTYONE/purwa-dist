@@ -21,42 +21,40 @@ end
 jp_skip_value(text, i) do
     L = str_len(text)
     i = jp_skip_ws(text, i)
-    if i >= L then L
+    if i >= L do L
     else do
         c = get_byte(text, i)
-        if c == 34 then do
+        if c == 34 do
             // string with escapes
             i = i + 1
             done = false
             while i < L and not done do
                 c2 = get_byte(text, i)
-                if c2 == 92 then i = i + 2
-                else if c2 == 34 then do done = true; i = i + 1 end
-                else i = i + 1
+                if c2 == 92 do i = i + 2
+                else if c2 == 34 do done = true; i = i + 1 else i = i + 1 end
             end
             i
-        end else if c == 123 or c == 91 then do
+        else if c == 123 or c == 91 do
             // object { or array [ — nested
             depth = 1
             i = i + 1
             while i < L and depth > 0 do
                 c2 = get_byte(text, i)
-                if c2 == 34 then do
+                if c2 == 34 do
                     // string inside — skip with escapes
                     i = i + 1
                     done = false
                     while i < L and not done do
                         c3 = get_byte(text, i)
-                        if c3 == 92 then i = i + 2
-                        else if c3 == 34 then do done = true; i = i + 1 end
-                        else i = i + 1
+                        if c3 == 92 do i = i + 2
+                        else if c3 == 34 do done = true; i = i + 1 else i = i + 1 end
                     end
-                end else if c2 == 123 or c2 == 91 then depth = depth + 1
-                else if c2 == 125 or c2 == 93 then depth = depth - 1
-                else i = i + 1
+                else if c2 == 123 or c2 == 91 do depth = depth + 1
+                else if c2 == 125 or c2 == 93 do depth = depth - 1
+                else i = i + 1 end
             end
             i
-        end else if (c >= 48 and c <= 57) or c == 45 then do
+        else if (c >= 48 and c <= 57) or c == 45 do
             // number
             i = i + 1
             while i < L and ((get_byte(text, i) >= 48 and get_byte(text, i) <= 57)
@@ -64,10 +62,10 @@ jp_skip_value(text, i) do
                    or get_byte(text, i) == 69 or get_byte(text, i) == 43
                    or get_byte(text, i) == 45) do i = i + 1 end
             i
-        end else if c == 116 then i + 4
-        else if c == 102 then i + 5
-        else if c == 110 then i + 4
-        else i
+        else if c == 116 do i + 4
+        else if c == 102 do i + 5
+        else if c == 110 do i + 4
+        else i end
     end
 end
 
@@ -77,18 +75,18 @@ end
 jp_skip_to_elem(text, start, n) do
     i = jp_skip_ws(text, start)
     L = str_len(text)
-    if i >= L or get_byte(text, i) != 91 then L
+    if i >= L or get_byte(text, i) != 91 do L
     else do
         i = i + 1  // skip '['
         idx = 0
         while idx < n do
             i = jp_skip_ws(text, i)
-            if i >= L then L
+            if i >= L do L
             else do
                 i = jp_skip_value(text, i)
                 i = jp_skip_ws(text, i)
-                if i < L and get_byte(text, i) == 44 then i = i + 1 else L
-                if i < L then idx = idx + 1 else L
+                if i < L and get_byte(text, i) == 44 do i = i + 1 else L end
+                if i < L do idx = idx + 1 else L end
             end
         end
         i
@@ -104,30 +102,29 @@ jp_find_key(text, start, key) do
     found = 0 - 1
     while i < L and found < 0 do
         c = get_byte(text, i)
-        if c == 34 then do
+        if c == 34 do
             // compare key
             si = i + 1
             is_eq = true
             j = 0
             while j < kL and is_eq and si + j < L do
-                if get_byte(text, si + j) != get_byte(key, j) then is_eq = false
+                if get_byte(text, si + j) != get_byte(key, j) do is_eq = false end
                 j = j + 1
             end
-            if is_eq and si + kL < L and get_byte(text, si + kL) == 34 then do
+            if is_eq and si + kL < L and get_byte(text, si + kL) == 34 do
                 ci = si + kL + 1
                 while ci < L and get_byte(text, ci) != 58 do ci = ci + 1 end
-                if ci < L then found = ci + 1
+                if ci < L do found = ci + 1 end
             end
             // skip the whole string value
             i = i + 1
             done = false
             while i < L and not done do
                 c2 = get_byte(text, i)
-                if c2 == 92 then i = i + 2
-                else if c2 == 34 then do done = true; i = i + 1 end
-                else i = i + 1
+                if c2 == 92 do i = i + 2
+                else if c2 == 34 do done = true; i = i + 1 else i = i + 1 end
             end
-        end else i = i + 1
+        else i = i + 1 end
     end
     found
 end
@@ -138,10 +135,10 @@ end
 jp_parse_seg(path, start, buf, bufsz) do
     L = str_len(path)
     i = jp_skip_ws(path, start)
-    if i >= L then (0, i)
+    if i >= L do (0, i)
     else do
         c = get_byte(path, i)
-        if c == 91 then do
+        if c == 91 do
             // array index [N]
             i = i + 1
             w = 0
@@ -151,10 +148,10 @@ jp_parse_seg(path, start, buf, bufsz) do
                 i = i + 1
             end
             set_byte(buf, w, 0)
-            if i < L and get_byte(path, i) == 93 then i = i + 1
+            if i < L and get_byte(path, i) == 93 do i = i + 1 end
             (buf, i)
-        end else do
-            if i < L and get_byte(path, i) == 46 then i = i + 1
+        else do
+            if i < L and get_byte(path, i) == 46 do i = i + 1 end
             w = 0
             while i < L and get_byte(path, i) != 46 and get_byte(path, i) != 91
                   and get_byte(path, i) > 32 and w < bufsz - 1 do
@@ -170,7 +167,7 @@ end
 
 // jp_is_arr_seg(buf): true if segment is an array index, false if object key
 jp_is_arr_seg(buf) do
-    if get_byte(buf, 0) >= 48 and get_byte(buf, 0) <= 57 then true else false
+    if get_byte(buf, 0) >= 48 and get_byte(buf, 0) <= 57 do true else false end
 end
 
 // jp_seg_to_int(buf): parse array index to integer
@@ -188,7 +185,7 @@ end
 // Returns index in text where the value starts, or -1 if not found.
 jp_nav(text, path) do
     L = str_len(path)
-    if L == 0 then 0
+    if L == 0 do 0
     else do
         buf = alloc(256)
         pos = 0
@@ -196,41 +193,41 @@ jp_nav(text, path) do
         found = true
         while pi < L and found do
             (seg, pi2) = jp_parse_seg(path, pi, buf, 256)
-            if jp_is_arr_seg(seg) then do
+            if jp_is_arr_seg(seg) do
                 idx = jp_seg_to_int(seg)
                 pos = jp_skip_to_elem(text, pos, idx)
-                if pos >= str_len(text) then found = false
-            end else do
+                if pos >= str_len(text) do found = false end
+            else do
                 pos = jp_find_key(text, pos, seg)
-                if pos < 0 then found = false
+                if pos < 0 do found = false end
             end
             pi = pi2
         end
         drop(buf)
-        if found then pos else 0 - 1
+        if found do pos else 0 - 1 end
     end
 end
 
 // ---- public: extract string value at path ----
 // jp_hex_val(c): nilai hex digit ('0'-'9','a'-'f','A'-'F'); -1 jika bukan hex.
 jp_hex_val(c) do
-    if c >= 48 and c <= 57 then c - 48
-    else if c >= 97 and c <= 102 then c - 87
-    else if c >= 65 and c <= 70 then c - 55
-    else 0 - 1
+    if c >= 48 and c <= 57 do c - 48
+    else if c >= 97 and c <= 102 do c - 87
+    else if c >= 65 and c <= 70 do c - 55
+    else 0 - 1 end
 end
 
 // jp_utf8_write(out, w, cp): tulis codepoint cp (≤0xFFFF) sebagai UTF-8,
 // return posisi w baru.
 jp_utf8_write(out, w, cp) do
-    if cp < 128 then do
+    if cp < 128 do
         set_byte(out, w, cp)
         w + 1
-    end else if cp < 2048 then do
+    else if cp < 2048 do
         set_byte(out, w, 192 + (cp >> 6))
         set_byte(out, w + 1, 128 + (cp & 63))
         w + 2
-    end else do
+    else do
         set_byte(out, w, 224 + (cp >> 12))
         set_byte(out, w + 1, 128 + ((cp >> 6) & 63))
         set_byte(out, w + 2, 128 + (cp & 63))
@@ -240,19 +237,19 @@ end
 
 jp_get_str(text, path) do
     pos = jp_nav(text, path)
-    if pos < 0 then ""
+    if pos < 0 do ""
     else do
         i = jp_skip_ws(text, pos)
-        if i >= str_len(text) or get_byte(text, i) != 34 then ""
+        if i >= str_len(text) or get_byte(text, i) != 34 do ""
         else do
             i = i + 1
             // count output length (estimasi; \uXXXX bisa >1 byte)
             n = 0
             j = i
             while j < str_len(text) and get_byte(text, j) != 34 do
-                if get_byte(text, j) == 92 and j + 1 < str_len(text) then do
+                if get_byte(text, j) == 92 and j + 1 < str_len(text) do
                     j = j + 1
-                    if get_byte(text, j) == 117 then j = j + 4  // \uXXXX
+                    if get_byte(text, j) == 117 do j = j + 4 end  // \uXXXX
                 end
                 n = n + 1
                 j = j + 1
@@ -261,38 +258,38 @@ jp_get_str(text, path) do
             w = 0
             while i < str_len(text) and get_byte(text, i) != 34 do
                 c = get_byte(text, i)
-                if c == 92 and i + 1 < str_len(text) then do
+                if c == 92 and i + 1 < str_len(text) do
                     i = i + 1
                     c2 = get_byte(text, i)
-                    if c2 == 110 then do set_byte(out, w, 10); w = w + 1
-                    end else if c2 == 114 then do set_byte(out, w, 13); w = w + 1
-                    end else if c2 == 116 then do set_byte(out, w, 9); w = w + 1
-                    end else if c2 == 34 then do set_byte(out, w, 34); w = w + 1
-                    end else if c2 == 92 then do set_byte(out, w, 92); w = w + 1
-                    end else if c2 == 117 then do
+                    if c2 == 110 do set_byte(out, w, 10); w = w + 1
+                    else if c2 == 114 do set_byte(out, w, 13); w = w + 1
+                    else if c2 == 116 do set_byte(out, w, 9); w = w + 1
+                    else if c2 == 34 do set_byte(out, w, 34); w = w + 1
+                    else if c2 == 92 do set_byte(out, w, 92); w = w + 1
+                    else if c2 == 117 do
                         // \uXXXX — decode 4 hex digits ke UTF-8
-                        if i + 4 < str_len(text) then do
+                        if i + 4 < str_len(text) do
                             h1 = jp_hex_val(get_byte(text, i + 1))
                             h2 = jp_hex_val(get_byte(text, i + 2))
                             h3 = jp_hex_val(get_byte(text, i + 3))
                             h4 = jp_hex_val(get_byte(text, i + 4))
-                            if h1 >= 0 and h2 >= 0 and h3 >= 0 and h4 >= 0 then do
+                            if h1 >= 0 and h2 >= 0 and h3 >= 0 and h4 >= 0 do
                                 cp = (h1 << 12) | (h2 << 8) | (h3 << 4) | h4
                                 w = jp_utf8_write(out, w, cp)
                                 i = i + 4
-                            end else do
+                            else do
                                 set_byte(out, w, 92)
                                 w = w + 1
                             end
-                        end else do
+                        else do
                             set_byte(out, w, 92)
                             w = w + 1
                         end
-                    end else do
+                    else do
                         set_byte(out, w, c2)
                         w = w + 1
                     end
-                end else do
+                else do
                     set_byte(out, w, c)
                     w = w + 1
                 end
@@ -310,19 +307,19 @@ end
 // ---- public: extract number value at path ----
 jp_get_num(text, path) do
     pos = jp_nav(text, path)
-    if pos < 0 then 0
+    if pos < 0 do 0
     else do
         i = jp_skip_ws(text, pos)
-        if i >= str_len(text) then 0
+        if i >= str_len(text) do 0
         else do
             neg = false
-            if get_byte(text, i) == 45 then do neg = true; i = i + 1 end
+            if get_byte(text, i) == 45 do neg = true; i = i + 1 end
             v = 0
             while i < str_len(text) and get_byte(text, i) >= 48 and get_byte(text, i) <= 57 do
                 v = v * 10 + (get_byte(text, i) - 48)
                 i = i + 1
             end
-            if neg then 0 - v else v
+            if neg do 0 - v else v end
         end
     end
 end
@@ -330,15 +327,15 @@ end
 // ---- public: extract raw JSON substring at path ----
 jp_get_raw(text, path) do
     pos = jp_nav(text, path)
-    if pos < 0 then ""
+    if pos < 0 do ""
     else do
         start = jp_skip_ws(text, pos)
         endp = jp_skip_value(text, start)
-        if endp > start then slice(text, start, endp) else ""
+        if endp > start do slice(text, start, endp) else "" end
     end
 end
 
 // ---- public: check if path exists ----
 jp_has(text, path) do
-    if jp_nav(text, path) >= 0 then true else false
+    if jp_nav(text, path) >= 0 do true else false end
 end

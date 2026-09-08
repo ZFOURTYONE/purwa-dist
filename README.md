@@ -4,7 +4,7 @@
 **A self-hosting systems programming language that compiles straight to native
 machine code — no LLVM, no GCC, no external linker, no CRT.**
 
-![Version](https://img.shields.io/badge/version-v37.37-6d28d9)
+![Version](https://img.shields.io/badge/version-v38.0-6d28d9)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20x86--64%20%7C%20Linux%20ARM64-informational)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen)
 ![Compiler](https://img.shields.io/badge/Compiler-%7E330%20KB-blue)
@@ -16,7 +16,7 @@ and cross-compiles to Linux ELF64 (x86-64 **and ARM64**) from the same command
 line.
 
 This package contains everything you need: **compiler (three targets), formatter,
-editor language server, and a speed-testing tool**. No installation required —
+and editor language server**. No installation required —
 download, unzip, and run.
 
 ---
@@ -46,13 +46,13 @@ That's it. No runtime, no libraries, no PATH setup beyond where you put
 | `purwac.exe` / `purwac-win64.exe` | The compiler — build, cross-compile, JIT, REPL, watch mode |
 | `purwac-linux` | Same compiler, Linux x86-64 ELF64 build |
 | `purwac-arm64` | Same compiler, Linux ARM64 (aarch64) ELF64 build |
-| `purwa-fmt.exe` | Source code formatter |
-| `purwa-lsp.exe` | Language Server Protocol (LSP 3.17) server for editor support |
-| `speednet.exe` / `speednet-linux` | Internet speed & ping tester (command-line) |
+| `tools/purwa-fmt.exe` / `tools/purwa-fmt-linux` | Source code formatter (Windows / Linux) |
+| `tools/purwa-lsp.exe` / `tools/purwa-lsp-linux` | Language Server Protocol (LSP 3.17) server for editor support |
+| `tools/pw-pack.exe` + `tools/pw_pack.pw` | Package manager (binary + source) |
+| `ext/purwa-lang-38.0.0.vsix` | Pre-built VS Code extension package |
 | `lib/` | Bundled standard libraries (35+ modules: net, json, crypto, tensor, …) |
 | `apps/` | Example applications |
 | `plugins/` | Optional plugin sources |
-| `tools/pw_pack.pw` | Package tool source |
 | `benchmarks/` | Cross-language benchmark suite (C, Rust, Go, Zig, Node, Python, Purwa) |
 
 ---
@@ -65,7 +65,7 @@ That's it. No runtime, no libraries, no PATH setup beyond where you put
   itself (bit-for-bit reproducible bootstrap).
 - **Triple-target** — Windows PE32+, Linux x86-64 ELF64, and Linux ARM64
   (aarch64) ELF64 from the same source; all three fixpoints byte-verified.
-- **Tiny & fast** — hello-world is ~1.5 KB; the compiler rebuilds itself in
+- **Tiny & fast** — hello-world is ~2 KB; the compiler rebuilds itself in
   ~0.2 s.
 - **Secure output (W^X)** — every generated executable uses separate
   *read-execute* (code) and *read-write* (data) segments. No segment is both
@@ -136,4 +136,4 @@ this release.
 
 ---
 
-*Purwa v37.37* · Windows x86-64 (PE32+) · Linux x86-64 (ELF64) · Linux ARM64 (ELF64) · [SHA256SUMS.txt](SHA256SUMS.txt)
+*Purwa v38.0* · Windows x86-64 (PE32+) · Linux x86-64 (ELF64) · Linux ARM64 (ELF64) · [SHA256SUMS.txt](SHA256SUMS.txt)

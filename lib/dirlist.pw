@@ -14,11 +14,11 @@ global g_dir_find_data = 0  // 320-byte WIN32_FIND_DATAA
 global g_dir_scratch = 0    // Linux: buffer getdents64 persisten (hindari drop bug H3#b)
 
 dir_init() do
-    if is_linux() then do
-        if g_dir_scratch == 0 then g_dir_scratch = alloc(8192)
-    end else if g_dir_k32 == 0 then do
+    if is_linux() do
+        if g_dir_scratch == 0 do g_dir_scratch = alloc(8192) end
+    else if g_dir_k32 == 0 do
         g_dir_k32 = load_dll("kernel32.dll")
-        if g_dir_k32 != 0 then do
+        if g_dir_k32 != 0 do
             g_dir_ff = get_fn(g_dir_k32, "FindFirstFileA")
             g_dir_fn = get_fn(g_dir_k32, "FindNextFileA")
             g_dir_fc = get_fn(g_dir_k32, "FindClose")
@@ -33,7 +33,7 @@ end
 dir_name_raw() do
     L = 0
     while L < 260 and get_byte(g_dir_find_data, 44 + L) != 0 do L = L + 1 end
-    if L > 0 then dir_raw_copy(g_dir_find_data, 44, L) else ""
+    if L > 0 do dir_raw_copy(g_dir_find_data, 44, L) else "" end
 end
 
 // Hitung posisi offset di buf untuk file ke-k (0-indexed)
@@ -56,7 +56,7 @@ dir_buf_write(buf, max, pos, nm) do
         set_byte(buf, pos + w, get_byte(nm, w))
         w = w + 1
     end
-    if pos + w < max - 1 then do
+    if pos + w < max - 1 do
         set_byte(buf, pos + w, 10)
         1
     end
@@ -64,8 +64,8 @@ end
 
 // dir_list(path, buf, max): listing file ke buf, return count.
 dir_list(path, buf, max) do
-    if is_linux() then dir_linux_list(path, buf, max)
-    else dir_win_list(path, buf, max)
+    if is_linux() do dir_linux_list(path, buf, max)
+    else dir_win_list(path, buf, max) end
 end
 
 // --- cabang Linux ---
@@ -86,20 +86,20 @@ end
 dir_linux_name(off) do
     L = 0
     while L < 256 and get_byte(g_dir_scratch, off + L) != 0 do L = L + 1 end
-    if L > 0 then dir_raw_copy(g_dir_scratch, off, L) else ""
+    if L > 0 do dir_raw_copy(g_dir_scratch, off, L) else "" end
 end
 
 dir_linux_list(path, buf, max) do
     dir_init()
     // openat(AT_FDCWD=-100, path, O_RDONLY|O_DIRECTORY=65536)
     fd = syscall(257, 0 - 100, path, 65536)
-    if fd < 0 then 0 - 1
+    if fd < 0 do 0 - 1
     else do
         count = 0
         more = true
         while more do
             n = syscall(217, fd, g_dir_scratch, 8192)   // getdents64
-            if n <= 0 then more = false
+            if n <= 0 do more = false
             else do
                 i = 0
                 while i < n do
@@ -109,10 +109,10 @@ dir_linux_list(path, buf, max) do
                     c1 = get_byte(g_dir_scratch, i + 20)
                     is_dot = c0 == 46 and (c1 == 0
                         or (c1 == 46 and get_byte(g_dir_scratch, i + 21) == 0))
-                    if not is_dot then do
+                    if not is_dot do
                         nm = dir_linux_name(i + 19)
                         pos = dir_buf_pos(buf, count)
-                        if dir_buf_write(buf, max, pos, nm) then count = count + 1
+                        if dir_buf_write(buf, max, pos, nm) do count = count + 1 end
                         drop(nm)
                     end
                     i = i + reclen
@@ -121,7 +121,7 @@ dir_linux_list(path, buf, max) do
         end
         syscall(3, fd)   // close
         pos = dir_buf_pos(buf, count)
-        if pos < max then set_byte(buf, pos, 0)
+        if pos < max do set_byte(buf, pos, 0) end
         count
     end
 end
@@ -129,12 +129,12 @@ end
 // --- cabang Windows (FFI FindFirstFileA) ---
 dir_win_list(path, buf, max) do
     dir_init()
-    if g_dir_ff == 0 then 0 - 1
+    if g_dir_ff == 0 do 0 - 1
     else do
         L = str_len(path)
         search = path
         search_wild = 0
-        if L > 0 and get_byte(path, L - 1) != 42 then do
+        if L > 0 and get_byte(path, L - 1) != 42 do
             search_wild = alloc(L + 3)
             mem_copy(search_wild, path, L)
             set_byte(search_wild, L, 92)
@@ -143,13 +143,13 @@ dir_win_list(path, buf, max) do
             search = search_wild
         end
         h = call_dll(g_dir_ff, search, g_dir_find_data)
-        if search_wild != 0 then drop(search_wild)
-        if h == 0 - 1 then 0
+        if search_wild != 0 do drop(search_wild) end
+        if h == 0 - 1 do 0
         else do
             count = 0
             nm = dir_name_raw()
-            if str_len(nm) > 0 then do
-                if not str_eq(nm, ".") and not str_eq(nm, "..") then do
+            if str_len(nm) > 0 do
+                if not str_eq(nm, ".") and not str_eq(nm, "..") do
                     dir_buf_write(buf, max, 0, nm)
                     count = 1
                 end
@@ -157,13 +157,13 @@ dir_win_list(path, buf, max) do
             end
             go = true
             while go do
-                if call_dll(g_dir_fn, h, g_dir_find_data) == 0 then go = false
+                if call_dll(g_dir_fn, h, g_dir_find_data) == 0 do go = false
                 else do
                     nm = dir_name_raw()
-                    if str_len(nm) > 0 then do
-                        if not str_eq(nm, ".") and not str_eq(nm, "..") then do
+                    if str_len(nm) > 0 do
+                        if not str_eq(nm, ".") and not str_eq(nm, "..") do
                             pos = dir_buf_pos(buf, count)
-                            if dir_buf_write(buf, max, pos, nm) then count = count + 1
+                            if dir_buf_write(buf, max, pos, nm) do count = count + 1 end
                         end
                         drop(nm)
                     end
@@ -171,7 +171,7 @@ dir_win_list(path, buf, max) do
             end
             call_dll(g_dir_fc, h)
             pos = dir_buf_pos(buf, count)
-            if pos < max then set_byte(buf, pos, 0)
+            if pos < max do set_byte(buf, pos, 0) end
             count
         end
     end

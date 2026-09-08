@@ -16,5 +16,5 @@ main() do
             ok = false
         end
     end
-    if ok then 0 else 1
+    if ok do 0 else 1 end
 end

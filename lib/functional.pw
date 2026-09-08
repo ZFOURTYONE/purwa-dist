@@ -27,7 +27,7 @@ filter_array(arr, len, pred_ptr) do
     while i < len do
         val = arr[i]
         keep = pred_ptr(val)
-        if keep != 0 then do
+        if keep != 0 do
             tmp[cnt] = val
             cnt = cnt + 1
         end

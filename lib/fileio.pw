@@ -14,21 +14,21 @@ struct FileBuf {
 
 file_read(path): FileBuf do
     k32 = load_dll("kernel32.dll")
-    if k32 == 0 then do
+    if k32 == 0 do
         0
-    end else do
+    else do
         // CreateFileA(path, GENERIC_READ, FILE_SHARE_READ|WRITE,
         //             0 security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0)
         h = call_dll(get_fn(k32, "CreateFileA"),
                      path, 2147483648, 3, 0, 3, 128, 0)
-        if h == 0 or h == 0 - 1 then do
+        if h == 0 or h == 0 - 1 do
             0
-        end else do
+        else do
             sz = call_dll(get_fn(k32, "GetFileSize"), h, 0)
-            if sz == 0 - 1 or sz == 0 or sz > 65536 then do
+            if sz == 0 - 1 or sz == 0 or sz > 65536 do
                 call_dll(get_fn(k32, "CloseHandle"), h)
                 0
-            end else do
+            else do
                 buf = alloc(sz)
                 mem_set(buf, 0, sz)
                 br = alloc(8)
@@ -38,9 +38,9 @@ file_read(path): FileBuf do
                         get_byte(br, 2) * 65536 + get_byte(br, 3) * 16777216
                 call_dll(get_fn(k32, "CloseHandle"), h)
                 drop(br)
-                if ok and nread > 0 then do
+                if ok and nread > 0 do
                     FileBuf(buf, nread)
-                end else do
+                else do
                     drop(buf)
                     0
                 end

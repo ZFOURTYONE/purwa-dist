@@ -101,7 +101,7 @@ nui_dark_install(win: GuiWindow) do
 
     // tema kontrol gelap bila tersedia (abaikan kegagalan dengan tenang)
     ux = load_dll("uxtheme.dll")
-    if ux != 0 then NU_F_THEME = get_fn(ux, "SetWindowTheme")
+    if ux != 0 do NU_F_THEME = get_fn(ux, "SetWindowTheme") end
 
     // kuas latar slate-900: COLORREF 0x002A170F (r15 g23 b42)
     fn_csbrush = get_fn(win.g32, "CreateSolidBrush")
@@ -154,7 +154,7 @@ nui_make_font(h, weight) do
     lf = alloc(128)
     mem_set(lf, 0, 128)
     // lfHeight int32 di offset 0
-    hh = if h < 0 then 4294967296 + h else h
+    hh = if h < 0 do 4294967296 + h else h end
     canvas_write_u32(lf, 0, hh)
     canvas_write_u32(lf, 16, weight)         // lfWeight
     set_byte(lf, 20, 0)                       // italic
@@ -186,7 +186,7 @@ nui_setup(win: GuiWindow) do
     NU_HFONT_BODY = nui_make_font(0 - 16, 400)
     NU_HFONT_HEAD = nui_make_font(0 - 26, 600)
     nui_init_tables()
-    if NU_DARK == 1 then nui_dark_install(win)
+    if NU_DARK == 1 do nui_dark_install(win) end
     0
 end
 
@@ -207,7 +207,7 @@ end
 
 nui_theme_ctl(hwnd) do
     // terapkan tema kontrol gelap (no-op aman bila tak tersedia)
-    if NU_DARK == 1 and NU_F_THEME != 0 then do
+    if NU_DARK == 1 and NU_F_THEME != 0 do
         nm = nui_utf16("DarkMode_Explorer")
         call_dll(NU_F_THEME, hwnd, nm, 0)
         drop(nm)
@@ -219,7 +219,7 @@ end
 
 nui_apply_font(hwnd, text_kind) do
     f = NU_HFONT_BODY
-    if text_kind == 1 then f = NU_HFONT_HEAD
+    if text_kind == 1 do f = NU_HFONT_HEAD end
     call_dll(NU_F_SEND, hwnd, WM_SETFONT, f, 1)
     0
 end
@@ -229,7 +229,7 @@ nui_create_static(parent, text, x, y, w, h, scale) do
     hwnd = call_dll(get_fn(NU_U32, "CreateWindowExA"),
         0, "STATIC", text, 1342177280,
         x, y, w, h, parent, 20000 + CTL_N, NU_HINST, 0)
-    if hwnd != 0 then do
+    if hwnd != 0 do
         CTL_HWND[CTL_N] = hwnd
         CTL_KIND[CTL_N] = 1
         CTL_AKSI[CTL_N] = 0
@@ -245,7 +245,7 @@ nui_create_button(parent, label, x, y, w, h, action) do
     hwnd = call_dll(get_fn(NU_U32, "CreateWindowExA"),
         0, "BUTTON", label, 1342177280,
         x, y, w, h, parent, 20000 + CTL_N, NU_HINST, 0)
-    if hwnd != 0 then do
+    if hwnd != 0 do
         CTL_HWND[CTL_N] = hwnd
         CTL_KIND[CTL_N] = 2
         CTL_AKSI[CTL_N] = action
@@ -262,7 +262,7 @@ nui_create_group(parent, title, x, y, w, h) do
     hwnd = call_dll(get_fn(NU_U32, "CreateWindowExA"),
         0, "BUTTON", title, 1342177280 + 7,
         x, y, w, h, parent, 20000 + CTL_N, NU_HINST, 0)
-    if hwnd != 0 then do
+    if hwnd != 0 do
         CTL_HWND[CTL_N] = hwnd
         CTL_KIND[CTL_N] = 3
         CTL_AKSI[CTL_N] = 0
@@ -277,47 +277,44 @@ end
 // tinggi natural per kind (konsisten dgn pui_measure)
 nui_child_h(node) do
     j = node[N_KIND]
-    if j == J_TEXT then do
+    if j == J_TEXT do
         sc = node[N_SC]
-        if sc >= 3 then 34 else if sc == 2 then 24 else 18
-    end
-    else if j == J_SPACER then node[N_MINH]
-    else if j == J_BUTTON then node[N_MINH]
-    else pui_measure(node, 999999)
+        if sc >= 3 do 34 else if sc == 2 do 24 else 18 end
+    else if j == J_SPACER do node[N_MINH]
+    else if j == J_BUTTON do node[N_MINH]
+    else pui_measure(node, 999999) end
 end
 
 // buat kontrol utk satu children pada kotak (x,y,w) -> tinggi terpakai
 nui_build_child(parent, node, x, y, w) do
     j = node[N_KIND]
-    if j == J_TEXT then do
+    if j == J_TEXT do
         sc = node[N_SC]
         hh = nui_child_h(node)
         tx = node[N_TEXT]
-        if sc >= 3 then do
+        if sc >= 3 do
             hwnd = nui_create_static(parent, tx, x, y, w, hh, 1)
             // judul pakai font head; geser sedikit agar baseline rapi
             34
-        end else do
+        else do
             nui_create_static(parent, tx, x, y, w, hh, 0)
             hh
         end
-    end
-    else if j == J_SPACER then node[N_MINH]
-    else if j == J_BUTTON then do
+    else if j == J_SPACER do node[N_MINH]
+    else if j == J_BUTTON do
         nui_create_button(parent, node[N_TEXT], x, y, w, node[N_MINH], node[N_ACTION])
         node[N_MINH]
-    end
-    else if j == J_BOX or j == J_ROW or j == J_COLUMN then do
+    else if j == J_BOX or j == J_ROW or j == J_COLUMN do
         // wadah: groupbox bila kartu/kotak; polos bila kolom/baris
         hh = pui_measure(node, w)
-        if j == J_BOX then do
+        if j == J_BOX do
             nui_create_group(parent, "", x, y, w, hh)
         end
         // isi
         inner_x = x
         inner_y = y
         inner_w = w
-        if j == J_BOX then do
+        if j == J_BOX do
             inner_x = x + PAD
             inner_y = y + PAD + 8
             inner_w = w - PAD * 2
@@ -325,8 +322,8 @@ nui_build_child(parent, node, x, y, w) do
         cy = inner_y
         n = node[N_NA]
         mh = 0
-        if j == J_ROW then do
-            if n > 0 then do
+        if j == J_ROW do
+            if n > 0 do
                 iw = (inner_w - GAP * (n - 1)) / n
                 cx = inner_x
                 i = 0
@@ -346,7 +343,7 @@ nui_build_child(parent, node, x, y, w) do
                 end
             end
             cy = cy + mh
-        end else do
+        else do
             i = 0
             while i < n do
                 an = node[N_CHILDREN][i]
@@ -356,7 +353,6 @@ nui_build_child(parent, node, x, y, w) do
             end
         end
         hh
-    end
     else do
         // J_SPACER sudah ditangani; fallback aman
         pui_measure(node, w)
@@ -367,7 +363,7 @@ nui_rebuild(parent, root, sw) do
     // hancurkan semua kontrol lama lalu bangun ulang dari pohon
     // mode gelap: WM_ERASEBKGND kita tolak (return 1) supaya Windows
     // tak mengecat putih - maka KITA yang mengisi latar dgn kuas gelap
-    if NU_DARK == 1 and NU_HBR_BG != 0 then do
+    if NU_DARK == 1 and NU_HBR_BG != 0 do
         fn_gcr = get_fn(NU_U32, "GetClientRect")
         fn_gdc = get_fn(NU_U32, "GetDC")
         fn_fr = get_fn(NU_U32, "FillRect")
@@ -394,10 +390,10 @@ nui_poll_click() do
     ketemu = 0 - 1
     i = 0
     while i < CTL_N do
-        if CTL_KIND[i] == 2 then do
+        if CTL_KIND[i] == 2 do
             st = call_dll(NU_F_SEND, CTL_HWND[i], BM_GETSTATE, 0, 0)
-            pushed = if st % (BST_PUSHED * 2) >= BST_PUSHED then true else false
-            if pushed == 1 and CTL_PREV[i] == 0 then ketemu = CTL_AKSI[i]
+            pushed = if st % (BST_PUSHED * 2) >= BST_PUSHED do true else false end
+            if pushed == 1 and CTL_PREV[i] == 0 do ketemu = CTL_AKSI[i] end
             CTL_PREV[i] = pushed
         end
         i += 1
@@ -412,14 +408,14 @@ nui_selftest_offscreen(title, sw, sh, build_fn) do
     // semua HWND valid, roundtrip teks statis, tombol terdaftar
     pui_init_theme()
     win = gui_open_window(title, sw, sh)
-    if win == 0 then 0 - 1
+    if win == 0 do 0 - 1
     else do
         call_dll(get_fn(win.u32, "ShowWindow"), win.hwnd, 0)   // SW_HIDE
         nui_setup(win)
         root = build_fn(0)
         nui_rebuild(win.hwnd, root, sw)
         fails = 0
-        if CTL_N < 2 then do
+        if CTL_N < 2 do
             fails = fails + 1
             show("uji gagal: kontrol terlalu sedikit\n")
         end
@@ -427,19 +423,19 @@ nui_selftest_offscreen(title, sw, sh, build_fn) do
         ketemu_statis = 0 - 1
         i = 0
         while i < CTL_N and ketemu_statis < 0 do
-            if CTL_KIND[i] == 1 then ketemu_statis = i
+            if CTL_KIND[i] == 1 do ketemu_statis = i end
             i += 1
         end
-        if ketemu_statis < 0 then do
+        if ketemu_statis < 0 do
             fails = fails + 1
             show("uji gagal: tidak ada label\n")
-        end else do
+        else do
             hw = CTL_HWND[ketemu_statis]
             call_dll(NU_F_SETTXT, hw, "UJI123")
             rcv = alloc(64)
             mem_set(rcv, 0, 64)
             call_dll(NU_F_GETTXT, hw, rcv, 63)
-            if str_eq(rcv, "UJI123") then 0 else do
+            if str_eq(rcv, "UJI123") do 0 else do
                 fails = fails + 1
                 show("uji gagal: roundtrip teks\n")
             end
@@ -449,7 +445,7 @@ nui_selftest_offscreen(title, sw, sh, build_fn) do
         fn_iswin = get_fn(NU_U32, "IsWindow")
         i = 0
         while i < CTL_N do
-            if call_dll(fn_iswin, CTL_HWND[i]) == 0 then do
+            if call_dll(fn_iswin, CTL_HWND[i]) == 0 do
                 fails = fails + 1
                 show("uji gagal: kontrol mati\n")
             end
@@ -469,12 +465,12 @@ end
 
 nui_start(title, sw, sh, initial_state, build_fn, event_fn) do
     cmdline = args()
-    if pui_has_flag(cmdline, "-selftest") then do
+    if pui_has_flag(cmdline, "-selftest") do
         nui_selftest_offscreen(title, sw, sh, build_fn)
-    end else do
+    else do
         pui_init_theme()
         win = gui_open_window(title, sw, sh)
-        if win == 0 then 0
+        if win == 0 do 0
         else do
             nui_setup(win)
             state = initial_state
@@ -482,12 +478,12 @@ nui_start(title, sw, sh, initial_state, build_fn, event_fn) do
             nui_rebuild(win.hwnd, root, sw)
             jalan = 1
             while jalan == 1 do
-                if not gui_is_open(win) then jalan = 0
-                else if gui_key_esc(win) != 0 then jalan = 0
+                if not gui_is_open(win) do jalan = 0
+                else if gui_key_esc(win) != 0 do jalan = 0
                 else do
                     gui_poll_events(win)
                     id = nui_poll_click()
-                    if id > 0 then do
+                    if id > 0 do
                         state = event_fn(state, id)
                         root = build_fn(state)
                         nui_rebuild(win.hwnd, root, sw)

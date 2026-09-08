@@ -52,7 +52,7 @@ b32(buf, off) = get_byte(buf, off) + get_byte(buf, off + 1) * 256 + get_byte(buf
 b64(buf, off) = b32(buf, off) + b32(buf, off + 4) * 4294967296
 
 st32(p, off, v) do
-    u = if v < 0 then v + 4294967296 else v
+    u = if v < 0 do v + 4294967296 else v end
     set_byte(p, off + 0, u % 256)
     set_byte(p, off + 1, (u / 256) % 256)
     set_byte(p, off + 2, (u / 65536) % 256)
@@ -61,7 +61,7 @@ end
 
 st64(p, off, v) do
     ll = v % 4294967296
-    lo = if ll < 0 then ll + 4294967296 else ll
+    lo = if ll < 0 do ll + 4294967296 else ll end
     st32(p, off, lo)
     rest = (v - lo) / 4294967296
     st32(p, off + 4, rest)
@@ -72,15 +72,15 @@ end
 elf_load(path) do
     buf = alloc(1048576)
     n = read_file(path, buf, 1048576)
-    if n < 64 then do
+    if n < 64 do
         drop(buf)
         0
-    end else do
+    else do
         if get_byte(buf, 0) != 127 or get_byte(buf, 1) != 69 or
-           get_byte(buf, 2) != 76 or get_byte(buf, 3) != 70 then do
+           get_byte(buf, 2) != 76 or get_byte(buf, 3) != 70 do
             drop(buf)
             0
-        end else do
+        else do
             phoff = b64(buf, ELF_E_PHOFF)
             phent = b16(buf, ELF_E_PHENTSIZE)
             phnum = b16(buf, ELF_E_PHNUM)
@@ -90,41 +90,41 @@ elf_load(path) do
             i = 0
             while i < phnum do
                 off = phoff + i * phent
-                if b32(buf, off) == PT_LOAD then do
+                if b32(buf, off) == PT_LOAD do
                     va = b64(buf, off + 16)
                     ms = b64(buf, off + 40)
-                    if base == 0 - 1 then do
+                    if base == 0 - 1 do
                         base = va
-                    end else do
-                        if va < base then base = va
+                    else do
+                        if va < base do base = va end
                     end
                     e = va + ms
-                    if e > total then total = e
+                    if e > total do total = e end
                 end
                 i = i + 1
             end
             // Batasan: base vaddr harus 0 (layout `ld -shared`).
-            if base != 0 or total <= base then do
+            if base != 0 or total <= base do
                 drop(buf)
                 0
-            end else do
+            else do
                 ms = total - base
                 ms = (ms + 4095) / 4096 * 4096
                 // mmap RW (prot=3) + 4096-byte halaman header utk menyimpan size.
                 // Fase 1 memakai RWX (prot=7); Fase 2 W^X: tulis/relokasi lalu
                 // mprotect segmen ke prot yang tepat.
                 map_addr = syscall(9, 0, ms + 4096, 3, 34, 0 - 1, 0)
-                if map_addr < 0 then do
+                if map_addr < 0 do
                     drop(buf)
                     0
-                end else do
+                else do
                     hdl = map_addr + 4096
                     st64(map_addr, 0, ms + 4096)   // simpan total mmap size
                     // Copy PT_LOAD segments (file offset -> hdl + vaddr)
                     j = 0
                     while j < phnum do
                         off = phoff + j * phent
-                        if b32(buf, off) == PT_LOAD then do
+                        if b32(buf, off) == PT_LOAD do
                             foff = b64(buf, off + 8)
                             va = b64(buf, off + 16)
                             fsz = b64(buf, off + 32)
@@ -145,12 +145,12 @@ elf_load(path) do
                     drop(buf)
                     // Terapkan relokasi (RELATIVE + GLOB_DAT) SELAGI RW,
                     // lalu proteksi segmen (W^X).
-                    if elf_reloc(hdl) == 0 then do
+                    if elf_reloc(hdl) == 0 do
                         // relokasi gagal (mis. tiada PT_DYNAMIC) — lepas.
                         sz0 = b64(hdl - 4096, 0)
                         syscall(11, hdl - 4096, sz0, 0, 0, 0, 0)
                         0
-                    end else do
+                    else do
                         elf_protect(hdl, phoff, phent, phnum)
                         hdl
                     end
@@ -171,13 +171,13 @@ elf_reloc(handle) do
     i = 0
     while i < phnum and dyn_v == 0 do
         off = phoff + i * phent
-        if b32(handle, off) == PT_DYNAMIC then do
+        if b32(handle, off) == PT_DYNAMIC do
             dyn_v = b64(handle, off + 16)
             dyn_sz = b64(handle, off + 40)
         end
         i = i + 1
     end
-    if dyn_v == 0 then 0
+    if dyn_v == 0 do 0
     else do
         rela = 0
         relasz = 0
@@ -187,19 +187,19 @@ elf_reloc(handle) do
         while pos < dyn_sz do
             tag = b64(handle, dyn_v + pos)
             val = b64(handle, dyn_v + pos + 8)
-            if tag == DT_NULL then pos = dyn_sz
+            if tag == DT_NULL do pos = dyn_sz
             else do
-                if tag == DT_SYMTAB then symtab = val
-                else if tag == DT_RELA then rela = val
-                else if tag == DT_RELASZ then relasz = val
-                else if tag == DT_RELAENT then relaent = val
+                if tag == DT_SYMTAB do symtab = val
+                else if tag == DT_RELA do rela = val
+                else if tag == DT_RELASZ do relasz = val
+                else if tag == DT_RELAENT do relaent = val end
                 pos = pos + 16
             end
         end
-        if rela == 0 or relasz == 0 then do
+        if rela == 0 or relasz == 0 do
             1    // tidak ada relokasi — dianggap sukses
-        end else do
-            if relaent == 0 then relaent = 24
+        else do
+            if relaent == 0 do relaent = 24 end
             cnt = relasz / relaent
             r = 0
             while r < cnt do
@@ -209,10 +209,10 @@ elf_reloc(handle) do
                 r_add = b64(handle, ro + 16)
                 rtyp = r_info % 4294967296        // tipe = info & 0xffffffff
                 symidx = (r_info - rtyp) / 4294967296   // simbol = info >> 32
-                if rtyp == R_X86_64_RELATIVE then do
+                if rtyp == R_X86_64_RELATIVE do
                     st64(handle + r_off, 0, handle + r_add)
-                end else if rtyp == R_X86_64_GLOB_DAT then do
-                    if symtab != 0 and symidx > 0 then do
+                else if rtyp == R_X86_64_GLOB_DAT do
+                    if symtab != 0 and symidx > 0 do
                         sv = b64(handle, symtab + symidx * 24 + 8)
                         st64(handle + r_off, 0, handle + sv)
                     end
@@ -231,11 +231,11 @@ elf_protect(handle, phoff, phent, phnum) do
     i = 0
     while i < phnum do
         off = phoff + i * phent
-        if b32(handle, off) == PT_LOAD then do
+        if b32(handle, off) == PT_LOAD do
             va = b64(handle, off + 16)
             msz = b64(handle, off + 40)
             e = va + msz
-            if e > total then total = e
+            if e > total do total = e end
         end
         i = i + 1
     end
@@ -244,13 +244,13 @@ elf_protect(handle, phoff, phent, phnum) do
     pa = p0
     while pa < p1 do
         prot = elf_page_prot(handle, pa, phoff, phent, phnum)
-        if prot == 0 then prot = 1
+        if prot == 0 do prot = 1 end
         q = pa + 4096
         done = 0
         while q < p1 and done == 0 do
             qp = elf_page_prot(handle, q, phoff, phent, phnum)
-            if qp == 0 then qp = 1
-            if qp == prot then q = q + 4096 else done = 1
+            if qp == 0 do qp = 1 end
+            if qp == prot do q = q + 4096 else done = 1 end
         end
         syscall(10, pa, q - pa, prot, 0, 0, 0)   // mprotect
         pa = q
@@ -263,17 +263,17 @@ elf_page_prot(handle, page, phoff, phent, phnum) do
     i = 0
     while i < phnum do
         off = phoff + i * phent
-        if b32(handle, off) == PT_LOAD then do
+        if b32(handle, off) == PT_LOAD do
             va = b64(handle, off + 16)
             msz = b64(handle, off + 40)
             flags = b32(handle, off + 4)
             seg_b = handle + va
             seg_e = seg_b + msz
-            if seg_e > page and seg_b < page + 4096 then do
+            if seg_e > page and seg_b < page + 4096 do
                 sp = 0
-                if (flags & PF_R) != 0 then sp = sp | 1     // PROT_READ
-                if (flags & PF_W) != 0 then sp = sp | 2     // PROT_WRITE
-                if (flags & PF_X) != 0 then sp = sp | 4     // PROT_EXEC
+                if (flags & PF_R) != 0 do sp = sp | 1 end     // PROT_READ
+                if (flags & PF_W) != 0 do sp = sp | 2 end     // PROT_WRITE
+                if (flags & PF_X) != 0 do sp = sp | 4 end     // PROT_EXEC
                 prot = prot | sp
             end
         end
@@ -292,13 +292,13 @@ elf_find(handle, name) do
     i = 0
     while i < phnum and dyn_v == 0 do
         off = phoff + i * phent
-        if b32(handle, off) == PT_DYNAMIC then do
+        if b32(handle, off) == PT_DYNAMIC do
             dyn_v = b64(handle, off + 16)
             dyn_sz = b64(handle, off + 40)
         end
         i = i + 1
     end
-    if dyn_v == 0 then 0
+    if dyn_v == 0 do 0
     else do
         symtab = 0
         strtab = 0
@@ -308,39 +308,39 @@ elf_find(handle, name) do
         while pos < dyn_sz do
             tag = b64(handle, dyn_v + pos)
             val = b64(handle, dyn_v + pos + 8)
-            if tag == DT_NULL then pos = dyn_sz
+            if tag == DT_NULL do pos = dyn_sz
             else do
-                if tag == DT_SYMTAB then symtab = val
-                else if tag == DT_STRTAB then strtab = val
-                else if tag == DT_STRSZ then strsz = val
-                else if tag == DT_SYMENT then syment = val
+                if tag == DT_SYMTAB do symtab = val
+                else if tag == DT_STRTAB do strtab = val
+                else if tag == DT_STRSZ do strsz = val
+                else if tag == DT_SYMENT do syment = val end
                 pos = pos + 16
             end
         end
-        if symtab == 0 or strtab == 0 then 0
+        if symtab == 0 or strtab == 0 do 0
         else do
             idx = 0
             found = 0
             while idx < 200 and found == 0 do
                 so = symtab + idx * syment
                 nm = b32(handle, so)
-                if nm > 0 and nm < strsz then do
+                if nm > 0 and nm < strsz do
                     j = 0
                     mok = 1
                     while j < 200 do
                         cb = get_byte(handle, strtab + nm + j)
                         nb = get_byte(name, j)
-                        if cb != nb then do
+                        if cb != nb do
                             mok = 0
                             j = 200
-                        end else if cb == 0 then
+                        else if cb == 0 do
                             j = 200
                         else
-                            j = j + 1
+                            j = j + 1 end
                     end
-                    if mok == 1 then do
+                    if mok == 1 do
                         sv = b64(handle, so + 8)
-                        if sv != 0 then found = handle + sv
+                        if sv != 0 do found = handle + sv end
                         idx = 200
                     end
                 end
@@ -353,10 +353,10 @@ end
 
 // elf_close(handle) — munmap seluruh mapping (halaman header + image).
 elf_close(handle) do
-    if handle == 0 then 0
+    if handle == 0 do 0
     else do
         sz = b64(handle - 4096, 0)
-        if sz > 0 then syscall(11, handle - 4096, sz, 0, 0, 0, 0)
+        if sz > 0 do syscall(11, handle - 4096, sz, 0, 0, 0, 0) end
         0
     end
 end

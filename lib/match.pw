@@ -8,7 +8,7 @@ struct MatchClassRes {
 
 // Helper huruf kecil ASCII
 _match_to_lower(c) do
-    if c >= 65 and c <= 90 then c + 32 else c
+    if c >= 65 and c <= 90 do c + 32 else c end
 end
 
 // Mencocokkan character class [...]
@@ -17,34 +17,34 @@ _match_char_class(pat, p_start, p_len, ch, icase) do
     p = p_start
     neg = 0
     c_cur = get_byte(pat, p)
-    if c_cur == 33 or c_cur == 94 then do // '!' atau '^'
+    if c_cur == 33 or c_cur == 94 do // '!' atau '^'
         neg = 1
         p = p + 1
     end
     
-    target_c = if icase == 1 then _match_to_lower(ch) else ch
+    target_c = if icase == 1 do _match_to_lower(ch) else ch end
     matched = 0
     
     loop = 1
     while loop == 1 and p < p_len do
         c = get_byte(pat, p)
-        if c == 93 then do // ']'
+        if c == 93 do // ']'
             loop = 0
-        end else do
-            c1 = if icase == 1 then _match_to_lower(c) else c
-            if p + 2 < p_len and get_byte(pat, p + 1) == 45 and get_byte(pat, p + 2) != 93 then do // range '-'
+        else do
+            c1 = if icase == 1 do _match_to_lower(c) else c end
+            if p + 2 < p_len and get_byte(pat, p + 1) == 45 and get_byte(pat, p + 2) != 93 do // range '-'
                 c2_raw = get_byte(pat, p + 2)
-                c2 = if icase == 1 then _match_to_lower(c2_raw) else c2_raw
-                if target_c >= c1 and target_c <= c2 then matched = 1
+                c2 = if icase == 1 do _match_to_lower(c2_raw) else c2_raw end
+                if target_c >= c1 and target_c <= c2 do matched = 1 end
                 p = p + 3
-            end else do
-                if target_c == c1 then matched = 1
+            else do
+                if target_c == c1 do matched = 1 end
                 p = p + 1
             end
         end
     end
     
-    final_match = if neg == 1 then (if matched == 1 then 0 else 1) else matched
+    final_match = if neg == 1 do (if matched == 1 do 0 else 1 end) else matched end
     MatchClassRes(final_match, p)
 end
 
@@ -61,73 +61,73 @@ _glob_exec(pat, text, icase, is_path) do
     
     has_failed = 0
     while t < t_len and has_failed == 0 do
-        p_ch = if p < p_len then get_byte(pat, p) else -1
+        p_ch = if p < p_len do get_byte(pat, p) else -1 end
         t_ch = get_byte(text, t)
         
-        t_cmp = if icase == 1 then _match_to_lower(t_ch) else t_ch
-        p_cmp = if icase == 1 and p_ch >= 0 then _match_to_lower(p_ch) else p_ch
+        t_cmp = if icase == 1 do _match_to_lower(t_ch) else t_ch end
+        p_cmp = if icase == 1 and p_ch >= 0 do _match_to_lower(p_ch) else p_ch end
         
         // Cek recursive glob '**'
-        if is_path == 1 and p_ch == 42 and p + 1 < p_len and get_byte(pat, p + 1) == 42 then do
+        if is_path == 1 and p_ch == 42 and p + 1 < p_len and get_byte(pat, p + 1) == 42 do
             star_double = 1
             star_p = p + 2
             star_t = t
             p = p + 2
         // Cek single glob '*'
-        end else if p_ch == 42 then do // '*'
+        else if p_ch == 42 do // '*'
             star_double = 0
             star_p = p + 1
             star_t = t
             p = p + 1
         // Cek single char '?'
-        end else if p_ch == 63 and (is_path == 0 or t_ch != 47) then do // '?' dan bukan '/'
+        else if p_ch == 63 and (is_path == 0 or t_ch != 47) do // '?' dan bukan '/'
             p = p + 1
             t = t + 1
         // Cek character class '[...]'
-        end else if p_ch == 91 then do // '['
+        else if p_ch == 91 do // '['
             res = _match_char_class(pat, p + 1, p_len, t_ch, icase)
             m_ok = res.matched
             next_p = res.next_p
             drop(res)
-            if m_ok == 1 then do
+            if m_ok == 1 do
                 p = next_p + 1 // lewati ']'
                 t = t + 1
-            end else if star_p != -1 then do
-                if is_path == 1 and star_double == 0 and get_byte(text, star_t) == 47 then do
+            else if star_p != -1 do
+                if is_path == 1 and star_double == 0 and get_byte(text, star_t) == 47 do
                     has_failed = 1
-                end else do
+                else do
                     star_t = star_t + 1
                     t = star_t
                     p = star_p
                 end
-            end else do
+            else do
                 has_failed = 1
             end
         // Karakter eksak cocok
-        end else if p_ch >= 0 and p_cmp == t_cmp then do
+        else if p_ch >= 0 and p_cmp == t_cmp do
             p = p + 1
             t = t + 1
         // Backtrack ke '*' sebelumnya jika ada
-        end else if star_p != -1 then do
-            if is_path == 1 and star_double == 0 and get_byte(text, star_t) == 47 then do
+        else if star_p != -1 do
+            if is_path == 1 and star_double == 0 and get_byte(text, star_t) == 47 do
                 has_failed = 1
-            end else do
+            else do
                 star_t = star_t + 1
                 t = star_t
                 p = star_p
             end
-        end else do
+        else do
             has_failed = 1
         end
     end
     
-    if has_failed == 1 then false
+    if has_failed == 1 do false
     else do
         // Lewati sisa '*' di akhir pattern
         while p < p_len and get_byte(pat, p) == 42 do
             p = p + 1
         end
-        if p == p_len and t == t_len then true else false
+        if p == p_len and t == t_len do true else false end
     end
 end
 
@@ -149,8 +149,8 @@ _normalize_glob_path(path_str) do
     i = 0
     while i < len do
         c = get_byte(path_str, i)
-        if c == 92 then set_byte(buf, i, 47) // '\' -> '/'
-        else set_byte(buf, i, c)
+        if c == 92 do set_byte(buf, i, 47) // '\' -> '/'
+        else set_byte(buf, i, c) end
         i = i + 1
     end
     set_byte(buf, len, 0)

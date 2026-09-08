@@ -14,16 +14,16 @@ struct DateTime {
 
 // Menentukan apakah tahun adalah tahun kabisat (Gregorian)
 time_is_leap_year(year) do
-    if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) then true else false
+    if (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0) do true else false end
 end
 
 // Menghitung jumlah hari dalam bulan tertentu
 time_days_in_month(year, month) do
-    if month == 1 or month == 3 or month == 5 or month == 7 or month == 8 or month == 10 or month == 12 then 31
-    else if month == 4 or month == 6 or month == 9 or month == 11 then 30
-    else if month == 2 then do
-        if time_is_leap_year(year) then 29 else 28
-    end else 0
+    if month == 1 or month == 3 or month == 5 or month == 7 or month == 8 or month == 10 or month == 12 do 31
+    else if month == 4 or month == 6 or month == 9 or month == 11 do 30
+    else if month == 2 do
+        if time_is_leap_year(year) do 29 else 28 end
+    else 0 end
 end
 
 // Mengambil waktu saat ini dalam milidetik
@@ -47,11 +47,11 @@ time_epoch_to_datetime(epoch_sec) do
     y = 1970
     loop_y = 1
     while loop_y == 1 do
-        diy = if time_is_leap_year(y) then 366 else 365
-        if total_days >= diy then do
+        diy = if time_is_leap_year(y) do 366 else 365 end
+        if total_days >= diy do
             total_days = total_days - diy
             y = y + 1
-        end else do
+        else do
             loop_y = 0
         end
     end
@@ -60,10 +60,10 @@ time_epoch_to_datetime(epoch_sec) do
     loop_m = 1
     while loop_m == 1 do
         dim = time_days_in_month(y, m)
-        if total_days >= dim then do
+        if total_days >= dim do
             total_days = total_days - dim
             m = m + 1
-        end else do
+        else do
             loop_m = 0
         end
     end
@@ -77,7 +77,7 @@ time_datetime_to_epoch(dt) do
     days = 0
     y = 1970
     while y < dt.year do
-        days = days + (if time_is_leap_year(y) then 366 else 365)
+        days = days + (if time_is_leap_year(y) do 366 else 365 end)
         y = y + 1
     end
     
@@ -93,15 +93,15 @@ end
 
 // Format 2-digit zero padded string
 time_pad2(n) do
-    if n < 10 then $"0{n}" else $"{n}"
+    if n < 10 do $"0{n}" else $"{n}" end
 end
 
 // Format 4-digit zero padded string
 time_pad4(n) do
-    if n < 10 then $"000{n}"
-    else if n < 100 then $"00{n}"
-    else if n < 1000 then $"0{n}"
-    else $"{n}"
+    if n < 10 do $"000{n}"
+    else if n < 100 do $"00{n}"
+    else if n < 1000 do $"0{n}"
+    else $"{n}" end
 end
 
 // Format tanggal "YYYY-MM-DD"
@@ -128,7 +128,7 @@ end
 // Parsing ISO 8601 string "YYYY-MM-DD HH:MM:SS" atau "YYYY-MM-DD"
 time_parse_iso(s) do
     len = str_len(s)
-    if len < 10 then DateTime(1970, 1, 1, 0, 0, 0, 0, 4)
+    if len < 10 do DateTime(1970, 1, 1, 0, 0, 0, 0, 4)
     else do
         yr = time_parse_num(s, 0, 4)
         mo = time_parse_num(s, 5, 7)
@@ -137,7 +137,7 @@ time_parse_iso(s) do
         hr = 0
         mn = 0
         sc = 0
-        if len >= 19 then do
+        if len >= 19 do
             hr = time_parse_num(s, 11, 13)
             mn = time_parse_num(s, 14, 16)
             sc = time_parse_num(s, 17, 19)

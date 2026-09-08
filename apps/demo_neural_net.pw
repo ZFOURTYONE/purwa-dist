@@ -115,15 +115,15 @@ main() do
     f11: f64 = tensor_get(final_pred, 3, 0)
 
     show("Final XOR Gate Predictions vs Ground Truth:\n")
-    show($"  [0, 0] -> Expected: 0.0 | Predicted: {f00} -> Classified: {if flt(f00, 0.5) then 0 else 1}\n")
-    show($"  [0, 1] -> Expected: 1.0 | Predicted: {f01} -> Classified: {if flt(f01, 0.5) then 0 else 1}\n")
-    show($"  [1, 0] -> Expected: 1.0 | Predicted: {f10} -> Classified: {if flt(f10, 0.5) then 0 else 1}\n")
-    show($"  [1, 1] -> Expected: 0.0 | Predicted: {f11} -> Classified: {if flt(f11, 0.5) then 0 else 1}\n\n")
+    show($"  [0, 0] -> Expected: 0.0 | Predicted: {f00} -> Classified: {if flt(f00, 0.5) do 0 else 1 end}\n")
+    show($"  [0, 1] -> Expected: 1.0 | Predicted: {f01} -> Classified: {if flt(f01, 0.5) do 0 else 1 end}\n")
+    show($"  [1, 0] -> Expected: 1.0 | Predicted: {f10} -> Classified: {if flt(f10, 0.5) do 0 else 1 end}\n")
+    show($"  [1, 1] -> Expected: 0.0 | Predicted: {f11} -> Classified: {if flt(f11, 0.5) do 0 else 1 end}\n\n")
 
-    c00 = if flt(f00, 0.5) then 1 else 0
-    c01 = if fgt(f01, 0.5) then 1 else 0
-    c10 = if fgt(f10, 0.5) then 1 else 0
-    c11 = if flt(f11, 0.5) then 1 else 0
+    c00 = if flt(f00, 0.5) do 1 else 0 end
+    c01 = if fgt(f01, 0.5) do 1 else 0 end
+    c10 = if fgt(f10, 0.5) do 1 else 0 end
+    c11 = if flt(f11, 0.5) do 1 else 0 end
 
     if c00 == 1 and c01 == 1 and c10 == 1 and c11 == 1 do
         show(">>> NEURAL NETWORK TRAINING CONVERGED PERFECTLY (100% ACCURACY) <<<\n")

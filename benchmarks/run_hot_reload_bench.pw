@@ -42,7 +42,7 @@ main() = do
         c_rc = exec(compile_cmd);
         t1 = time_ms();
         
-        if c_rc == 0 then do
+        if c_rc == 0 do
             // 2. Measure Cold Process Spawn & Execution Time
             t2 = time_ms();
             e_rc = exec(tmp_exe);
@@ -56,17 +56,17 @@ main() = do
             sum_exec = sum_exec + exec_ms;
             sum_total = sum_total + total_ms;
             
-            if recompile_ms < min_recompile then min_recompile = recompile_ms else 0;
-            if recompile_ms > max_recompile then max_recompile = recompile_ms else 0;
+            if recompile_ms < min_recompile do min_recompile = recompile_ms else 0 end;
+            if recompile_ms > max_recompile do max_recompile = recompile_ms else 0 end;
             
-            if total_ms < min_total then min_total = total_ms else 0;
-            if total_ms > max_total then max_total = total_ms else 0;
+            if total_ms < min_total do min_total = total_ms else 0 end;
+            if total_ms > max_total do max_total = total_ms else 0 end;
             
             success_count = success_count + 1;
             
-            if i == 1 or i % 10 == 0 then do
+            if i == 1 or i % 10 == 0 do
                 show("  Cycle ");
-                if i < 10 then show("0") else 0;
+                if i < 10 do show("0") else 0 end;
                 show_num(i);
                 show("/50 -> Recompile: ");
                 show_num(recompile_ms);
@@ -76,7 +76,7 @@ main() = do
                 show_num(total_ms);
                 show(" ms\n")
             end
-        end else show("[FAIL] Compilation error\n");
+        else show("[FAIL] Compilation error\n") end;
         
         i = i + 1
     end;
@@ -87,7 +87,7 @@ main() = do
     avg_recompile = sum_recompile / total_cycles;
     avg_exec = sum_exec / total_cycles;
     avg_total = sum_total / total_cycles;
-    throughput = if avg_total > 0 then 1000 / avg_total else 0;
+    throughput = if avg_total > 0 do 1000 / avg_total else 0 end;
     
     show("---------------------------------------------------------------------------\n");
     show("?? STATISTICAL BENCHMARK RESULTS (Across 50 Live Hot Reloads):\n");

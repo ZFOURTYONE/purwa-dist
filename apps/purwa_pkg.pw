@@ -15,21 +15,21 @@ salin_token(cmd: string, k: i64, buf: string, maxw: i64): i64 do
     cmd_len = str_len(cmd)
     while go == 1 do
         while i < cmd_len and (get_byte(cmd, i) == 32 or get_byte(cmd, i) == 9 or get_byte(cmd, i) == 13) do i = i + 1 end
-        if i >= cmd_len then go = 0
+        if i >= cmd_len do go = 0
         else do
-            if get_byte(cmd, i) == 34 then do
+            if get_byte(cmd, i) == 34 do
                 i = i + 1
                 while i < cmd_len and get_byte(cmd, i) != 34 do
-                    if ck == k and w < maxw - 1 then do
+                    if ck == k and w < maxw - 1 do
                         set_byte(buf, w, get_byte(cmd, i))
                         w = w + 1
                     end
                     i = i + 1
                 end
                 i = i + 1
-            end else do
+            else do
                 while i < cmd_len and get_byte(cmd, i) != 32 and get_byte(cmd, i) != 9 and get_byte(cmd, i) != 13 do
-                    if ck == k and w < maxw - 1 then do
+                    if ck == k and w < maxw - 1 do
                         set_byte(buf, w, get_byte(cmd, i))
                         w = w + 1
                     end
@@ -74,42 +74,42 @@ end
 
 // ---- Directory & OS Utilities ----
 ensure_dir(dir: string) do
-    if not is_linux() then do
+    if not is_linux() do
         exec($"cmd /c if not exist \"{dir}\" mkdir \"{dir}\"")
-    end else do
+    else do
         exec($"-p {dir}")
     end
 end
 
 find_purwac_compiler() do
-    if file_exists("purwac.exe") then "purwac.exe"
-    else if file_exists("..\\purwac.exe") then "..\\purwac.exe"
-    else if file_exists("..\\..\\purwac.exe") then "..\\..\\purwac.exe"
-    else if file_exists("..\\..\\..\\purwac.exe") then "..\\..\\..\\purwac.exe"
-    else if file_exists("I:\\PROJECT\\big-project\\purwac.exe") then "I:\\PROJECT\\big-project\\purwac.exe"
-    else "purwac"
+    if file_exists("purwac.exe") do "purwac.exe"
+    else if file_exists("..\\purwac.exe") do "..\\purwac.exe"
+    else if file_exists("..\\..\\purwac.exe") do "..\\..\\purwac.exe"
+    else if file_exists("..\\..\\..\\purwac.exe") do "..\\..\\..\\purwac.exe"
+    else if file_exists("I:\\PROJECT\\big-project\\purwac.exe") do "I:\\PROJECT\\big-project\\purwac.exe"
+    else "purwac" end
 end
 
 get_install_root() do
-    if not is_linux() then do
+    if not is_linux() do
         localapp = read_text("env:LOCALAPPDATA")
-        if str_len(localapp) == 0 then do
+        if str_len(localapp) == 0 do
             userprofile = read_text("env:USERPROFILE")
-            if str_len(userprofile) > 0 then path_join(userprofile, "AppData\\Local\\PurwaApps")
-            else "C:\\PurwaApps"
-        end else do
+            if str_len(userprofile) > 0 do path_join(userprofile, "AppData\\Local\\PurwaApps")
+            else "C:\\PurwaApps" end
+        else do
             path_join(localapp, "PurwaApps")
         end
-    end else do
+    else do
         home = read_text("env:HOME")
-        if str_len(home) > 0 then path_join(home, ".local/share/purwa-apps")
-        else "/usr/local/share/purwa-apps"
+        if str_len(home) > 0 do path_join(home, ".local/share/purwa-apps")
+        else "/usr/local/share/purwa-apps" end
     end
 end
 
 // ---- 1. Command: init ----
 cmd_init(name: string) do
-    app_name = if str_len(name) > 0 then name else "my_purwa_app"
+    app_name = if str_len(name) > 0 do name else "my_purwa_app" end
     show_banner()
     show($"[+] Menginisialisasi proyek aplikasi Purwa: '{app_name}'\n")
 
@@ -163,41 +163,41 @@ end
 // ---- 2. Command: build ----
 cmd_build() do
     show_banner()
-    if not file_exists("purwa.app.json") and not file_exists("src/main.pw") then do
+    if not file_exists("purwa.app.json") and not file_exists("src/main.pw") do
         show("[x] Error: 'purwa.app.json' atau 'src/main.pw' tidak ditemukan di direktori saat ini.\n")
         show("    Jalankan perintah ini di dalam direktori proyek aplikasi Purwa.\n\n")
         1
-    end else do
-        main_file = if file_exists("src/main.pw") then "src/main.pw" else "main.pw"
+    else do
+        main_file = if file_exists("src/main.pw") do "src/main.pw" else "main.pw" end
         ensure_dir("dist")
         
         app_name = "app"
-        if file_exists("purwa.app.json") then do
+        if file_exists("purwa.app.json") do
             manifest_txt = read_text("purwa.app.json")
-            if contains(manifest_txt, "\"name\":") then do
+            if contains(manifest_txt, "\"name\":") do
                 p1 = index_of(manifest_txt, "\"name\":")
                 p2 = index_of(slice(manifest_txt, p1 + 7, str_len(manifest_txt)), "\"")
-                if p2 > 0 then do
+                if p2 > 0 do
                     p3 = index_of(slice(manifest_txt, p1 + 7 + p2 + 1, str_len(manifest_txt)), "\"")
-                    if p3 > 0 then app_name = slice(manifest_txt, p1 + 7 + p2 + 1, p1 + 7 + p2 + 1 + p3)
+                    if p3 > 0 do app_name = slice(manifest_txt, p1 + 7 + p2 + 1, p1 + 7 + p2 + 1 + p3) end
                 end
             end
         end
 
-        out_bin = if not is_linux() then $"dist/{app_name}.exe" else $"dist/{app_name}"
+        out_bin = if not is_linux() do $"dist/{app_name}.exe" else $"dist/{app_name}" end
         show($"[*] Mengompilasi '{main_file}' -> '{out_bin}'...\n")
 
         purwac_bin = find_purwac_compiler()
-        if not is_linux() then do
+        if not is_linux() do
             exec($"cmd /c \"{purwac_bin}\" {main_file} -o {out_bin}")
-        end else do
+        else do
             exec($"-c \"{purwac_bin} {main_file} -o {out_bin}\"")
         end
         
-        if file_exists(out_bin) then do
+        if file_exists(out_bin) do
             show($"[✓] Berhasil dikompilasi ke biner standalone: '{out_bin}'!\n\n")
             0
-        end else do
+        else do
             show("[x] Kompilasi gagal! Periksa error di atas.\n\n")
             1
         end
@@ -207,31 +207,31 @@ end
 // ---- 3. Command: pack ----
 cmd_pack() do
     show_banner()
-    if not file_exists("purwa.app.json") then do
+    if not file_exists("purwa.app.json") do
         show("[x] Error: 'purwa.app.json' tidak ditemukan.\n")
         1
-    end else do
+    else do
         manifest_txt = read_text("purwa.app.json")
         app_name = "my_app"
-        if contains(manifest_txt, "\"name\":") then do
+        if contains(manifest_txt, "\"name\":") do
             p1 = index_of(manifest_txt, "\"name\":")
             p2 = index_of(slice(manifest_txt, p1 + 7, str_len(manifest_txt)), "\"")
-            if p2 > 0 then do
+            if p2 > 0 do
                 p3 = index_of(slice(manifest_txt, p1 + 7 + p2 + 1, str_len(manifest_txt)), "\"")
-                if p3 > 0 then app_name = slice(manifest_txt, p1 + 7 + p2 + 1, p1 + 7 + p2 + 1 + p3)
+                if p3 > 0 do app_name = slice(manifest_txt, p1 + 7 + p2 + 1, p1 + 7 + p2 + 1 + p3) end
             end
         end
 
-        bin_file = if not is_linux() then $"dist/{app_name}.exe" else $"dist/{app_name}"
-        if not file_exists(bin_file) then do
+        bin_file = if not is_linux() do $"dist/{app_name}.exe" else $"dist/{app_name}" end
+        if not file_exists(bin_file) do
             show($"[*] Biner belum ada, menjalankan build terlebih dahulu...\n")
             cmd_build()
         end
 
-        if not file_exists(bin_file) then do
+        if not file_exists(bin_file) do
             show($"[x] Gagal menemukan biner: '{bin_file}'\n")
             1
-        end else do
+        else do
             show($"[*] Membaca biner & membuat paket terverifikasi...\n")
             raw_buf = alloc(16777216) // 16 MB max
             cleanup drop(raw_buf)
@@ -263,24 +263,24 @@ end
 // ---- 4. Command: make-installer ----
 cmd_make_installer() do
     show_banner()
-    manifest_txt = if file_exists("purwa.app.json") then read_text("purwa.app.json") else ""
+    manifest_txt = if file_exists("purwa.app.json") do read_text("purwa.app.json") else "" end
     app_name = "PurwaApp"
-    if str_len(manifest_txt) > 0 and contains(manifest_txt, "\"name\":") then do
+    if str_len(manifest_txt) > 0 and contains(manifest_txt, "\"name\":") do
         p1 = index_of(manifest_txt, "\"name\":")
         p2 = index_of(slice(manifest_txt, p1 + 7, str_len(manifest_txt)), "\"")
-        if p2 > 0 then do
+        if p2 > 0 do
             p3 = index_of(slice(manifest_txt, p1 + 7 + p2 + 1, str_len(manifest_txt)), "\"")
-            if p3 > 0 then app_name = slice(manifest_txt, p1 + 7 + p2 + 1, p1 + 7 + p2 + 1 + p3)
+            if p3 > 0 do app_name = slice(manifest_txt, p1 + 7 + p2 + 1, p1 + 7 + p2 + 1 + p3) end
         end
     end
 
-    bin_file = if not is_linux() then $"dist/{app_name}.exe" else $"dist/{app_name}"
-    if not file_exists(bin_file) then cmd_build()
+    bin_file = if not is_linux() do $"dist/{app_name}.exe" else $"dist/{app_name}" end
+    if not file_exists(bin_file) do cmd_build() end
 
-    if not file_exists(bin_file) then do
+    if not file_exists(bin_file) do
         show($"[x] Gagal menemukan biner: '{bin_file}'\n")
         1
-    end else do
+    else do
         show($"[*] Menghasilkan Setup Installer Mandiri untuk '{app_name}'...\n")
         raw_buf = alloc(16777216)
         cleanup drop(raw_buf)
@@ -289,7 +289,7 @@ cmd_make_installer() do
         b64_payload = base64_encode_bytes(raw_buf, bin_len)
 
         installer_src_path = $"dist/_setup_{app_name}.pw"
-        installer_exe_path = if not is_linux() then $"dist/{app_name}-Setup.exe" else $"dist/{app_name}-Setup"
+        installer_exe_path = if not is_linux() do $"dist/{app_name}-Setup.exe" else $"dist/{app_name}-Setup" end
 
         setup_code = "// Standalone Native Setup Installer for " + app_name + "\n\n" +
             "const APP_NAME = \"" + app_name + "\"\n" +
@@ -298,12 +298,12 @@ cmd_make_installer() do
             "const EXPECTED_SHA = \"" + sha + "\"\n" +
             "const PAYLOAD_B64 = \"" + b64_payload + "\"\n\n" +
             "_b64_val(c) do\n" +
-            "    if c >= 65 and c <= 90 then c - 65\n" +
-            "    else if c >= 97 and c <= 122 then c - 97 + 26\n" +
-            "    else if c >= 48 and c <= 57 then c - 48 + 52\n" +
-            "    else if c == 43 then 62\n" +
-            "    else if c == 47 then 63\n" +
-            "    else 0\n" +
+            "    if c >= 65 and c <= 90 do c - 65\n" +
+            "    else if c >= 97 and c <= 122 do c - 97 + 26\n" +
+            "    else if c >= 48 and c <= 57 do c - 48 + 52\n" +
+            "    else if c == 43 do 62\n" +
+            "    else if c == 47 do 63\n" +
+            "    else 0 end\n" +
             "end\n\n" +
             "b64_decode_to_buf(s, out_buf) do\n" +
             "    L = str_len(s)\n" +
@@ -311,20 +311,20 @@ cmd_make_installer() do
             "    w = 0\n" +
             "    while i < L do\n" +
             "        c0 = get_byte(s, i)\n" +
-            "        c1 = if i + 1 < L then get_byte(s, i + 1) else 61\n" +
-            "        c2 = if i + 2 < L then get_byte(s, i + 2) else 61\n" +
-            "        c3 = if i + 3 < L then get_byte(s, i + 3) else 61\n" +
+            "        c1 = if i + 1 < L do get_byte(s, i + 1) else 61 end\n" +
+            "        c2 = if i + 2 < L do get_byte(s, i + 2) else 61 end\n" +
+            "        c3 = if i + 3 < L do get_byte(s, i + 3) else 61 end\n" +
             "        b0 = _b64_val(c0)\n" +
             "        b1 = _b64_val(c1)\n" +
             "        b2 = _b64_val(c2)\n" +
             "        b3 = _b64_val(c3)\n" +
             "        set_byte(out_buf, w, (b0 << 2) | (b1 >> 4))\n" +
             "        w = w + 1\n" +
-            "        if c2 != 61 then do\n" +
+            "        if c2 != 61 do\n" +
             "            set_byte(out_buf, w, ((b1 & 15) << 4) | (b2 >> 2))\n" +
             "            w = w + 1\n" +
             "        end\n" +
-            "        if c3 != 61 then do\n" +
+            "        if c3 != 61 do\n" +
             "            set_byte(out_buf, w, ((b2 & 3) << 6) | b3)\n" +
             "            w = w + 1\n" +
             "        end\n" +
@@ -339,16 +339,16 @@ cmd_make_installer() do
             "    show(\"=======================================================\\n\\n\")\n\n" +
             "    show(\"[*] Menentukan direktori instalasi target...\\n\")\n" +
             "    target_dir = \"C:\\\\Program Files\\\\\" + APP_NAME\n" +
-            "    if not is_linux() then do\n" +
+            "    if not is_linux() do\n" +
             "        localapp = read_text(\"env:LOCALAPPDATA\")\n" +
-            "        target_dir = if str_len(localapp) > 0 then path_join(localapp, \"Programs\\\\\" + APP_NAME) else \"C:\\\\PurwaApps\\\\\" + APP_NAME\n" +
-            "    end else do\n" +
+            "        target_dir = if str_len(localapp) > 0 do path_join(localapp, \"Programs\\\\\" + APP_NAME) else \"C:\\\\PurwaApps\\\\\" + APP_NAME end\n" +
+            "    else do\n" +
             "        home = read_text(\"env:HOME\")\n" +
-            "        target_dir = if str_len(home) > 0 then path_join(home, \".local/share/\" + APP_NAME) else \"/usr/local/share/\" + APP_NAME\n" +
+            "        target_dir = if str_len(home) > 0 do path_join(home, \".local/share/\" + APP_NAME) else \"/usr/local/share/\" + APP_NAME end\n" +
             "    end\n\n" +
             "    show(\"    Target Path: \" + target_dir + \"\\n\\n\")\n" +
-            "    if not is_linux() then exec(\"cmd /c if not exist \\\"\" + target_dir + \"\\\" mkdir \\\"\" + target_dir + \"\\\"\")\n" +
-            "    else exec(\"-p \" + target_dir)\n\n" +
+            "    if not is_linux() do exec(\"cmd /c if not exist \\\"\" + target_dir + \"\\\" mkdir \\\"\" + target_dir + \"\\\"\")\n" +
+            "    else exec(\"-p \" + target_dir) end\n\n" +
             "    show(\"[*] Mengekstrak payload biner...\\n\")\n" +
             "    out_mem = alloc(BIN_SIZE + 1024)\n" +
             "    cleanup drop(out_mem)\n" +
@@ -357,9 +357,9 @@ cmd_make_installer() do
             "    write_file(target_bin_path, out_mem, written_len)\n" +
             "    show(\"  [✓] File executable berhasil dipasang ke: \" + target_bin_path + \"\\n\")\n\n" +
             "    // Buat shortcut Desktop bila di Windows\n" +
-            "    if not is_linux() then do\n" +
+            "    if not is_linux() do\n" +
             "        userprofile = read_text(\"env:USERPROFILE\")\n" +
-            "        if str_len(userprofile) > 0 then do\n" +
+            "        if str_len(userprofile) > 0 do\n" +
             "            desktop_dir = path_join(userprofile, \"Desktop\")\n" +
             "            vbs_script = \"Set oWS = WScript.CreateObject(\\\"WScript.Shell\\\")\\n\" +\n" +
             "                \"sLinkFile = \\\"\" + path_join(desktop_dir, APP_NAME + \".lnk\") + \"\\\"\\n\" +\n" +
@@ -384,20 +384,20 @@ cmd_make_installer() do
         
         show($"[*] Mengompilasi Setup Installer -> '{installer_exe_path}'...\n")
         purwac_bin = find_purwac_compiler()
-        if not is_linux() then do
+        if not is_linux() do
             exec($"cmd /c \"{purwac_bin}\" {installer_src_path} -o {installer_exe_path}")
-        end else do
+        else do
             exec($"-c \"{purwac_bin} {installer_src_path} -o {installer_exe_path}\"")
         end
         
-        if file_exists(installer_exe_path) then do
-            if not is_linux() then exec($"cmd /c del \"{installer_src_path}\"")
-            else exec($"-f {installer_src_path}")
+        if file_exists(installer_exe_path) do
+            if not is_linux() do exec($"cmd /c del \"{installer_src_path}\"")
+            else exec($"-f {installer_src_path}") end
             
             show($"[✓] Standalone Setup Installer Sukses Dibuat: '{installer_exe_path}'!\n")
             show("    Installer ini siap didistribusikan langsung ke pengguna akhir (tanpa butuh compiler/runtime tambahan).\n\n")
             0
-        end else do
+        else do
             show("[x] Gagal mengompilasi setup installer.\n\n")
             1
         end
@@ -409,9 +409,9 @@ cmd_list() do
     show_banner()
     install_root = get_install_root()
     show($"[*] Memeriksa aplikasi Purwa terpasang di: '{install_root}'...\n\n")
-    if not file_exists(install_root) then do
+    if not file_exists(install_root) do
         show("Belum ada aplikasi Purwa yang terpasang melalui purwa-pkg.\n\n")
-    end else do
+    else do
         show("Gunakan direktori instalasi di atas untuk melihat aplikasi terpasang.\n\n")
     end
     0
@@ -426,22 +426,22 @@ main() do
     tl = salin_token(cmd, 1, action, 128)
     salin_token(cmd, 2, arg2, 256)
 
-    if tl == 0 then do
+    if tl == 0 do
         show_help()
-    end else do
-        if str_eq(action, "init") then do
+    else do
+        if str_eq(action, "init") do
             cmd_init(arg2)
-        end else if str_eq(action, "build") then do
+        else if str_eq(action, "build") do
             cmd_build()
-        end else if str_eq(action, "pack") then do
+        else if str_eq(action, "pack") do
             cmd_pack()
-        end else if str_eq(action, "make-installer") or str_eq(action, "installer") then do
+        else if str_eq(action, "make-installer") or str_eq(action, "installer") do
             cmd_make_installer()
-        end else if str_eq(action, "list") then do
+        else if str_eq(action, "list") do
             cmd_list()
-        end else if str_eq(action, "help") or str_eq(action, "--help") or str_eq(action, "-h") then do
+        else if str_eq(action, "help") or str_eq(action, "--help") or str_eq(action, "-h") do
             show_help()
-        end else do
+        else do
             show($"[x] Perintah tidak dikenal: '{action}'\n\n")
             show_help()
         end

@@ -40,7 +40,7 @@ end
 
 // hasil: (offset-berikut / -1 bila tag salah, nilai)
 dt_get_i64(buf, off) =
-    if get_byte(buf, off) != DT_I then (0 - 1, 0)
+    if get_byte(buf, off) != DT_I do (0 - 1, 0)
     else do
         v = get_byte(buf, off + 1) +
             get_byte(buf, off + 2) * 256 +
@@ -56,7 +56,7 @@ dt_get_i64(buf, off) =
 // hasil: (offset-berikut / -1, pointer salinan NUL-terminated; pemanggil
 // yang melepas via drop)
 dt_get_str(buf, off) =
-    if get_byte(buf, off) != DT_S then (0 - 1, 0)
+    if get_byte(buf, off) != DT_S do (0 - 1, 0)
     else do
         n = dt_get_u32(buf, off + 1)
         p = alloc(n + 1)
@@ -67,7 +67,7 @@ dt_get_str(buf, off) =
 
 // hasil: (offset-berikut / -1, array Purwa)
 dt_get_arr(buf, off) =
-    if get_byte(buf, off) != DT_A then (0 - 1, 0)
+    if get_byte(buf, off) != DT_A do (0 - 1, 0)
     else do
         n = dt_get_u32(buf, off + 1)
         arr = make_array(n, 0)

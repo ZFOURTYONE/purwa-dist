@@ -16,7 +16,7 @@ struct ServerNode {
 // 1. Multi-Return Computation with Safe Error Handling (Tuples)
 // ---------------------------------------------------------------------------
 calculate_throughput(ops, elapsed_ms) do
-    if elapsed_ms <= 0 then (0, 1)
+    if elapsed_ms <= 0 do (0, 1)
     else do
         ops_per_sec = (ops * 1000) / elapsed_ms
         (ops_per_sec, 0)

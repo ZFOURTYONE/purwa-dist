@@ -15,16 +15,16 @@
 // arr_get(a, i, default): baca a[i] aman — di luar batas return default
 arr_get(a, i, default) do
     n = size(a)
-    if i >= 0 and i < n then a[i] else default
+    if i >= 0 and i < n do a[i] else default end
 end
 
 // arr_set(a, i, v): tulis a[i] = v, no-op bila di luar batas (return 1 = ok)
 arr_set(a, i, v) do
     n = size(a)
-    if i >= 0 and i < n then do
+    if i >= 0 and i < n do
         a[i] = v
         1
-    end else 0
+    else 0 end
 end
 
 // arr_len(a): alias untuk size (nama intuitif)
@@ -52,7 +52,7 @@ arr_filter(a, pred) do
     i = 0
     while i < n do
         v = a[i]
-        if pred(v) != 0 then do
+        if pred(v) != 0 do
             tmp[cnt] = v
             cnt = cnt + 1
         end
@@ -100,7 +100,7 @@ arr_find(a, pred) do
     i = 0
     go = true
     while i < n and go do
-        if pred(a[i]) != 0 then do
+        if pred(a[i]) != 0 do
             found = a[i]
             go = false
         end
@@ -116,7 +116,7 @@ arr_find_index(a, pred) do
     i = 0
     go = true
     while i < n and go do
-        if pred(a[i]) != 0 then do
+        if pred(a[i]) != 0 do
             idx = i
             go = false
         end
@@ -131,8 +131,8 @@ arr_contains(a, v) do
     found = false
     i = 0
     while i < n and not found do
-        if a[i] == v then found = true
-        else i = i + 1
+        if a[i] == v do found = true
+        else i = i + 1 end
     end
     found
 end
@@ -193,7 +193,7 @@ end
 // arr_join(a, sep): gabung array string jadi satu string ("a,b,c")
 arr_join(a, sep) do
     n = size(a)
-    if n == 0 then ""
+    if n == 0 do ""
     else do
         out = a[0]
         i = 1
@@ -208,12 +208,12 @@ end
 // arr_to_string(a): array angka -> "[1, 2, 3]"
 arr_to_string(a) do
     n = size(a)
-    if n == 0 then "[]"
+    if n == 0 do "[]"
     else do
         out = "["
         i = 0
         while i < n do
-            if i > 0 then out = concat(out, ", ")
+            if i > 0 do out = concat(out, ", ") end
             out = concat(out, to_text(a[i]))
             i = i + 1
         end
@@ -236,12 +236,12 @@ end
 // arr_max(a): elemen maksimum
 arr_max(a) do
     n = size(a)
-    if n == 0 then 0
+    if n == 0 do 0
     else do
         m = a[0]
         i = 1
         while i < n do
-            if a[i] > m then m = a[i]
+            if a[i] > m do m = a[i] end
             i = i + 1
         end
         m
@@ -251,12 +251,12 @@ end
 // arr_min(a): elemen minimum
 arr_min(a) do
     n = size(a)
-    if n == 0 then 0
+    if n == 0 do 0
     else do
         m = a[0]
         i = 1
         while i < n do
-            if a[i] < m then m = a[i]
+            if a[i] < m do m = a[i] end
             i = i + 1
         end
         m

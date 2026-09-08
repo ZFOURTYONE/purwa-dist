@@ -19,8 +19,8 @@ thread_worker(p) do
 end
 
 fib_calc(n) =
-    if n <= 1 then n
-    else fib_calc(n - 1) + fib_calc(n - 2)
+    if n <= 1 do n
+    else fib_calc(n - 1) + fib_calc(n - 2) end
 
 salin_token(cmd, k, buf) do
     i = 0
@@ -31,21 +31,21 @@ salin_token(cmd, k, buf) do
         while i < str_len(cmd) and (get_byte(cmd, i) == 32 or get_byte(cmd, i) == 9 or get_byte(cmd, i) == 13) do
             i += 1
         end
-        if i >= str_len(cmd) then go = 0
+        if i >= str_len(cmd) do go = 0
         else do
-            if get_byte(cmd, i) == 34 then do
+            if get_byte(cmd, i) == 34 do
                 i += 1
                 while i < str_len(cmd) and get_byte(cmd, i) != 34 do
-                    if ck == k then do
+                    if ck == k do
                         set_byte(buf, w, get_byte(cmd, i))
                         w += 1
                     end
                     i += 1
                 end
                 i += 1
-            end else do
+            else do
                 while i < str_len(cmd) and get_byte(cmd, i) != 32 and get_byte(cmd, i) != 9 and get_byte(cmd, i) != 13 do
-                    if ck == k then do
+                    if ck == k do
                         set_byte(buf, w, get_byte(cmd, i))
                         w += 1
                     end

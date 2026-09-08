@@ -49,12 +49,12 @@ net_linux_parse_ip(src, off, sa) do
             i = i + 1
             c = get_byte(src, i)
         end
-        if ndig == 0 or val > 255 then ok = false
+        if ndig == 0 or val > 255 do ok = false
         else do
             set_byte(sa, 4 + oct, val)
             oct = oct + 1
-            if oct < 4 then do
-                if c == 46 then i = i + 1 else ok = false
+            if oct < 4 do
+                if c == 46 do i = i + 1 else ok = false end
             end
         end
     end
@@ -63,7 +63,7 @@ end
 
 // Lengkapi sockaddr_in: family + port BE + IP literal. true jika IP sah.
 net_linux_pack(sa, ip, port) do
-    if not net_linux_parse_ip(ip, 0, sa) then false
+    if not net_linux_parse_ip(ip, 0, sa) do false
     else do
         set_byte(sa, 0, 2)
         pb = net_htons(port)
@@ -76,7 +76,7 @@ end
 // /etc/resolv.conf -> "nameserver a.b.c.d" pertama -> sa (port 53 BE).
 net_linux_nameserver(sa) do
     fd = syscall(257, 0 - 100, "/etc/resolv.conf", 0)
-    if fd < 0 then false
+    if fd < 0 do false
     else do
         buf = alloc(1024)
         cleanup drop(buf)
@@ -85,8 +85,8 @@ net_linux_nameserver(sa) do
         ok = false
         line = 0
         while line < n and not ok do
-            if net_linux_ns_at(buf, line, n) then do
-                if net_linux_parse_ip(buf, line + 11, sa) then do
+            if net_linux_ns_at(buf, line, n) do
+                if net_linux_parse_ip(buf, line + 11, sa) do
                     set_byte(sa, 0, 2)
                     set_byte(sa, 2, 0)
                     set_byte(sa, 3, 53)
@@ -105,8 +105,8 @@ net_linux_ns_at(buf, line, n) do
     i = 0
     hit = true
     while hit and i < 11 do
-        if line + i >= n then hit = false
-        else if get_byte(buf, line + i) != get_byte(pat, i) then hit = false
+        if line + i >= n do hit = false
+        else if get_byte(buf, line + i) != get_byte(pat, i) do hit = false end
         i = i + 1
     end
     hit
@@ -115,7 +115,7 @@ end
 // Lewati nama DNS (label berpanjang atau pointer 0xC0xx); return offset akhir.
 net_linux_skip_name(buf, pos) do
     b = get_byte(buf, pos)
-    if (b & 192) == 192 then pos + 2
+    if (b & 192) == 192 do pos + 2
     else do
         while b != 0 do
             pos = pos + b + 1
@@ -131,7 +131,7 @@ net_linux_resolve(host, out4) do
     ns = alloc(16)
     cleanup drop(ns)
     mem_set(ns, 0, 16)
-    if not net_linux_nameserver(ns) then false
+    if not net_linux_nameserver(ns) do false
     else do
         q = alloc(256)
         cleanup drop(q)
@@ -161,15 +161,15 @@ net_linux_resolve(host, out4) do
         set_byte(q, pos + 3, 1)                  // qclass = IN
         qlen = pos + 4
         fd = syscall(41, 2, 2, 17)               // SOCK_DGRAM / UDP
-        if fd < 0 then false
+        if fd < 0 do false
         else do
             net_set_timeout(fd, 3000)
             ans = alloc(512)
             cleanup drop(ans)
             sent = syscall(44, fd, q, qlen, 0, ns, 16)
-            n = if sent == qlen then syscall(45, fd, ans, 512, 0, 0, 0) else 0 - 1
+            n = if sent == qlen do syscall(45, fd, ans, 512, 0, 0, 0) else 0 - 1 end
             found = false
-            if n > 12 then do
+            if n > 12 do
                 p = net_linux_skip_name(ans, 12) + 4     // lewati question
                 ancount = get_byte(ans, 6) * 256 + get_byte(ans, 7)
                 i = 0
@@ -177,7 +177,7 @@ net_linux_resolve(host, out4) do
                     p = net_linux_skip_name(ans, p)
                     typ = get_byte(ans, p) * 256 + get_byte(ans, p + 1)
                     rdlen = get_byte(ans, p + 8) * 256 + get_byte(ans, p + 9)
-                    if typ == 1 and rdlen == 4 then do
+                    if typ == 1 and rdlen == 4 do
                         j = 0
                         while j < 4 do
                             set_byte(out4, j, get_byte(ans, p + 10 + j))
@@ -196,10 +196,10 @@ net_linux_resolve(host, out4) do
 end
 
 net_init() do
-    if is_linux() then true
-    else if WS2_DLL == 0 then do
+    if is_linux() do true
+    else if WS2_DLL == 0 do
         WS2_DLL = load_dll("ws2_32.dll")
-        if WS2_DLL != 0 then do
+        if WS2_DLL != 0 do
             FN_WSA_STARTUP = get_fn(WS2_DLL, "WSAStartup")
             FN_WSA_CLEANUP = get_fn(WS2_DLL, "WSACleanup")
             FN_SOCKET = get_fn(WS2_DLL, "socket")
@@ -220,14 +220,14 @@ net_init() do
             wsa_data = alloc(512)
             res = call_dll(FN_WSA_STARTUP, 514, wsa_data)
             drop(wsa_data)
-            if res == 0 then true else false
+            if res == 0 do true else false end
         end
-    end else 1
+    else 1 end
 end
 
 net_cleanup() do
-    if is_linux() then 0
-    else if WS2_DLL != 0 and FN_WSA_CLEANUP != 0 then do
+    if is_linux() do 0
+    else if WS2_DLL != 0 and FN_WSA_CLEANUP != 0 do
         call_dll(FN_WSA_CLEANUP)
         close_dll(WS2_DLL)
         WS2_DLL = 0
@@ -236,8 +236,8 @@ net_cleanup() do
 end
 
 net_socket() do
-    if not net_init() then 0 - 1
-    else if is_linux() then syscall(41, 2, 1, 6)   // AF_INET, SOCK_STREAM, TCP
+    if not net_init() do 0 - 1
+    else if is_linux() do syscall(41, 2, 1, 6)   // AF_INET, SOCK_STREAM, TCP
     else do
         // socket(AF_INET=2, SOCK_STREAM=1, IPPROTO_TCP=6)
         call_dll(FN_SOCKET, 2, 1, 6)
@@ -245,9 +245,9 @@ net_socket() do
 end
 
 net_listen(port) do
-    if is_linux() then do
+    if is_linux() do
         sock = net_socket()
-        if sock < 0 then 0 - 1
+        if sock < 0 do 0 - 1
         else do
             opt = alloc(4)
             cleanup drop(opt)
@@ -257,17 +257,17 @@ net_listen(port) do
             cleanup drop(sa)
             mem_set(sa, 0, 16)
             net_linux_pack(sa, "0.0.0.0", port)      // INADDR_ANY
-            if syscall(49, sock, sa, 16) != 0 then do
+            if syscall(49, sock, sa, 16) != 0 do
                 net_close(sock)
                 0 - 1
-            end else if syscall(50, sock, 128) != 0 then do
+            else if syscall(50, sock, 128) != 0 do
                 net_close(sock)
                 0 - 1
-            end else sock
+            else sock end
         end
-    end else do
+    else do
     sock = net_socket()
-    if sock < 0 or sock == 18446744073709551615 then 0 - 1
+    if sock < 0 or sock == 18446744073709551615 do 0 - 1
     else do
         // Set SO_REUSEADDR (SOL_SOCKET=0xFFFF, SO_REUSEADDR=4)
         opt = alloc(8)
@@ -289,48 +289,48 @@ net_listen(port) do
         bind_res = call_dll(FN_BIND, sock, addr, 16)
         drop(addr)
         
-        if bind_res != 0 then do
+        if bind_res != 0 do
             call_dll(FN_CLOSESOCKET, sock)
             0 - 1
-        end else do
+        else do
             listen_res = call_dll(FN_LISTEN, sock, 128)
-            if listen_res != 0 then do
+            if listen_res != 0 do
                 call_dll(FN_CLOSESOCKET, sock)
                 0 - 1
-            end else sock
+            else sock end
         end
     end
     end
 end
 
 net_accept(server_fd) do
-    if server_fd < 0 then 0 - 1
-    else if is_linux() then syscall(43, server_fd, 0, 0)
+    if server_fd < 0 do 0 - 1
+    else if is_linux() do syscall(43, server_fd, 0, 0)
     else do
         call_dll(FN_ACCEPT, server_fd, 0, 0)
     end
 end
 
 net_send(client_fd, msg_buf, msg_len) do
-    if client_fd < 0 then 0 - 1
-    else if is_linux() then syscall(44, client_fd, msg_buf, msg_len, 0, 0)  // sendto flags=0
+    if client_fd < 0 do 0 - 1
+    else if is_linux() do syscall(44, client_fd, msg_buf, msg_len, 0, 0)  // sendto flags=0
     else do
         call_dll(FN_SEND, client_fd, msg_buf, msg_len, 0)
     end
 end
 
 net_recv(client_fd, out_buf, max_len) do
-    if client_fd < 0 then 0 - 1
-    else if is_linux() then syscall(45, client_fd, out_buf, max_len, 0, 0, 0)  // recvfrom
+    if client_fd < 0 do 0 - 1
+    else if is_linux() do syscall(45, client_fd, out_buf, max_len, 0, 0, 0)  // recvfrom
     else do
         call_dll(FN_RECV, client_fd, out_buf, max_len, 0)
     end
 end
 
 net_close(sock_fd) do
-    if is_linux() then do
-        if sock_fd >= 3 then syscall(3, sock_fd)
-    end else if sock_fd >= 0 and WS2_DLL != 0 and FN_CLOSESOCKET != 0 then do
+    if is_linux() do
+        if sock_fd >= 3 do syscall(3, sock_fd) end
+    else if sock_fd >= 0 and WS2_DLL != 0 and FN_CLOSESOCKET != 0 do
         call_dll(FN_CLOSESOCKET, sock_fd)
     end
 end
@@ -342,8 +342,8 @@ end
 // net_set_timeout(fd, ms) — SO_RCVTIMEO + SO_SNDTIMEO agar connect/recv
 // tidak menggantung selamanya. return 0 ok, -1 gagal.
 net_set_timeout(fd, ms) do
-    if fd < 0 then 0 - 1
-    else if is_linux() then do
+    if fd < 0 do 0 - 1
+    else if is_linux() do
         // struct timeval { u64 sec; u64 usec } — 16 byte, BUKAN DWORD ms
         tv = alloc(16)
         cleanup drop(tv)
@@ -353,7 +353,7 @@ net_set_timeout(fd, ms) do
         syscall(54, fd, 1, 20, tv, 16)            // SO_RCVTIMEO
         syscall(54, fd, 1, 21, tv, 16)            // SO_SNDTIMEO
         0
-    end else do
+    else do
         opt = alloc(8)
         mem_set(opt, 0, 8)
         set_byte(opt, 0, ms & 255)
@@ -371,25 +371,25 @@ end
 // net_connect_ip("1.2.3.4", port) — sambung TCP ke IP literal.
 // return socket fd (>= 0) atau -1 gagal.
 net_connect_ip(ip_str, port) do
-    if not net_init() then 0 - 1
-    else if is_linux() then do
+    if not net_init() do 0 - 1
+    else if is_linux() do
         sock = syscall(41, 2, 1, 6)
-        if sock < 0 then 0 - 1
+        if sock < 0 do 0 - 1
         else do
             sa = alloc(16)
             cleanup drop(sa)
             mem_set(sa, 0, 16)
-            if not net_linux_pack(sa, ip_str, port) then do
+            if not net_linux_pack(sa, ip_str, port) do
                 net_close(sock)
                 0 - 1
-            end else if syscall(42, sock, sa, 16) != 0 then do
+            else if syscall(42, sock, sa, 16) != 0 do
                 net_close(sock)
                 0 - 1
-            end else sock
+            else sock end
         end
-    end else do
+    else do
         sock = call_dll(FN_SOCKET, 2, 1, 6)
-        if sock < 0 then 0 - 1
+        if sock < 0 do 0 - 1
         else do
             addr = alloc(16)
             mem_set(addr, 0, 16)
@@ -398,22 +398,22 @@ net_connect_ip(ip_str, port) do
             set_byte(addr, 2, port_be & 255)
             set_byte(addr, 3, (port_be >> 8) & 255)
             ip_raw = call_dll(FN_INET_ADDR, ip_str)
-            if ip_raw == 4294967295 or ip_raw == 18446744073709551615 then do
+            if ip_raw == 4294967295 or ip_raw == 18446744073709551615 do
                 // inet_addr gagal (INADDR_NONE)
                 net_close(sock)
                 drop(addr)
                 0 - 1
-            end else do
+            else do
                 set_byte(addr, 4, ip_raw & 255)
                 set_byte(addr, 5, (ip_raw >> 8) & 255)
                 set_byte(addr, 6, (ip_raw >> 16) & 255)
                 set_byte(addr, 7, (ip_raw >> 24) & 255)
                 r = call_dll(FN_CONNECT, sock, addr, 16)
                 drop(addr)
-                if r != 0 then do
+                if r != 0 do
                     net_close(sock)
                     0 - 1
-                end else sock
+                else sock end
             end
         end
     end
@@ -422,15 +422,15 @@ end
 // net_connect_host("example.com", port) — Windows: getaddrinfo;
 // Linux: resolver DNS A murni-Purwa via /etc/resolv.conf.
 net_connect_host(host, port) do
-    if not net_init() then 0 - 1
-    else if is_linux() then do
+    if not net_init() do 0 - 1
+    else if is_linux() do
         ip = alloc(8)
         cleanup drop(ip)
         mem_set(ip, 0, 8)
-        if not net_linux_resolve(host, ip) then 0 - 1
+        if not net_linux_resolve(host, ip) do 0 - 1
         else do
             sock = syscall(41, 2, 1, 6)
-            if sock < 0 then 0 - 1
+            if sock < 0 do 0 - 1
             else do
                 sa = alloc(16)
                 cleanup drop(sa)
@@ -444,13 +444,13 @@ net_connect_host(host, port) do
                     set_byte(sa, 4 + j, get_byte(ip, j))
                     j = j + 1
                 end
-                if syscall(42, sock, sa, 16) != 0 then do
+                if syscall(42, sock, sa, 16) != 0 do
                     net_close(sock)
                     0 - 1
-                end else sock
+                else sock end
             end
         end
-    end else do
+    else do
         port_str = to_text(port)
         res_ptr = alloc(8)
         mem_set(res_ptr, 0, 8)
@@ -461,23 +461,23 @@ net_connect_host(host, port) do
         gai = call_dll(FN_GETADDRINFO, host, port_str, hints, res_ptr)
         drop(hints)
         drop(port_str)
-        if gai != 0 then do
+        if gai != 0 do
             drop(res_ptr)
             0 - 1
-        end else do
+        else do
             first = read_u64(res_ptr, 0)
             ai = first
             fd = 0 - 1
             while ai != 0 and fd < 0 do
                 fam = get_byte(ai, 4) + get_byte(ai, 5) * 256
-                if fam == 2 then do
+                if fam == 2 do
                     sa = read_u64(ai, 32)     // ai_addr
                     alen = read_u64(ai, 16)   // ai_addrlen
-                    if sa != 0 then do
+                    if sa != 0 do
                         fd = call_dll(FN_SOCKET, 2, 1, 6)
-                        if fd >= 0 then do
+                        if fd >= 0 do
                             r = call_dll(FN_CONNECT, fd, sa, alen)
-                            if r != 0 then do
+                            if r != 0 do
                                 net_close(fd)
                                 fd = 0 - 1
                             end
@@ -500,10 +500,10 @@ net_connect(host, port) do
     i = 0
     while i < L and is_ip do
         c = get_byte(host, i)
-        if c != 46 and (c < 48 or c > 57) then is_ip = 0 else i = i + 1
+        if c != 46 and (c < 48 or c > 57) do is_ip = 0 else i = i + 1 end
     end
-    if is_ip then net_connect_ip(host, port)
-    else net_connect_host(host, port)
+    if is_ip do net_connect_ip(host, port)
+    else net_connect_host(host, port) end
 end
 
 // ===========================================================================
@@ -552,12 +552,12 @@ end
 // H3#2); return -1 agar pemanggil jatuh ke jalur error alih-alih sukses
 // palsu (load_dll di Linux mengembalikan -ENOSYS yang bukan 0).
 https_init() do
-    if is_linux() then 0 - 1
-    else if WH_SESSION != 0 then 1
+    if is_linux() do 0 - 1
+    else if WH_SESSION != 0 do 1
     else do
-        if WH_DLL == 0 then do
+        if WH_DLL == 0 do
             WH_DLL = load_dll("winhttp.dll")
-            if WH_DLL != 0 then do
+            if WH_DLL != 0 do
                 FN_WH_OPEN = get_fn(WH_DLL, "WinHttpOpen")
                 FN_WH_CONNECT = get_fn(WH_DLL, "WinHttpConnect")
                 FN_WH_OPENREQ = get_fn(WH_DLL, "WinHttpOpenRequest")
@@ -571,7 +571,7 @@ https_init() do
                 FN_WH_TIMEOUT = get_fn(WH_DLL, "WinHttpSetTimeouts")
             end
         end
-        if WH_HOSTW == 0 then do
+        if WH_HOSTW == 0 do
             WH_HOSTW = alloc(1024)
             WH_PATHW = alloc(8192)
             WH_VERBW = alloc(32)
@@ -580,20 +580,20 @@ https_init() do
             WH_UAW = alloc(64)
             wh_wide("purwa-net/1.0", WH_UAW)
         end
-        if WH_SESSION == 0 and FN_WH_OPEN != 0 then do
+        if WH_SESSION == 0 and FN_WH_OPEN != 0 do
             WH_SESSION = call_dll(FN_WH_OPEN, WH_UAW, 0, 0, 0, 0)
-            if WH_SESSION != 0 then do
+            if WH_SESSION != 0 do
                 call_dll(FN_WH_TIMEOUT, WH_SESSION, 10000, 15000, 30000, 60000)
                 1
-            end else 0 - 1
-        end else if WH_SESSION != 0 then 1 else 0 - 1
+            else 0 - 1 end
+        else if WH_SESSION != 0 do 1 else 0 - 1 end
     end
 end
 
 // Tutup sesi (opsional — proses exit tetap bersih tanpa ini).
 https_close() do
-    if WH_SESSION != 0 and FN_WH_CLOSEH != 0 then
-        call_dll(FN_WH_CLOSEH, WH_SESSION)
+    if WH_SESSION != 0 and FN_WH_CLOSEH != 0 do
+        call_dll(FN_WH_CLOSEH, WH_SESSION) end
     WH_SESSION = 0
     0
 end
@@ -603,13 +603,13 @@ end
 // resp: buffer caller; terisi body + NUL, maksimal max-1 byte.
 // Jangan kirim Accept-Encoding: gzip — WinHTTP tidak dekompresi otomatis.
 net_request(verb, url, headers, body, resp, max) do
-    if not https_init() then 0 - 1
+    if not https_init() do 0 - 1
     else do
         // --- bedah URL: scheme://host[:port]/path ---
         i = 0
         secure = 8388608                      // 0x800000 WINHTTP_FLAG_SECURE
-        if starts_with(url, "https://") then i = 8
-        if starts_with(url, "http://") then do
+        if starts_with(url, "https://") do i = 8 end
+        if starts_with(url, "http://") do
             secure = 0
             i = 7
         end
@@ -617,25 +617,25 @@ net_request(verb, url, headers, body, resp, max) do
         slash = 0
         j = i
         while j < un and slash == 0 do
-            if get_byte(url, j) == 47 then slash = j else j = j + 1
+            if get_byte(url, j) == 47 do slash = j else j = j + 1 end
         end
-        hostend = if slash != 0 then slash else un
+        hostend = if slash != 0 do slash else un end
         colon = 0
         k = i
         while k < hostend and colon == 0 do
-            if get_byte(url, k) == 58 then colon = k else k = k + 1
+            if get_byte(url, k) == 58 do colon = k else k = k + 1 end
         end
-        port = if secure != 0 then 443 else 80
-        if colon != 0 then do
+        port = if secure != 0 do 443 else 80 end
+        if colon != 0 do
             pnum = 0
             m = colon + 1
             while m < hostend do
                 pnum = pnum * 10 + (get_byte(url, m) - 48)
                 m = m + 1
             end
-            if pnum > 0 then port = pnum
+            if pnum > 0 do port = pnum end
         end
-        hend = if colon != 0 then colon else hostend
+        hend = if colon != 0 do colon else hostend end
         hn = 0
         while hn < hend - i do
             set_byte(WH_HOSTW, hn * 2, get_byte(url, i + hn))
@@ -644,53 +644,53 @@ net_request(verb, url, headers, body, resp, max) do
         end
         set_byte(WH_HOSTW, hn * 2, 0)
         set_byte(WH_HOSTW, hn * 2 + 1, 0)
-        if slash != 0 then do
+        if slash != 0 do
             wh_wide(slice(url, slash, un), WH_PATHW)
-        end else do
+        else do
             set_byte(WH_PATHW, 0, 47)
             set_byte(WH_PATHW, 1, 0)
             set_byte(WH_PATHW, 2, 0)
             set_byte(WH_PATHW, 3, 0)
         end
         wh_wide(verb, WH_VERBW)
-        if str_len(headers) > 0 then wh_wide(headers, WH_HDRW)
+        if str_len(headers) > 0 do wh_wide(headers, WH_HDRW) end
         // --- kirim ---
         status = 0 - 2
         conn = call_dll(FN_WH_CONNECT, WH_SESSION, WH_HOSTW, port, 0)
-        if conn != 0 then do
+        if conn != 0 do
             status = 0 - 3
             req = call_dll(FN_WH_OPENREQ, conn, WH_VERBW, WH_PATHW, 0, 0, 0, secure)
-            if req != 0 then do
+            if req != 0 do
                 status = 0 - 4
-                if str_len(headers) > 0 then
-                    call_dll(FN_WH_ADDHDR, req, WH_HDRW, 0 - 1, 805306368)
+                if str_len(headers) > 0 do
+                    call_dll(FN_WH_ADDHDR, req, WH_HDRW, 0 - 1, 805306368) end
                 blen = str_len(body)
-                if call_dll(FN_WH_SEND, req, 0, 0, body, blen, blen, 0) != 0 then do
+                if call_dll(FN_WH_SEND, req, 0, 0, body, blen, blen, 0) != 0 do
                     status = 0 - 5
-                    if call_dll(FN_WH_RECV, req, 0) != 0 then do
+                    if call_dll(FN_WH_RECV, req, 0) != 0 do
                         status = 0 - 6
                         mem_set(WH_SCR, 0, 8)
                         // lpdwBufferSize = POINTER ke DWORD, bukan nilainya!
                         write_u64(WH_SCR + 8, 0, 4)
                         q = call_dll(FN_WH_QHDR, req, 536870931, 0, WH_SCR, WH_SCR + 8, 0)
-                        if q != 0 then status = read_u32(WH_SCR, 0)
-                        if status >= 100 then do
+                        if q != 0 do status = read_u32(WH_SCR, 0) end
+                        if status >= 100 do
                             off = 0
                             more = 1
                             while more != 0 do
                                 mem_set(WH_SCR, 0, 8)
                                 call_dll(FN_WH_QAVAIL, req, WH_SCR)
                                 nav = read_u32(WH_SCR, 0)
-                                if nav == 0 then more = 0
-                                if nav > 0 and off < max - 1 then do
+                                if nav == 0 do more = 0 end
+                                if nav > 0 and off < max - 1 do
                                     chunk = nav
-                                    if chunk > 4096 then chunk = 4096
+                                    if chunk > 4096 do chunk = 4096 end
                                     room = max - 1 - off
-                                    if chunk > room then chunk = room
+                                    if chunk > room do chunk = room end
                                     mem_set(WH_SCR + 8, 0, 8)
                                     call_dll(FN_WH_READ, req, resp + off, chunk, WH_SCR + 8)
                                     nrd = read_u32(WH_SCR + 8, 0)
-                                    if nrd == 0 then more = 0
+                                    if nrd == 0 do more = 0 end
                                     off = off + nrd
                                 end
                             end
@@ -722,14 +722,14 @@ global sst_status = 0        // HTTP status respons (dari net_stream_open)
 
 net_stream_open(verb, url, headers, body) do
     sst_status = 0
-    if not https_init() then 0 - 1
+    if not https_init() do 0 - 1
     else do
         // perpanjang receive timeout untuk stream panjang (6 menit antar-chunk)
         call_dll(FN_WH_TIMEOUT, WH_SESSION, 10000, 15000, 30000, 360000)
         i = 0
         secure = 8388608                    // WINHTTP_FLAG_SECURE
-        if starts_with(url, "https://") then i = 8
-        if starts_with(url, "http://") then do
+        if starts_with(url, "https://") do i = 8 end
+        if starts_with(url, "http://") do
             secure = 0
             i = 7
         end
@@ -737,25 +737,25 @@ net_stream_open(verb, url, headers, body) do
         slash = 0
         j = i
         while j < un and slash == 0 do
-            if get_byte(url, j) == 47 then slash = j else j = j + 1
+            if get_byte(url, j) == 47 do slash = j else j = j + 1 end
         end
-        hostend = if slash != 0 then slash else un
+        hostend = if slash != 0 do slash else un end
         colon = 0
         k = i
         while k < hostend and colon == 0 do
-            if get_byte(url, k) == 58 then colon = k else k = k + 1
+            if get_byte(url, k) == 58 do colon = k else k = k + 1 end
         end
-        port = if secure != 0 then 443 else 80
-        if colon != 0 then do
+        port = if secure != 0 do 443 else 80 end
+        if colon != 0 do
             pnum = 0
             m = colon + 1
             while m < hostend do
                 pnum = pnum * 10 + (get_byte(url, m) - 48)
                 m = m + 1
             end
-            if pnum > 0 then port = pnum
+            if pnum > 0 do port = pnum end
         end
-        hend = if colon != 0 then colon else hostend
+        hend = if colon != 0 do colon else hostend end
         hn = 0
         while hn < hend - i do
             set_byte(WH_HOSTW, hn * 2, get_byte(url, i + hn))
@@ -764,7 +764,7 @@ net_stream_open(verb, url, headers, body) do
         end
         set_byte(WH_HOSTW, hn * 2, 0)
         set_byte(WH_HOSTW, hn * 2 + 1, 0)
-        if slash != 0 then wh_wide(slice(url, slash, un), WH_PATHW)
+        if slash != 0 do wh_wide(slice(url, slash, un), WH_PATHW)
         else do
             set_byte(WH_PATHW, 0, 47)
             set_byte(WH_PATHW, 1, 0)
@@ -772,60 +772,60 @@ net_stream_open(verb, url, headers, body) do
             set_byte(WH_PATHW, 3, 0)
         end
         wh_wide(verb, WH_VERBW)
-        if str_len(headers) > 0 then wh_wide(headers, WH_HDRW)
+        if str_len(headers) > 0 do wh_wide(headers, WH_HDRW) end
         st = 0 - 2
         conn = call_dll(FN_WH_CONNECT, WH_SESSION, WH_HOSTW, port, 0)
-        if conn != 0 then do
+        if conn != 0 do
             st = 0 - 3
             req = call_dll(FN_WH_OPENREQ, conn, WH_VERBW, WH_PATHW, 0, 0, 0, secure)
-            if req != 0 then do
+            if req != 0 do
                 st = 0 - 4
-                if str_len(headers) > 0 then
-                    call_dll(FN_WH_ADDHDR, req, WH_HDRW, 0 - 1, 805306368)
+                if str_len(headers) > 0 do
+                    call_dll(FN_WH_ADDHDR, req, WH_HDRW, 0 - 1, 805306368) end
                 blen = str_len(body)
-                if call_dll(FN_WH_SEND, req, 0, 0, body, blen, blen, 0) != 0 then do
+                if call_dll(FN_WH_SEND, req, 0, 0, body, blen, blen, 0) != 0 do
                     st = 0 - 5
-                    if call_dll(FN_WH_RECV, req, 0) != 0 then do
+                    if call_dll(FN_WH_RECV, req, 0) != 0 do
                         // query status HTTP (WinHttpQueryHeaders)
                         mem_set(WH_SCR, 0, 8)
                         write_u64(WH_SCR + 8, 0, 4)
                         q = call_dll(FN_WH_QHDR, req, 536870931, 0, WH_SCR, WH_SCR + 8, 0)
-                        if q != 0 then sst_status = read_u32(WH_SCR, 0) else sst_status = 0
+                        if q != 0 do sst_status = read_u32(WH_SCR, 0) else sst_status = 0 end
                         sst_conn = conn
                         sst_req = req
                         st = req
                     end
                 end
-                if st < 0 then call_dll(FN_WH_CLOSEH, req)
+                if st < 0 do call_dll(FN_WH_CLOSEH, req) end
             end
-            if st < 0 then call_dll(FN_WH_CLOSEH, conn)
+            if st < 0 do call_dll(FN_WH_CLOSEH, conn) end
         end
         st
     end
 end
 
 net_stream_read(req, buf, max) do
-    if req == 0 then 0 - 2
+    if req == 0 do 0 - 2
     else do
         mem_set(WH_SCR, 0, 8)
         call_dll(FN_WH_QAVAIL, req, WH_SCR)
         nav = read_u32(WH_SCR, 0)
-        if nav == 0 then 0
+        if nav == 0 do 0
         else do
             chunk = nav
-            if chunk > max - 1 then chunk = max - 1
+            if chunk > max - 1 do chunk = max - 1 end
             mem_set(WH_SCR + 8, 0, 8)
             call_dll(FN_WH_READ, req, buf, chunk, WH_SCR + 8)
             nrd = read_u32(WH_SCR + 8, 0)
-            if nrd > 0 then set_byte(buf, nrd, 0)
+            if nrd > 0 do set_byte(buf, nrd, 0) end
             nrd
         end
     end
 end
 
 net_stream_close(req) do
-    if req != 0 then call_dll(FN_WH_CLOSEH, req)
-    if sst_conn != 0 then call_dll(FN_WH_CLOSEH, sst_conn)
+    if req != 0 do call_dll(FN_WH_CLOSEH, req) end
+    if sst_conn != 0 do call_dll(FN_WH_CLOSEH, sst_conn) end
     sst_req = 0
     sst_conn = 0
     0
@@ -876,7 +876,7 @@ end
 
 tcp_recv_text(client_fd: i64, buf: ptr, max_len: i64): i64 do
     n = net_recv(client_fd, buf, max_len)
-    if n > 0 then set_byte(buf, n, 0)
+    if n > 0 do set_byte(buf, n, 0) end
     n
 end
 

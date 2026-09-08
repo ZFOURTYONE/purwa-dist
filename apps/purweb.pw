@@ -13,21 +13,21 @@ import "hrtimer"
 
 get_mime_type(file_path: string): string do
     ext = path_ext(file_path)
-    if ext == ".html" or ext == ".htm" then "text/html; charset=utf-8"
-    else if ext == ".js" or ext == ".mjs" then "application/javascript; charset=utf-8"
-    else if ext == ".ts" or ext == ".tsx" or ext == ".jsx" then "application/javascript; charset=utf-8"
-    else if ext == ".css" then "text/css; charset=utf-8"
-    else if ext == ".json" then "application/json; charset=utf-8"
-    else if ext == ".svg" then "image/svg+xml"
-    else if ext == ".png" then "image/png"
-    else if ext == ".jpg" or ext == ".jpeg" then "image/jpeg"
-    else if ext == ".gif" then "image/gif"
-    else if ext == ".ico" then "image/x-icon"
-    else if ext == ".wasm" then "application/wasm"
-    else if ext == ".woff" or ext == ".woff2" then "font/woff2"
-    else if ext == ".ttf" then "font/ttf"
-    else if ext == ".map" then "application/json"
-    else "text/plain; charset=utf-8"
+    if ext == ".html" or ext == ".htm" do "text/html; charset=utf-8"
+    else if ext == ".js" or ext == ".mjs" do "application/javascript; charset=utf-8"
+    else if ext == ".ts" or ext == ".tsx" or ext == ".jsx" do "application/javascript; charset=utf-8"
+    else if ext == ".css" do "text/css; charset=utf-8"
+    else if ext == ".json" do "application/json; charset=utf-8"
+    else if ext == ".svg" do "image/svg+xml"
+    else if ext == ".png" do "image/png"
+    else if ext == ".jpg" or ext == ".jpeg" do "image/jpeg"
+    else if ext == ".gif" do "image/gif"
+    else if ext == ".ico" do "image/x-icon"
+    else if ext == ".wasm" do "application/wasm"
+    else if ext == ".woff" or ext == ".woff2" do "font/woff2"
+    else if ext == ".ttf" do "font/ttf"
+    else if ext == ".map" do "application/json"
+    else "text/plain; charset=utf-8" end
 end
 
 // ---- High-Speed Single-Buffer HTTP Response Dispatcher ----
@@ -76,10 +76,10 @@ end
 
 send_http_json(client_fd: i64, status_code: i64, json_str: string) do
     body_len = str_len(json_str)
-    status_text = if status_code == 200 then "200 OK"
-                  else if status_code == 201 then "201 Created"
-                  else if status_code == 404 then "404 Not Found"
-                  else "500 Internal Server Error"
+    status_text = if status_code == 200 do "200 OK"
+                  else if status_code == 201 do "201 Created"
+                  else if status_code == 404 do "404 Not Found"
+                  else "500 Internal Server Error" end
 
     full_resp = $"HTTP/1.1 {status_text}\r\n" +
                 "Content-Type: application/json; charset=utf-8\r\n" +
@@ -171,7 +171,7 @@ dispatch_request(client_fd: i64, req_str: string, root_dir: string, spa_mode: bo
         send_http_file(client_fd, demo_index, "text/html; charset=utf-8")
     else do
         // 2. Static File & SPA Fallback Handler
-        rel_path = if get_byte(p, 0) == 47 then slice(p, 1, str_len(p)) else p
+        rel_path = if get_byte(p, 0) == 47 do slice(p, 1, str_len(p)) else p end
         target_file = path_join(root_dir, rel_path)
         mime = get_mime_type(target_file)
 
@@ -251,10 +251,10 @@ main() do
     if nameeq(cmd, "help") or nameeq(cmd, "--help") or nameeq(cmd, "-h") do
         print_help()
     else do
-        root_dir = if str_len(token2) > 0 and not nameeq(token2, "-p") then token2
-                   else "apps/demo_react_app"
+        root_dir = if str_len(token2) > 0 and not nameeq(token2, "-p") do token2
+                   else "apps/demo_react_app" end
 
-        port = if nameeq(cmd, "dev") then 5173 else 3000
+        port = if nameeq(cmd, "dev") do 5173 else 3000 end
 
         // Parse custom port if provided
         if nameeq(token2, "-p") and str_len(token3) > 0 do
@@ -266,10 +266,10 @@ main() do
         spa_mode = true
 
         print_banner()
-        show($"[Purweb] Mode            : {if str_len(cmd) > 0 then cmd else "serve"}\n")
+        show($"[Purweb] Mode            : {if str_len(cmd) > 0 do cmd else "serve" end}\n")
         show($"[Purweb] Root Directory  : {root_dir}\n")
         show($"[Purweb] Port            : {port}\n")
-        show($"[Purweb] SPA Routing     : {if spa_mode then "Enabled (index.html fallback)" else "Disabled"}\n")
+        show($"[Purweb] SPA Routing     : {if spa_mode do "Enabled (index.html fallback)" else "Disabled" end}\n")
         show($"[Purweb] Memory Footprint: < 5 MB RAM (vs Node.js 60 MB)\n")
         show($"[Purweb] Cold Startup    : < 1 ms (Instant)\n\n")
 

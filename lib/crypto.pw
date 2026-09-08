@@ -18,15 +18,15 @@ _cr_m32(x) = x & 4294967295
 _cr_rotr32(x, n) do
     v = x & 4294967295
     s = n % 32
-    if s == 0 then v
-    else (((v >> s) | (v << (32 - s))) & 4294967295)
+    if s == 0 do v
+    else (((v >> s) | (v << (32 - s))) & 4294967295) end
 end
 
 _cr_rotl32(x, n) do
     v = x & 4294967295
     s = n % 32
-    if s == 0 then v
-    else (((v << s) | (v >> (32 - s))) & 4294967295)
+    if s == 0 do v
+    else (((v << s) | (v >> (32 - s))) & 4294967295) end
 end
 
 _cr_shr32(x, n) = (x & 4294967295) >> n
@@ -35,7 +35,7 @@ _cr_shr32(x, n) = (x & 4294967295) >> n
 global _CR_HEX_CHARS = "0123456789abcdef"
 
 hex_encode_bytes(buf, len) do
-    if len <= 0 then ""
+    if len <= 0 do ""
     else do
         out = alloc(len * 2 + 1)
         i = 0
@@ -57,14 +57,14 @@ end
 hex_encode(s) = hex_encode_bytes(s, str_len(s))
 
 _cr_hex_val(c) =
-    if c >= 48 and c <= 57 then c - 48
-    else if c >= 97 and c <= 102 then c - 97 + 10
-    else if c >= 65 and c <= 70 then c - 65 + 10
-    else 0
+    if c >= 48 and c <= 57 do c - 48
+    else if c >= 97 and c <= 102 do c - 97 + 10
+    else if c >= 65 and c <= 70 do c - 65 + 10
+    else 0 end
 
 hex_decode(hex_str) do
     L = str_len(hex_str)
-    if L == 0 then ""
+    if L == 0 do ""
     else do
         out_len = L / 2
         out = alloc(out_len + 1)
@@ -86,7 +86,7 @@ end
 global _CR_B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
 base64_encode_bytes(buf, len) do
-    if len <= 0 then ""
+    if len <= 0 do ""
     else do
         out_cap = ((len + 2) / 3) * 4 + 1
         out = alloc(out_cap)
@@ -94,8 +94,8 @@ base64_encode_bytes(buf, len) do
         w = 0
         while i < len do
             b0 = get_byte(buf, i) & 255
-            b1 = if i + 1 < len then get_byte(buf, i + 1) & 255 else 0
-            b2 = if i + 2 < len then get_byte(buf, i + 2) & 255 else 0
+            b1 = if i + 1 < len do get_byte(buf, i + 1) & 255 else 0 end
+            b2 = if i + 2 < len do get_byte(buf, i + 2) & 255 else 0 end
             
             trip = (b0 << 16) | (b1 << 8) | b2
             
@@ -125,16 +125,16 @@ end
 base64_encode(s) = base64_encode_bytes(s, str_len(s))
 
 _cr_b64_val(c) =
-    if c >= 65 and c <= 90 then c - 65
-    else if c >= 97 and c <= 122 then c - 97 + 26
-    else if c >= 48 and c <= 57 then c - 48 + 52
-    else if c == 43 then 62 // '+'
-    else if c == 47 then 63 // '/'
-    else 0
+    if c >= 65 and c <= 90 do c - 65
+    else if c >= 97 and c <= 122 do c - 97 + 26
+    else if c >= 48 and c <= 57 do c - 48 + 52
+    else if c == 43 do 62 // '+'
+    else if c == 47 do 63 // '/'
+    else 0 end
 
 base64_decode(s) do
     L = str_len(s)
-    if L == 0 then ""
+    if L == 0 do ""
     else do
         out_cap = (L / 4) * 3 + 4
         out = alloc(out_cap)
@@ -142,14 +142,14 @@ base64_decode(s) do
         w = 0
         while i < L do
             c0 = get_byte(s, i)
-            c1 = if i + 1 < L then get_byte(s, i + 1) else 61
-            c2 = if i + 2 < L then get_byte(s, i + 2) else 61
-            c3 = if i + 3 < L then get_byte(s, i + 3) else 61
+            c1 = if i + 1 < L do get_byte(s, i + 1) else 61 end
+            c2 = if i + 2 < L do get_byte(s, i + 2) else 61 end
+            c3 = if i + 3 < L do get_byte(s, i + 3) else 61 end
             
             v0 = _cr_b64_val(c0)
             v1 = _cr_b64_val(c1)
-            v2 = if c2 == 61 then 0 else _cr_b64_val(c2)
-            v3 = if c3 == 61 then 0 else _cr_b64_val(c3)
+            v2 = if c2 == 61 do 0 else _cr_b64_val(c2) end
+            v3 = if c3 == 61 do 0 else _cr_b64_val(c3) end
             
             trip = (v0 << 18) | (v1 << 12) | (v2 << 6) | v3
             
@@ -248,7 +248,7 @@ sha256_bytes_raw(data, len, out32) do
     
     pad_len = len + 9
     rem = pad_len % 64
-    total_len = if rem == 0 then pad_len else pad_len + (64 - rem)
+    total_len = if rem == 0 do pad_len else pad_len + (64 - rem) end
     
     buf = alloc(total_len)
     mem_set(buf, 0, total_len)
@@ -514,7 +514,7 @@ md5_bytes_raw(data, len, out16) do
     
     pad_len = len + 9
     rem = pad_len % 64
-    total_len = if rem == 0 then pad_len else pad_len + (64 - rem)
+    total_len = if rem == 0 do pad_len else pad_len + (64 - rem) end
     
     buf = alloc(total_len)
     mem_set(buf, 0, total_len)
@@ -565,19 +565,19 @@ md5_bytes_raw(data, len, out16) do
             if i < 16 do
                 f = (bb & cc) | ((bb ^ 4294967295) & dd)
                 g = i
-                s = if (i % 4) == 0 then 7 else if (i % 4) == 1 then 12 else if (i % 4) == 2 then 17 else 22
+                s = if (i % 4) == 0 do 7 else if (i % 4) == 1 do 12 else if (i % 4) == 2 do 17 else 22 end
             else if i < 32 do
                 f = (dd & bb) | ((dd ^ 4294967295) & cc)
                 g = (5 * i + 1) % 16
-                s = if (i % 4) == 0 then 5 else if (i % 4) == 1 then 9 else if (i % 4) == 2 then 14 else 20
+                s = if (i % 4) == 0 do 5 else if (i % 4) == 1 do 9 else if (i % 4) == 2 do 14 else 20 end
             else if i < 48 do
                 f = bb ^ cc ^ dd
                 g = (3 * i + 5) % 16
-                s = if (i % 4) == 0 then 4 else if (i % 4) == 1 then 11 else if (i % 4) == 2 then 16 else 23
+                s = if (i % 4) == 0 do 4 else if (i % 4) == 1 do 11 else if (i % 4) == 2 do 16 else 23 end
             else do
                 f = cc ^ (bb | (dd ^ 4294967295))
                 g = (7 * i) % 16
-                s = if (i % 4) == 0 then 6 else if (i % 4) == 1 then 10 else if (i % 4) == 2 then 15 else 21
+                s = if (i % 4) == 0 do 6 else if (i % 4) == 1 do 10 else if (i % 4) == 2 do 15 else 21 end
             end
             
             temp = _cr_m32(aa + f + t_table[i] + x[g])

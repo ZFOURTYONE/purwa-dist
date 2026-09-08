@@ -301,10 +301,10 @@ html_apply_css(root: DomNode, css_str: string) do
             child.margin = 2
             child.is_centered = true
         else if child.tag == "h2" or child.tag == "h3" do
-            child.font_size = if contains(cls, "cyan") then 2 else 3
-            child.fg_r = if contains(cls, "cyan") then 56 else 241
-            child.fg_g = if contains(cls, "cyan") then 189 else 245
-            child.fg_b = if contains(cls, "cyan") then 248 else 249
+            child.font_size = if contains(cls, "cyan") do 2 else 3 end
+            child.fg_r = if contains(cls, "cyan") do 56 else 241 end
+            child.fg_g = if contains(cls, "cyan") do 189 else 245 end
+            child.fg_b = if contains(cls, "cyan") do 248 else 249 end
             child.margin = 2
         else if child.tag == "p" do
             child.font_size = 1
@@ -412,11 +412,11 @@ html_compute_layout(root: DomNode, cur_x: i64, cur_y: i64, max_w: i64) do
                 html_compute_layout(child, child.x, child.y, col_w)
                 if child.h > max_child_h do max_child_h = child.h end
             else do
-                child_h = if child.tag == "h1" then 36
-                          else if child.tag == "h2" then 26
-                          else if child.tag == "button" then 36
-                          else if child.tag == "p" then 20
-                          else 32
+                child_h = if child.tag == "h1" do 36
+                          else if child.tag == "h2" do 26
+                          else if child.tag == "button" do 36
+                          else if child.tag == "p" do 20
+                          else 32 end
                 child.h = child_h
                 if child_h > max_child_h do max_child_h = child_h end
             end
@@ -448,11 +448,11 @@ html_compute_layout(root: DomNode, cur_x: i64, cur_y: i64, max_w: i64) do
                     html_compute_layout(child, child.x, child.y, child_w)
                     child_h = child.h
                 else do
-                    child_h = if child.tag == "h1" then 34
-                              else if child.tag == "h2" then 26
-                              else if child.tag == "button" then 36
-                              else if child.tag == "p" then 20
-                              else 28
+                    child_h = if child.tag == "h1" do 34
+                              else if child.tag == "h2" do 26
+                              else if child.tag == "button" do 36
+                              else if child.tag == "p" do 20
+                              else 28 end
                     child.h = child_h
                 end
 
@@ -467,9 +467,9 @@ end
 // ---- Canvas Rasterizer ----
 
 html_render_node(node: DomNode, c: Canvas) do
-    is_btn = if node.tag == "button" or contains(node.class_name, "btn-primary") or contains(node.class_name, "btn-secondary") or node.class_name == "btn" then true else false
-    is_card = if contains(node.class_name, "card") or contains(node.class_name, "stat-card") or contains(node.class_name, "badge") or contains(node.class_name, "code-box") then true else false
-    is_box = if is_btn or is_card then true else false
+    is_btn = if node.tag == "button" or contains(node.class_name, "btn-primary") or contains(node.class_name, "btn-secondary") or node.class_name == "btn" do true else false end
+    is_card = if contains(node.class_name, "card") or contains(node.class_name, "stat-card") or contains(node.class_name, "badge") or contains(node.class_name, "code-box") do true else false end
+    is_box = if is_btn or is_card do true else false end
 
     if is_box do
         canvas_fill_rect(c, node.x, node.y, node.w, node.h, node.bg_r, node.bg_g, node.bg_b, 255)
@@ -494,10 +494,10 @@ end
 html_render_text(node: DomNode, win: GuiWindow) do
     txt_len = _str_len(node.text_content)
     if txt_len > 0 do
-        char_w = if node.font_size == 2 then 11
-                 else if node.font_size == 3 then 9
-                 else if node.font_size == 0 then 6
-                 else 8
+        char_w = if node.font_size == 2 do 11
+                 else if node.font_size == 3 do 9
+                 else if node.font_size == 0 do 6
+                 else 8 end
         txt_px = txt_len * char_w
 
         // Word wrapping for long paragraphs inside cards
@@ -514,16 +514,16 @@ html_render_text(node: DomNode, win: GuiWindow) do
             line2 = slice(node.text_content, split_idx + 1, txt_len)
 
             ty = node.y + (node.h - 32) / 2
-            tx1 = if node.is_centered then node.x + (node.w - (_str_len(line1) * char_w)) / 2 else node.x + 10
-            tx2 = if node.is_centered then node.x + (node.w - (_str_len(line2) * char_w)) / 2 else node.x + 10
+            tx1 = if node.is_centered do node.x + (node.w - (_str_len(line1) * char_w)) / 2 else node.x + 10 end
+            tx2 = if node.is_centered do node.x + (node.w - (_str_len(line2) * char_w)) / 2 else node.x + 10 end
             if tx1 < node.x + 4 do tx1 = node.x + 4 end
             if tx2 < node.x + 4 do tx2 = node.x + 4 end
 
             gui_draw_text(win, line1, tx1, ty, node.font_size, node.fg_r, node.fg_g, node.fg_b)
             gui_draw_text(win, line2, tx2, ty + 16, node.font_size, node.fg_r, node.fg_g, node.fg_b)
         else do
-            tx = if node.is_centered then node.x + (node.w - txt_px) / 2
-                 else node.x + 10
+            tx = if node.is_centered do node.x + (node.w - txt_px) / 2
+                 else node.x + 10 end
             if tx < node.x + 4 do tx = node.x + 4 end
 
             ty = node.y + (node.h - 16) / 2

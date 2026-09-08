@@ -10,7 +10,7 @@ import "cli"
 // ---- Hex helpers ----
 
 hexc(d) do
-    if d < 10 then 48 + d else 55 + d
+    if d < 10 do 48 + d else 55 + d end
 end
 
 format_hex(buf, v, digits) do

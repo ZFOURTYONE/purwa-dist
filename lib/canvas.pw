@@ -78,10 +78,10 @@ canvas_fill_rect(c: Canvas, rx, ry, rw, rh, r, g, b, a) do
     buf = c.buffer
 
     // Klip ke batas kanvas
-    x0 = if rx < 0 then 0 else rx
-    y0 = if ry < 0 then 0 else ry
-    x1 = if rx + rw > cw then cw else rx + rw
-    y1 = if ry + rh > ch then ch else ry + rh
+    x0 = if rx < 0 do 0 else rx end
+    y0 = if ry < 0 do 0 else ry end
+    x1 = if rx + rw > cw do cw else rx + rw end
+    y1 = if ry + rh > ch do ch else ry + rh end
 
     clip_w = x1 - x0
     clip_h = y1 - y0
@@ -133,10 +133,10 @@ canvas_draw_rect(c: Canvas, rx, ry, rw, rh, r, g, b, a, fill_bool) do
 end
 
 canvas_draw_line(c: Canvas, x0, y0, x1, y1, r, g, b, a) do
-    dx = if x1 >= x0 then x1 - x0 else x0 - x1
-    sx = if x0 < x1 then 1 else 0 - 1
-    dy = if y1 >= y0 then 0 - (y1 - y0) else y0 - y1
-    sy = if y0 < y1 then 1 else 0 - 1
+    dx = if x1 >= x0 do x1 - x0 else x0 - x1 end
+    sx = if x0 < x1 do 1 else 0 - 1 end
+    dy = if y1 >= y0 do 0 - (y1 - y0) else y0 - y1 end
+    sy = if y0 < y1 do 1 else 0 - 1 end
     err = dx + dy
     
     cur_x = x0
@@ -220,7 +220,7 @@ canvas_write_u32(buf, offset, val) do
     // normalize negatives into the unsigned 32-bit domain first:
     // % and / truncate toward zero, so raw negatives pack garbage
     u = val
-    if u < 0 then u = u + 4294967296
+    if u < 0 do u = u + 4294967296 end
     set_byte(buf, offset + 0, u % 256)
     u = u / 256
     set_byte(buf, offset + 1, u % 256)
@@ -234,7 +234,7 @@ end
 // Helper: Tulis integer 16-bit little-endian ke buffer
 canvas_write_u16(buf, offset, val) do
     u = val
-    if u < 0 then u = u + 65536
+    if u < 0 do u = u + 65536 end
     set_byte(buf, offset + 0, u % 256)
     set_byte(buf, offset + 1, (u / 256) % 256)
     0

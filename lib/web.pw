@@ -254,14 +254,14 @@ end
 // ---- Response Serializer ----
 
 build_http_response(ctx: HttpContext, cors: bool): string do
-    status_text = if ctx.res_status == 200 then "200 OK"
-                  else if ctx.res_status == 201 then "201 Created"
-                  else if ctx.res_status == 400 then "400 Bad Request"
-                  else if ctx.res_status == 404 then "404 Not Found"
-                  else if ctx.res_status == 500 then "500 Internal Server Error"
-                  else "200 OK"
+    status_text = if ctx.res_status == 200 do "200 OK"
+                  else if ctx.res_status == 201 do "201 Created"
+                  else if ctx.res_status == 400 do "400 Bad Request"
+                  else if ctx.res_status == 404 do "404 Not Found"
+                  else if ctx.res_status == 500 do "500 Internal Server Error"
+                  else "200 OK" end
 
-    cors_header = if cors then "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n" else ""
+    cors_header = if cors do "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n" else "" end
     body_len = str_len(ctx.res_body)
 
     $"HTTP/1.1 {status_text}\r\n" +

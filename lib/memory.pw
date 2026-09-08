@@ -7,7 +7,7 @@ global G_FRAME_ARENA = 0
 // Initialize global frame scratchpad with given capacity (default 2 MB)
 frame_init(capacity_bytes: i64) do
     if G_FRAME_ARENA == 0 do
-        cap = if capacity_bytes <= 0 then 2097152 else capacity_bytes // 2 MB
+        cap = if capacity_bytes <= 0 do 2097152 else capacity_bytes end // 2 MB
         G_FRAME_ARENA = arena_new(cap)
     end
     G_FRAME_ARENA

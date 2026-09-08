@@ -1,15 +1,20 @@
-// lib/json.pw — JSON reader/writer (human-centric, flat objects)
+// lib/json.pw — JSON reader/writer (human-centric, nested objects/arrays)
 // Python `json` module style: json_get_str(s, "key"), json_get_num(s, "key"),
 // json_build_str("name", "Purwa"), json_object([...]), json_array([...]).
-// Pure Purwa, zero dependencies. Handles flat objects and arrays.
+// Pure Purwa, zero dependencies. Supports structural nested lookup without
+// requiring a heavyweight DOM allocation for simple request handlers.
 //
 // Quick start:
 //   s = json_object([json_field_str("name", "Purwa"), json_field_num("year", 2026)])
 //   n = json_get_num(s, "year")        // 2026
 //   name = json_get_str(s, "name")     // "Purwa"
 //
-// Limitation: nested objects/arrays are not parsed (v1); use explicit
-// extraction for known keys.
+// Legacy flat lookup remains available and wins as fallback: a flat key that
+// itself contains a dot (e.g. "user.name" as a LITERAL member) still resolves.
+// Nested lookup uses dotted paths (multi-bracket supported: a[0][1]):
+//   json_get_path_str(s, "user.profile.name")
+//   json_get_array_num(s, "items", 2)
+//   json_get_array_path_str(s, "items", 2, "name")   // object elem + key
 
 // ---- build helpers ----
 
@@ -21,8 +26,8 @@ json_escape(s) do
     i = 0
     while i < L do
         c = get_byte(s, i)
-        if c == 34 or c == 92 or c == 10 or c == 13 or c == 9 then extra = extra + 1
-        else if c < 32 then extra = extra + 5  // \uXXXX
+        if c == 34 or c == 92 or c == 10 or c == 13 or c == 9 do extra = extra + 1
+        else if c < 32 do extra = extra + 5 end  // \uXXXX
         i = i + 1
     end
     out = alloc(L + extra + 3)  // leading/trailing quote + NUL
@@ -31,12 +36,12 @@ json_escape(s) do
     i = 0
     while i < L do
         c = get_byte(s, i)
-        if c == 34 then do set_byte(out, w, 92); set_byte(out, w+1, 34); w = w + 2
-        end else if c == 92 then do set_byte(out, w, 92); set_byte(out, w+1, 92); w = w + 2
-        end else if c == 10 then do set_byte(out, w, 92); set_byte(out, w+1, 110); w = w + 2
-        end else if c == 13 then do set_byte(out, w, 92); set_byte(out, w+1, 114); w = w + 2
-        end else if c == 9 then do set_byte(out, w, 92); set_byte(out, w+1, 116); w = w + 2
-        end else do
+        if c == 34 do set_byte(out, w, 92); set_byte(out, w+1, 34); w = w + 2
+        else if c == 92 do set_byte(out, w, 92); set_byte(out, w+1, 92); w = w + 2
+        else if c == 10 do set_byte(out, w, 92); set_byte(out, w+1, 110); w = w + 2
+        else if c == 13 do set_byte(out, w, 92); set_byte(out, w+1, 114); w = w + 2
+        else if c == 9 do set_byte(out, w, 92); set_byte(out, w+1, 116); w = w + 2
+        else do
             set_byte(out, w, c); w = w + 1
         end
         i = i + 1
@@ -58,7 +63,7 @@ end
 
 // json_field_bool(key, value): -> "key":true/false
 json_field_bool(key, value) do
-    concat(concat(concat("\"", key), "\":"), if value then "true" else "false")
+    concat(concat(concat("\"", key), "\":"), if value do "true" else "false" end)
 end
 
 // json_object(fields): -> { "k1":"v1", "k2":123, ... }
@@ -68,7 +73,7 @@ json_object(fields) do
     s = "{"
     i = 0
     while i < n do
-        if i > 0 then s = s + ","
+        if i > 0 do s = s + "," end
         s = s + fields[i]
         i = i + 1
     end
@@ -82,7 +87,7 @@ json_array(items) do
     s = "["
     i = 0
     while i < n do
-        if i > 0 then s = s + ","
+        if i > 0 do s = s + "," end
         s = s + items[i]
         i = i + 1
     end
@@ -99,30 +104,31 @@ json_find_key(text, key) do
     i = 0
     found = 0 - 1
     while i + kL + 2 <= L and found < 0 do
-        if get_byte(text, i) == 34 then do
+        if get_byte(text, i) == 34 do
             // compare: "key":
             s = i + 1
             is_eq = true
             j = 0
             while j < kL and is_eq do
-                if get_byte(text, s + j) != get_byte(key, j) then is_eq = false
+                if get_byte(text, s + j) != get_byte(key, j) do is_eq = false end
                 j = j + 1
             end
-            if is_eq and get_byte(text, s + kL) == 34 then do
+            if is_eq and get_byte(text, s + kL) == 34 do
                 // skip "key"
                 ci = s + kL + 1
                 while ci < L and get_byte(text, ci) != 58 do ci = ci + 1 end  // ':'
-                if ci < L then found = ci + 1
+                if ci < L do found = ci + 1 end
             end
             i = i + 1
-        end else i = i + 1
+        else i = i + 1 end
     end
     found
 end
 
 // json_skip_ws(text, i): skip whitespace from index i
 json_skip_ws(text, i) do
-    while i < str_len(text) and (get_byte(text, i) == 32 or get_byte(text, i) == 9
+    L = str_len(text)
+    while i < L and (get_byte(text, i) == 32 or get_byte(text, i) == 9
            or get_byte(text, i) == 10 or get_byte(text, i) == 13) do i = i + 1 end
     i
 end
@@ -132,57 +138,58 @@ end
 // Mendukung escape \n \r \t \" \\ DAN \uXXXX (decode ke UTF-8).
 json_read_str(text, start) do
     i = json_skip_ws(text, start)
-    if i >= str_len(text) or get_byte(text, i) != 34 then ""
+    L = str_len(text)
+    if i >= L or get_byte(text, i) != 34 do ""
     else do
         i = i + 1  // skip opening quote
         // pass 1: count output length (estimasi; \uXXXX bisa >1 byte,
         // alokasi cukup besar lalu di-trim)
         n = 0
         j = i
-        while j < str_len(text) and get_byte(text, j) != 34 do
-            if get_byte(text, j) == 92 and j + 1 < str_len(text) then do
+        while j < L and get_byte(text, j) != 34 do
+            if get_byte(text, j) == 92 and j + 1 < L do
                 j = j + 1
-                if get_byte(text, j) == 117 then j = j + 4  // \uXXXX
+                if get_byte(text, j) == 117 do j = j + 4 end  // \uXXXX
             end
             n = n + 1
             j = j + 1
         end
         out = alloc(n * 3 + 1)
         w = 0
-        while i < str_len(text) and get_byte(text, i) != 34 do
+        while i < L and get_byte(text, i) != 34 do
             c = get_byte(text, i)
-            if c == 92 and i + 1 < str_len(text) then do
+            if c == 92 and i + 1 < L do
                 i = i + 1
                 c2 = get_byte(text, i)
-                if c2 == 110 then do set_byte(out, w, 10); w = w + 1
-                end else if c2 == 114 then do set_byte(out, w, 13); w = w + 1
-                end else if c2 == 116 then do set_byte(out, w, 9); w = w + 1
-                end else if c2 == 34 then do set_byte(out, w, 34); w = w + 1
-                end else if c2 == 92 then do set_byte(out, w, 92); w = w + 1
-                end else if c2 == 117 then do
+                if c2 == 110 do set_byte(out, w, 10); w = w + 1
+                else if c2 == 114 do set_byte(out, w, 13); w = w + 1
+                else if c2 == 116 do set_byte(out, w, 9); w = w + 1
+                else if c2 == 34 do set_byte(out, w, 34); w = w + 1
+                else if c2 == 92 do set_byte(out, w, 92); w = w + 1
+                else if c2 == 117 do
                     // \uXXXX — decode 4 hex digits ke UTF-8
-                    if i + 4 < str_len(text) then do
+                    if i + 4 < L do
                         h1 = jh_hex(get_byte(text, i + 1))
                         h2 = jh_hex(get_byte(text, i + 2))
                         h3 = jh_hex(get_byte(text, i + 3))
                         h4 = jh_hex(get_byte(text, i + 4))
-                        if h1 >= 0 and h2 >= 0 and h3 >= 0 and h4 >= 0 then do
+                        if h1 >= 0 and h2 >= 0 and h3 >= 0 and h4 >= 0 do
                             cp = (h1 << 12) | (h2 << 8) | (h3 << 4) | h4
                             w = jh_utf8(out, w, cp)
                             i = i + 4
-                        end else do
+                        else do
                             set_byte(out, w, 92)
                             w = w + 1
                         end
-                    end else do
+                    else do
                         set_byte(out, w, 92)
                         w = w + 1
                     end
-                end else do
+                else do
                     set_byte(out, w, c2)
                     w = w + 1
                 end
-            end else do
+            else do
                 set_byte(out, w, c)
                 w = w + 1
             end
@@ -198,22 +205,22 @@ end
 
 // jh_hex(c): nilai hex digit ('0'-'9','a'-'f','A'-'F'); -1 jika bukan hex.
 jh_hex(c) do
-    if c >= 48 and c <= 57 then c - 48
-    else if c >= 97 and c <= 102 then c - 87
-    else if c >= 65 and c <= 70 then c - 55
-    else 0 - 1
+    if c >= 48 and c <= 57 do c - 48
+    else if c >= 97 and c <= 102 do c - 87
+    else if c >= 65 and c <= 70 do c - 55
+    else 0 - 1 end
 end
 
 // jh_utf8(out, w, cp): tulis codepoint cp (≤0xFFFF) sebagai UTF-8, return w baru.
 jh_utf8(out, w, cp) do
-    if cp < 128 then do
+    if cp < 128 do
         set_byte(out, w, cp)
         w + 1
-    end else if cp < 2048 then do
+    else if cp < 2048 do
         set_byte(out, w, 192 + (cp >> 6))
         set_byte(out, w + 1, 128 + (cp & 63))
         w + 2
-    end else do
+    else do
         set_byte(out, w, 224 + (cp >> 12))
         set_byte(out, w + 1, 128 + ((cp >> 6) & 63))
         set_byte(out, w + 2, 128 + (cp & 63))
@@ -225,36 +232,251 @@ end
 // Returns 0 if not a number (or 0).
 json_read_num(text, start) do
     i = json_skip_ws(text, start)
-    if i >= str_len(text) then 0
+    L = str_len(text)
+    if i >= L do 0
     else do
         neg = false
-        if get_byte(text, i) == 45 then do neg = true; i = i + 1 end
+        if get_byte(text, i) == 45 do neg = true; i = i + 1 end
         v = 0
-        while i < str_len(text) and get_byte(text, i) >= 48 and get_byte(text, i) <= 57 do
+        while i < L and get_byte(text, i) >= 48 and get_byte(text, i) <= 57 do
             v = v * 10 + (get_byte(text, i) - 48)
             i = i + 1
         end
-        if neg then 0 - v else v
+        if neg do 0 - v else v end
     end
+end
+
+// ---- structural scanner ----
+// These helpers walk JSON delimiters while respecting quoted strings. They
+// return offsets into the original text, so callers can choose a typed read.
+json_string_end(text, start) do
+    L = str_len(text)
+    i = start + 1
+    escaped = false
+    found = false
+    while i < L and not found do
+        c = get_byte(text, i)
+        if escaped do escaped = false
+        else if c == 92 do escaped = true
+        else if c == 34 do found = true end
+        if not found do i = i + 1 end
+    end
+    if found do i + 1 else L end
+end
+
+json_skip_value(text, start) do
+    L = str_len(text)
+    i = json_skip_ws(text, start)
+    if i >= L do i
+    else if get_byte(text, i) == 34 do json_string_end(text, i)
+    else if get_byte(text, i) == 123 or get_byte(text, i) == 91 do
+        depth = 1
+        i = i + 1
+        in_str = false
+        escaped = false
+        while i < L and depth > 0 do
+            c = get_byte(text, i)
+            if in_str do
+                if escaped do escaped = false
+                else if c == 92 do escaped = true
+                else if c == 34 do in_str = false end
+            else if c == 34 do in_str = true
+            else if c == 123 or c == 91 do depth = depth + 1
+            else if c == 125 or c == 93 do depth = depth - 1 end
+            i = i + 1
+        end
+        i
+    else do
+        while i < L and get_byte(text, i) != 44 and
+              get_byte(text, i) != 125 and get_byte(text, i) != 93 do i = i + 1 end
+        i
+    end
+end
+
+json_key_at(text, start, key) do
+    L = str_len(text)
+    i = json_skip_ws(text, start)
+    if i >= L or get_byte(text, i) != 34 do false
+    else do
+        e = json_string_end(text, i)
+        raw_key = slice(text, i + 1, e - 1)
+        str_eq(raw_key, key)
+    end
+end
+
+json_find_member(text, object_start, key) do
+    L = str_len(text)
+    i = json_skip_ws(text, object_start)
+    found = 0 - 1
+    if i < L and get_byte(text, i) == 123 do
+        i = json_skip_ws(text, i + 1)
+        done = false
+        while i < L and not done and get_byte(text, i) != 125 do
+            if get_byte(text, i) != 34 do done = true
+            else do
+                key_end = json_string_end(text, i)
+                value_start = json_skip_ws(text, key_end)
+                if value_start < L and get_byte(text, value_start) == 58 do
+                    value_start = json_skip_ws(text, value_start + 1)
+                    if json_key_at(text, i, key) do
+                        found = value_start
+                        done = true
+                    else do
+                        i = json_skip_value(text, value_start)
+                        i = json_skip_ws(text, i)
+                        if i < L and get_byte(text, i) == 44 do i = i + 1 end
+                        i = json_skip_ws(text, i)
+                    end
+                else done = true end
+            end
+        end
+    end
+    found
+end
+
+json_find_array(text, array_start, wanted) do
+    L = str_len(text)
+    i = json_skip_ws(text, array_start)
+    found = 0 - 1
+    if i < L and get_byte(text, i) == 91 do
+        i = json_skip_ws(text, i + 1)
+        index = 0
+        done = false
+        while i < L and not done and get_byte(text, i) != 93 do
+            value_start = i
+            if index == wanted do
+                found = value_start
+                done = true
+            else do
+                i = json_skip_value(text, value_start)
+                i = json_skip_ws(text, i)
+                if i < L and get_byte(text, i) == 44 do i = i + 1 end
+                i = json_skip_ws(text, i)
+                index = index + 1
+            end
+        end
+    end
+    found
+end
+
+json_find_path(text, path) do
+    L = str_len(text)
+    current = json_skip_ws(text, 0)
+    rest = path
+    result = 0 - 1
+    active = true
+    while active and str_len(rest) > 0 do
+        dot = index_of(rest, ".")
+        part = if dot < 0 do rest else slice(rest, 0, dot) end
+        next_pos = if dot < 0 do str_len(rest) else dot + 1 end
+        rest = slice(rest, next_pos, str_len(rest))
+        // satu segmen bisa memuat BANYAK bracket: a[0][1], [2][3][4] —
+        // proses berurutan dari bracket pertama sampai habis (fix arr[1][0])
+        bracket = index_of(part, "[")
+        if bracket >= 0 do
+            base = slice(part, 0, bracket)
+            if str_len(base) > 0 do current = json_find_member(text, current, base) end
+            seg = slice(part, bracket, str_len(part))
+            while active and str_len(seg) > 0 do
+                open = index_of(seg, "[")
+                close = if open >= 0 do index_of(seg, "]") else 0 - 1 end
+                if open < 0 or close < 0 do seg = ""
+                else do
+                    idx = parse_int(slice(seg, open + 1, close))
+                    current = json_find_array(text, current, idx)
+                    if current < 0 do active = false end
+                    seg = slice(seg, close + 1, str_len(seg))
+                end
+            end
+        else current = json_find_member(text, current, part) end
+        if current < 0 do active = false end
+    end
+    if active do current else result end
+end
+
+// json_locate(text, key): resolve key sebagai PATH dulu; bila gagal dan key
+// memuat '.'/'[', fallback ke lookup FLAT literal (kompatibilitas v1 — key
+// flat yang bertitik tidak boleh hilang senyap).
+json_locate(text, key) do
+    pos = json_find_path(text, key)
+    if pos >= 0 do pos
+    else if index_of(key, ".") >= 0 or index_of(key, "[") >= 0 do json_find_key(text, key)
+    else 0 - 1 end
+end
+
+json_is_true(text, start) do
+    i = json_skip_ws(text, start)
+    i + 4 <= str_len(text) and slice(text, i, i + 4) == "true"
+end
+
+json_is_null(text, start) do
+    i = json_skip_ws(text, start)
+    i + 4 <= str_len(text) and slice(text, i, i + 4) == "null"
 end
 
 // ---- public parse API ----
 
-// json_get_str(text, key): extract string value for key from JSON object
+// json_get_str(text, key): string utk key (path bertitik, atau key flat literal)
 json_get_str(text, key) do
-    pos = json_find_key(text, key)
-    if pos < 0 then ""
-    else json_read_str(text, pos)
+    pos = json_locate(text, key)
+    if pos < 0 do ""
+    else json_read_str(text, pos) end
 end
 
-// json_get_num(text, key): extract integer value for key from JSON object
+// json_get_num(text, key): angka utk key (path, atau key flat literal)
 json_get_num(text, key) do
-    pos = json_find_key(text, key)
-    if pos < 0 then 0
-    else json_read_num(text, pos)
+    pos = json_locate(text, key)
+    if pos < 0 do 0
+    else json_read_num(text, pos) end
 end
 
-// json_has(text, key): 1 if key exists in JSON object
+// json_has(text, key): 1 bila key ada (path, atau key flat literal)
 json_has(text, key) do
-    if json_find_key(text, key) >= 0 then true else false
+    if json_locate(text, key) >= 0 do true else false end
 end
+
+json_get_bool(text, key) do
+    pos = json_locate(text, key)
+    if pos < 0 do false else json_is_true(text, pos) end
+end
+
+json_get_null(text, key) do
+    pos = json_locate(text, key)
+    if pos < 0 do false else json_is_null(text, pos) end
+end
+
+json_get_array_num(text, key, index) do
+    pos = json_locate(text, key)
+    if pos < 0 do 0
+    else do
+        item = json_find_array(text, pos, index)
+        if item < 0 do 0 else json_read_num(text, item) end
+    end
+end
+
+json_get_array_str(text, key, index) do
+    pos = json_locate(text, key)
+    if pos < 0 do ""
+    else do
+        item = json_find_array(text, pos, index)
+        if item < 0 do "" else json_read_str(text, item) end
+    end
+end
+
+// json_get_array_path_str(text, path, index, key): elemen array path[index]
+// (harus objek) lalu ambil member `key` dari elemen itu — ter-scope ke elemen
+json_get_array_path_str(text, path, index, key) do
+    pos = json_find_path(text, path)
+    if pos < 0 do ""
+    else do
+        item = json_find_array(text, pos, index)
+        if item < 0 do ""
+        else do
+            member = json_find_member(text, item, key)
+            if member < 0 do "" else json_read_str(text, member) end
+        end
+    end
+end
+
+json_get_path_str(text, path) = json_get_str(text, path)
+json_get_path_num(text, path) = json_get_num(text, path)
