@@ -1,0 +1,132 @@
+// lib/test.pw — Mini test framework murni Purwa (v37.39)
+// ===========================================================================
+// Pola pakai:
+//   import "test"
+//   main() do
+//       t_begin("arith")
+//       t_check_eq(1 + 1, 2)
+//       t_check_eq_str("a", "a")
+//       t_end()
+//       if t_summary() == 0 then 0 else 1
+//   end
+//
+// Desain:
+//   - counter global (pass/fail/total check) — laporan di t_summary()
+//   - t_begin/t_end memberi nama konteks per test; kegagalan dicetak
+//     langsung dengan label agar mudah ditemukan
+//   - t_reset() membersihkan counter (untuk pengujian framework itu sendiri)
+//   - murni prelude: tanpa import, tanpa FFI, tanpa alokasi
+// ===========================================================================
+
+global t_total = 0
+global t_pass_n = 0
+global t_fail_n = 0
+global t_cur = 0
+global t_cur_fail = 0
+
+// t_begin(name): mulai konteks test bernama (reset fail konteks)
+t_begin(name) do
+    t_cur = name
+    t_cur_fail = 0
+    0
+end
+
+// t_end(): tutup konteks — cetak [PASS]/[FAIL n] untuk test terakhir
+t_end() do
+    if t_cur_fail == 0 do
+        show("  [PASS] ")
+        show(t_cur)
+        show("\n")
+    else do
+        show("  [FAIL ")
+        show_num(t_cur_fail)
+        show("] ")
+        show(t_cur)
+        show("\n")
+    end
+    0
+end
+
+// t_check_true(cond, label): asser umum berlabel
+t_check_true(cond, label) do
+    t_total = t_total + 1
+    if cond do
+        t_pass_n = t_pass_n + 1
+    else do
+        t_fail_n = t_fail_n + 1
+        t_cur_fail = t_cur_fail + 1
+        show("    FAIL ")
+        show(t_cur)
+        show(" :: ")
+        show(label)
+        show("\n")
+    end
+    cond
+end
+
+// t_check_eq(a, b): bandingkan dua angka (i64) — lapor expected/actual
+t_check_eq(a, b) do
+    t_total = t_total + 1
+    if a == b do
+        t_pass_n = t_pass_n + 1
+        true
+    else do
+        t_fail_n = t_fail_n + 1
+        t_cur_fail = t_cur_fail + 1
+        show("    FAIL ")
+        show(t_cur)
+        show(" :: expected=")
+        show_num(b)
+        show(" actual=")
+        show_num(a)
+        show("\n")
+        false
+    end
+end
+
+// t_check_ne(a, b): angka harus BERBEDA
+t_check_ne(a, b) do
+    t_check_true(a != b, "values must differ")
+end
+
+// t_check_eq_str(a, b): bandingkan dua string (isi)
+t_check_eq_str(a, b) do
+    t_total = t_total + 1
+    if str_eq(a, b) do
+        t_pass_n = t_pass_n + 1
+        true
+    else do
+        t_fail_n = t_fail_n + 1
+        t_cur_fail = t_cur_fail + 1
+        show("    FAIL ")
+        show(t_cur)
+        show(" :: string mismatch\n")
+        false
+    end
+end
+
+// t_check_lt(a, b): a < b
+t_check_lt(a, b) do
+    t_check_true(a < b, "expected a < b")
+end
+
+// t_summary(): cetak ringkasan; return jumlah test gagal (0 = semua hijau)
+t_summary() do
+    show("test: ")
+    show_num(t_pass_n)
+    show(" passed, ")
+    show_num(t_fail_n)
+    show(" failed (")
+    show_num(t_total)
+    show(" checks)\n")
+    t_fail_n
+end
+
+// t_reset(): kosongkan semua counter (dipakai untuk self-test framework)
+t_reset() do
+    t_total = 0
+    t_pass_n = 0
+    t_fail_n = 0
+    t_cur_fail = 0
+    0
+end

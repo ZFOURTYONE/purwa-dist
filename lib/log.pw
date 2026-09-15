@@ -1,0 +1,96 @@
+// lib/log.pw — Logging berlevel murni Purwa (v37.39)
+// ===========================================================================
+// Pola pakai:
+//   import "log"
+//   main() do
+//       log_init()
+//       log_info("net", "server listening")
+//       log_set_level(LOG_WARN)              // INFO tenggelam
+//       log_error("db", "connection refused")
+//   end
+//
+// Level: LOG_DEBUG=0, LOG_INFO=1, LOG_WARN=2, LOG_ERROR=3, LOG_OFF=4.
+// Format baris: [+ms] [LEVEL] [tag] pesan  — ms sejak log_init()
+// (relatif, nol dependensi — time.pw tidak dibutuhkan).
+//
+// Sink: console secara default; log_set_file(path) menambahkan sink file
+// (append per baris). Baris file dan console identik.
+// ===========================================================================
+
+global LOG_DEBUG = 0
+global LOG_INFO = 1
+global LOG_WARN = 2
+global LOG_ERROR = 3
+global LOG_OFF = 4
+
+global log_level_cur = 1
+global log_t0 = 0 - 1
+global log_file_path = 0
+
+// log_init(): mulai jam relatif log (panggil sekali di awal main)
+log_init() do
+    log_t0 = time_ms()
+    0
+end
+
+// log_set_level(l): tenggelamkan level di bawah l
+log_set_level(l) do
+    log_level_cur = l
+    0
+end
+
+// log_get_level(): baca level aktif
+log_get_level() = log_level_cur
+
+// log_set_file(path): aktifkan sink file (0 = console saja)
+log_set_file(path) do
+    log_file_path = path
+    0
+end
+
+// log_enabled(l): apakah level l akan dicetak (untuk pre-check pemanggil)
+log_enabled(l) do
+    if log_level_cur == LOG_OFF do false
+    else l >= log_level_cur end
+end
+
+// _log_emit(lname, tag, msg): inti emisi — level sudah di-gate oleh pemanggil
+_log_emit(lname, tag, msg) do
+    if log_t0 < 0 do log_t0 = time_ms() end
+    now = time_ms() - log_t0
+    line = concat("[+", concat(to_text(now), concat("ms] [", concat(lname, concat("] [", concat(tag, concat("] ", msg)))))))
+    show(line)
+    show("\n")
+    if log_file_path != 0 do append_text(log_file_path, concat(line, "\n")) end
+    0
+end
+
+// log_debug(tag, msg): level 0 — detail internal
+log_debug(tag, msg) do
+    if log_enabled(LOG_DEBUG) do _log_emit("DEBUG", tag, msg) else 0 end
+end
+
+// log_info(tag, msg): level 1 — peristiwa normal
+log_info(tag, msg) do
+    if log_enabled(LOG_INFO) do _log_emit("INFO", tag, msg) else 0 end
+end
+
+// log_warn(tag, msg): level 2 — anormal tapi jalan
+log_warn(tag, msg) do
+    if log_enabled(LOG_WARN) do _log_emit("WARN", tag, msg) else 0 end
+end
+
+// log_error(tag, msg): level 3 — gagal
+log_error(tag, msg) do
+    if log_enabled(LOG_ERROR) do _log_emit("ERROR", tag, msg) else 0 end
+end
+
+// log_info_num(tag, msg, v): info dengan angka (menghindari concat manual)
+log_info_num(tag, msg, v) do
+    if log_enabled(LOG_INFO) do _log_emit("INFO", tag, concat(msg, to_text(v))) else 0 end
+end
+
+// log_error_num(tag, msg, v): error dengan angka
+log_error_num(tag, msg, v) do
+    if log_enabled(LOG_ERROR) do _log_emit("ERROR", tag, concat(msg, to_text(v))) else 0 end
+end
