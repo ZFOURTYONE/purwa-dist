@@ -4,10 +4,10 @@
 **A self-hosting systems programming language that compiles straight to native
 machine code — no LLVM, no GCC, no external linker, no CRT.**
 
-![Version](https://img.shields.io/badge/version-v38.0-6d28d9)
+![Version](https://img.shields.io/badge/version-v39.14-6d28d9)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20x86--64%20%7C%20Linux%20ARM64-informational)
 ![License](https://img.shields.io/badge/License-MIT-brightgreen)
-![Compiler](https://img.shields.io/badge/Compiler-%7E330%20KB-blue)
+![Compiler](https://img.shields.io/badge/Compiler-%7E380%20KB-blue)
 ![Security](https://img.shields.io/badge/Security-W%5EX%20sections-success)
 
 Purwa is a small, fast, and **human-centric** systems language. Its compiler is
@@ -50,7 +50,7 @@ That's it. No runtime, no libraries, no PATH setup beyond where you put
 | `tools/purwa-lsp.exe` / `tools/purwa-lsp-linux` | Language Server Protocol (LSP 3.17) server for editor support |
 | `tools/pw-pack.exe` + `tools/pw_pack.pw` | Package manager (binary + source) |
 | `ext/purwa-lang-38.0.0.vsix` | Pre-built VS Code extension package |
-| `lib/` | Bundled standard libraries (35+ modules: net, json, crypto, tensor, …) |
+| `lib/` | Bundled standard libraries (52 modules: net, json, crypto, tensor, log, sort, test, …) |
 | `apps/` | Example applications |
 | `plugins/` | Optional plugin sources |
 | `benchmarks/` | Cross-language benchmark suite (C, Rust, Go, Zig, Node, Python, Purwa) |
@@ -66,7 +66,7 @@ That's it. No runtime, no libraries, no PATH setup beyond where you put
 - **Triple-target** — Windows PE32+, Linux x86-64 ELF64, and Linux ARM64
   (aarch64) ELF64 from the same source; all three fixpoints byte-verified.
 - **Tiny & fast** — hello-world is ~2 KB; the compiler rebuilds itself in
-  ~0.2 s.
+  ~0.27 s (13.6k lines, ~51k lines/ms).
 - **Secure output (W^X)** — every generated executable uses separate
   *read-execute* (code) and *read-write* (data) segments. No segment is both
   writable and executable (incl. `PT_GNU_STACK` on ELF).
@@ -136,4 +136,4 @@ this release.
 
 ---
 
-*Purwa v38.0* · Windows x86-64 (PE32+) · Linux x86-64 (ELF64) · Linux ARM64 (ELF64) · [SHA256SUMS.txt](SHA256SUMS.txt)
+*Purwa v39.14* · Windows x86-64 (PE32+) · Linux x86-64 (ELF64) · Linux ARM64 (ELF64) · [SHA256SUMS.txt](SHA256SUMS.txt)
